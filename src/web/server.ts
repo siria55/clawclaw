@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
@@ -71,23 +71,42 @@ export class WebServer {
   async #handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const path = req.url?.split("?")[0] ?? "/";
 
-    if (req.method === "GET" && path === "/") {
-      this.#serveHtml(res);
+    if (req.method === "POST" && path === "/api/chat") {
+      await this.#handleChat(req, res);
       return;
     }
 
-    if (req.method === "POST" && path === "/api/chat") {
-      await this.#handleChat(req, res);
+    if (req.method === "GET") {
+      this.#serveStatic(path, res);
       return;
     }
 
     res.writeHead(404).end();
   }
 
-  #serveHtml(res: ServerResponse): void {
-    const html = readFileSync(join(__dirname, "index.html"), "utf8");
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(html);
+  #serveStatic(urlPath: string, res: ServerResponse): void {
+    const distDir = join(__dirname, "dist");
+    // Resolve file path — default to index.html for SPA routing
+    const filePath = urlPath === "/" || !extname(urlPath)
+      ? join(distDir, "index.html")
+      : join(distDir, urlPath);
+
+    if (!existsSync(filePath)) {
+      // SPA fallback
+      const index = join(distDir, "index.html");
+      if (existsSync(index)) {
+        const html = readFileSync(index, "utf8");
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(html);
+        return;
+      }
+      res.writeHead(404).end("Not found");
+      return;
+    }
+
+    const mime = MIME_TYPES[extname(filePath)] ?? "application/octet-stream";
+    res.writeHead(200, { "Content-Type": mime });
+    res.end(readFileSync(filePath));
   }
 
   async #handleChat(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -160,6 +179,19 @@ export class WebServer {
     return new Agent({ ...this.#config.agentConfig, llm });
   }
 }
+
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript",
+  ".mjs": "text/javascript",
+  ".css": "text/css",
+  ".json": "application/json",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+};
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
