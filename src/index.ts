@@ -1,5 +1,10 @@
 export { Agent } from "./core/agent.js";
 export { createLLM } from "./llm/index.js";
+export { ClawServer } from "./server/index.js";
+export { FeishuPlatform, FeishuChallenge, WecomPlatform } from "./platform/index.js";
+export { defineTool } from "./tools/index.js";
 export type { LLMProvider, LLMConfig, Message } from "./llm/types.js";
 export type { Tool, ToolResult } from "./tools/types.js";
+export type { IMPlatform, IMMessage } from "./platform/types.js";
 export type { AgentConfig, AgentOptions } from "./core/types.js";
+export type { ClawServerConfig } from "./server/index.js";
