@@ -1,0 +1,113 @@
+import type { AgentConfig, AgentOptions, AgentRunResult, AgentEvent } from "./types.js";
+import type { Message } from "../llm/types.js";
+
+const DEFAULT_MAX_TURNS = 20;
+
+/**
+ * Core agent that orchestrates LLM + tool calls in a loop.
+ *
+ * @example
+ * ```ts
+ * const agent = new Agent({ name: "assistant", system: "...", llm });
+ * const result = await agent.run("Hello");
+ * ```
+ */
+export class Agent {
+  readonly name: string;
+  readonly #config: AgentConfig;
+
+  constructor(config: AgentConfig) {
+    this.name = config.name;
+    this.#config = config;
+  }
+
+  /**
+   * Run the agent until the LLM stops calling tools or maxTurns is reached.
+   */
+  async run(userMessage: string, options: AgentOptions = {}): Promise<AgentRunResult> {
+    const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
+    const messages: Message[] = [{ role: "user", content: userMessage }];
+    let turns = 0;
+
+    while (turns < maxTurns) {
+      const response = await this.#config.llm.complete({
+        system: this.#config.system,
+        messages,
+        ...(this.#config.tools ? { tools: this.#config.tools } : {}),
+      });
+
+      messages.push(response.message);
+      turns++;
+
+      if (!response.toolCalls || response.toolCalls.length === 0) {
+        break;
+      }
+
+      const toolResults = await this.#executeTools(response.toolCalls);
+      messages.push({ role: "tool", content: toolResults });
+    }
+
+    return { messages, turns };
+  }
+
+  /**
+   * Run the agent and emit events as they occur.
+   */
+  async *stream(userMessage: string, options: AgentOptions = {}): AsyncGenerator<AgentEvent> {
+    const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
+    const messages: Message[] = [{ role: "user", content: userMessage }];
+    let turns = 0;
+
+    while (turns < maxTurns) {
+      const response = await this.#config.llm.complete({
+        system: this.#config.system,
+        messages,
+        ...(this.#config.tools ? { tools: this.#config.tools } : {}),
+      });
+
+      messages.push(response.message);
+      yield { type: "message", message: response.message };
+      turns++;
+
+      if (!response.toolCalls || response.toolCalls.length === 0) {
+        break;
+      }
+
+      for (const call of response.toolCalls) {
+        yield { type: "tool_call", toolName: call.name, input: call.input };
+      }
+
+      const toolResults = await this.#executeTools(response.toolCalls);
+      for (const result of toolResults) {
+        yield { type: "tool_result", toolName: result.toolName, result: result.result };
+      }
+
+      messages.push({ role: "tool", content: toolResults });
+    }
+
+    const result: AgentRunResult = { messages, turns };
+    yield { type: "done", result };
+  }
+
+  async #executeTools(
+    calls: NonNullable<Awaited<ReturnType<AgentConfig["llm"]["complete"]>>["toolCalls"]>,
+  ): Promise<Array<{ toolName: string; result: import("../tools/types.js").ToolResult }>> {
+    const tools = this.#config.tools ?? [];
+
+    return Promise.all(
+      calls.map(async (call) => {
+        const tool = tools.find((t) => t.name === call.name);
+        if (!tool) {
+          return { toolName: call.name, result: { error: `Tool "${call.name}" not found` } };
+        }
+        try {
+          const result = await tool.execute(call.input);
+          return { toolName: call.name, result };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { toolName: call.name, result: { error: message } };
+        }
+      }),
+    );
+  }
+}
