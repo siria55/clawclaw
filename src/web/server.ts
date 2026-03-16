@@ -17,6 +17,8 @@ export interface WebServerConfig {
    */
   agentConfig?: AgentConfig;
   port?: number;
+  /** Override static file directory (default: `<__dirname>/dist`). Used in tests. */
+  staticDir?: string;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -42,7 +44,12 @@ export class WebServer {
   readonly #server: ReturnType<typeof createServer>;
 
   constructor(config: WebServerConfig) {
-    this.#config = { port: 3000, agentConfig: undefined, ...config };
+    this.#config = {
+      port: 3000,
+      agentConfig: undefined,
+      staticDir: join(__dirname, "dist"),
+      ...config,
+    };
     this.#server = createServer((req, res) => {
       void this.#handleRequest(req, res);
     });
@@ -85,7 +92,7 @@ export class WebServer {
   }
 
   #serveStatic(urlPath: string, res: ServerResponse): void {
-    const distDir = join(__dirname, "dist");
+    const distDir = this.#config.staticDir;
     // Resolve file path — default to index.html for SPA routing
     const filePath = urlPath === "/" || !extname(urlPath)
       ? join(distDir, "index.html")

@@ -1,8 +1,24 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { WebServer } from "../../src/web/server.js";
 import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";
+
+/** Temp directory with a fake index.html for static serving tests */
+let staticDir: string;
+
+beforeAll(() => {
+  staticDir = join(tmpdir(), `clawclaw-test-${Date.now()}`);
+  mkdirSync(staticDir, { recursive: true });
+  writeFileSync(join(staticDir, "index.html"), "<html><body>test</body></html>");
+});
+
+afterAll(() => {
+  rmSync(staticDir, { recursive: true, force: true });
+});
 
 function makeMockAgent(reply = "hello"): Agent {
   return {
@@ -34,7 +50,7 @@ async function startWebServer(
   agent: Agent,
   agentConfig?: AgentConfig,
 ): Promise<{ server: WebServer; url: string }> {
-  const server = new WebServer({ agent, agentConfig, port: 0 });
+  const server = new WebServer({ agent, agentConfig, port: 0, staticDir });
   await server.start();
   return { server, url: `http://localhost:${server.port}` };
 }
