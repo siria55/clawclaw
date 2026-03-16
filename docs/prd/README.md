@@ -2,79 +2,90 @@
 
 ## 定位
 
-clawclaw 是一个轻量、可扩展的 AI Agent 框架，TypeScript 实现。目标是用最少的抽象让开发者快速构建具备工具调用能力的 Agent，同时保持代码可测试、可替换。
+clawclaw 是一个可 24 小时持续运行的 AI Agent 框架，TypeScript 实现。核心能力是将 Agent 接入飞书、企业微信等 IM 平台，让 AI 以 Bot 形式常驻在团队工作流中。
+
+---
+
+## 核心架构
+
+```
+IM 平台 (飞书 / 企业微信 / ...)
+    ↓ Webhook 推送消息
+  ClawServer              ← 24/7 常驻 HTTP 服务
+    ↓ 路由到对应 Agent
+  Agent
+    ↓ LLM 决策
+  LLM (Anthropic / ...)
+    ↓ 工具调用
+  Tool × N
+    ↓ 执行结果
+  Agent
+    ↓ 生成回复
+  ClawServer
+    ↓ 调用 IM API 发送
+IM 平台
+```
 
 ---
 
 ## 核心概念
 
+### ClawServer
+
+框架的运行容器，负责：
+- 启动 HTTP 服务监听 IM Webhook 回调
+- 将收到的 IM 消息分发给对应的 Agent 实例
+- 将 Agent 回复通过 IMPlatform 发送回 IM
+- 优雅关闭（SIGTERM / SIGINT）
+
+一个进程可挂载多个 Agent，服务多个 IM 频道或群组。
+
+### IMPlatform
+
+所有 IM 平台适配器实现的接口，职责：
+- 解析平台推送的 Webhook 事件，转换为统一的 `IMMessage`
+- 提供签名验证，防止伪造请求
+- 实现 `send()` 方法，将文本回复发送到对应会话
+
+内置适配器：飞书（Feishu/Lark）、企业微信（WeCom）。
+
+### IMMessage
+
+平台无关的统一消息格式：
+
+| 字段 | 说明 |
+|------|------|
+| `platform` | 来源平台标识 |
+| `chatId` | 会话 ID（群 or 单聊） |
+| `userId` | 发消息的用户 ID |
+| `text` | 消息文本内容 |
+| `raw` | 原始平台事件，供高级用途 |
+
 ### Agent
 
-Agent 是框架的核心调度单元。它持有一个系统提示词、一个 LLM 适配器和一组工具，负责驱动"LLM 决策 → 工具执行 → 结果回传"的循环，直到 LLM 不再调用工具或达到最大轮数为止。
-
-```
-用户消息
-    ↓
-  Agent
-    ↓ 调用
-  LLM
-    ↓ 返回 (文本 | 工具调用)
-  Tool × N          ← 并发执行所有工具调用
-    ↓ 返回结果
-  LLM               ← 继续下一轮
-    ↓ 返回文本
-  结束
-```
+Agent 是框架的核心调度单元，负责驱动"LLM 决策 → 工具执行 → 结果回传"的循环。每收到一条 IM 消息，ClawServer 创建一次 Agent 运行。
 
 Agent 有两种运行模式：
 - **run** — 阻塞执行，完成后返回完整消息历史
-- **stream** — 逐步 yield 事件，适合流式 UI
+- **stream** — 逐步 yield 事件，适合流式推送回复
+
+### LLMProvider
+
+所有 LLM 适配器实现的接口，只有一个方法 `complete(params)`。框架对 LLM 无假设，目前内置 Anthropic 适配器，可扩展 OpenAI、DeepSeek、本地模型。
+
+### Tool
+
+Agent 可调用的外部能力单元。工具执行失败不中断循环，错误信息回传给 LLM 自行处理。`defineTool()` 是推荐的创建方式，内置 Zod 输入校验。
 
 ### Message
 
-消息是 Agent 与 LLM 之间的信息单元，有三种角色：
+Agent 与 LLM 之间的消息单元，三种角色：
 
 | role | 说明 |
 |------|------|
 | `user` | 用户输入 |
-| `assistant` | LLM 输出（文本或工具调用指令） |
-| `tool` | 工具执行结果，回传给 LLM |
-
-消息按时间顺序追加，构成完整的对话上下文，每轮都完整传给 LLM。
-
-### LLMProvider
-
-`LLMProvider` 是所有 LLM 适配器必须实现的接口，只有一个方法：`complete(params)`。
-
-框架对 LLM 无任何假设，只要实现该接口即可接入。目前内置 Anthropic 适配器，后续可扩展 OpenAI、DeepSeek、本地模型等。
-
-适配器负责：
-- 将框架内部的 `Message[]` 格式转换为具体 API 格式
-- 解析响应中的工具调用指令（`ToolCall[]`）
-- 透传 token 用量（可选）
-
-### Tool
-
-Tool 是 Agent 可调用的外部能力单元。LLM 根据工具的 `name` 和 `description` 决定是否调用，根据 `inputSchema`（JSON Schema）生成合法的调用参数。
-
-工具执行的结果只有两种状态：
-- `output` — 成功，字符串内容回传给 LLM
-- `error` — 失败，错误信息回传给 LLM，LLM 自行决定如何处理
-
-工具调用失败不会中断 Agent 循环，LLM 会根据错误信息决定重试或放弃。
-
-`defineTool()` 是创建工具的推荐方式，内置 Zod 输入校验，参数非法时自动返回 `error` 而不是抛出异常。
-
-### AgentEvent
-
-`stream()` 模式下 yield 的事件类型，共四种：
-
-| 事件 | 触发时机 |
-|------|----------|
-| `message` | LLM 返回消息（含文本或工具调用指令） |
-| `tool_call` | Agent 准备执行某个工具 |
-| `tool_result` | 工具执行完毕 |
-| `done` | 本轮 Agent 运行结束 |
+| `assistant` | LLM 输出 |
+| `tool` | 工具执行结果 |
 
 ---
 
@@ -83,24 +94,30 @@ Tool 是 Agent 可调用的外部能力单元。LLM 根据工具的 `name` 和 `
 ```
 src/
 ├── core/
-│   ├── agent.ts      Agent 类，run() 和 stream() 实现
-│   └── types.ts      AgentConfig / AgentOptions / AgentEvent 类型定义
+│   ├── agent.ts        Agent 类，run() 和 stream() 实现
+│   └── types.ts        AgentConfig / AgentOptions / AgentEvent 类型
 ├── llm/
-│   ├── types.ts      LLMProvider 接口、Message、ToolCall 等核心类型
-│   ├── anthropic.ts  Anthropic Claude 适配器
-│   └── index.ts      createLLM() 工厂函数
+│   ├── types.ts        LLMProvider 接口、Message、ToolCall 等
+│   ├── anthropic.ts    Anthropic Claude 适配器
+│   └── index.ts        createLLM() 工厂
+├── platform/
+│   ├── types.ts        IMPlatform 接口、IMMessage 类型
+│   ├── feishu.ts       飞书适配器
+│   └── wecom.ts        企业微信适配器
+├── server/
+│   └── index.ts        ClawServer，24/7 常驻服务
 └── tools/
-    ├── types.ts      Tool 接口、ToolResult、defineTool() 实现
-    └── index.ts      公共导出
+    ├── types.ts        Tool 接口、ToolResult、defineTool()
+    └── index.ts        公共导出
 ```
 
-各模块职责单一，依赖方向为：`core → llm / tools`，`llm` 和 `tools` 互不依赖。
+依赖方向：`server → platform / core`，`core → llm / tools`，各层互不反向依赖。
 
 ---
 
 ## 设计原则
 
-- **接口优于实现** — `LLMProvider` 和 `Tool` 都是接口，框架不锁定任何具体实现
-- **错误不崩溃** — 工具执行异常转为 `error` 返回，Agent 循环不中断
-- **可测试** — 核心逻辑不依赖网络，Mock LLM 即可单元测试
+- **接口优于实现** — `LLMProvider`、`Tool`、`IMPlatform` 均为接口，不锁定任何具体实现
+- **错误不崩溃** — 工具异常和 IM 发送失败均捕获处理，不影响其他会话
+- **可测试** — 核心逻辑不依赖网络，Mock LLM 和 IMPlatform 即可单元测试
 - **最小依赖** — 运行时只需 `@anthropic-ai/sdk` 和 `zod`
