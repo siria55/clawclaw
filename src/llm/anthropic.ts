@@ -4,15 +4,31 @@ import type { LLMProvider, LLMConfig, LLMCompleteParams, LLMResponse, ToolCall }
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DEFAULT_MAX_TOKENS = 8192;
 
+export interface AnthropicConfig extends Partial<LLMConfig> {
+  apiKey?: string;
+  /** Override the Anthropic API base URL, e.g. for proxies or mirrors. */
+  baseURL?: string;
+}
+
 /**
  * Anthropic Claude LLM adapter.
+ *
+ * Proxy support: set HTTPS_PROXY / HTTP_PROXY env vars, or pass baseURL directly.
  */
 export class AnthropicProvider implements LLMProvider {
   readonly #client: Anthropic;
   readonly #config: Required<LLMConfig>;
 
-  constructor(config: Partial<LLMConfig> & { apiKey?: string } = {}) {
-    this.#client = new Anthropic({ apiKey: config.apiKey });
+  constructor(config: AnthropicConfig = {}) {
+    const baseURL = config.baseURL ?? process.env["ANTHROPIC_BASE_URL"];
+    const proxy = process.env["HTTPS_PROXY"] ?? process.env["HTTP_PROXY"];
+
+    this.#client = new Anthropic({
+      apiKey: config.apiKey,
+      ...(baseURL ? { baseURL } : {}),
+      ...(proxy ? { httpAgent: buildProxyAgent(proxy) as import("node:http").Agent } : {}),
+    });
+
     this.#config = {
       model: config.model ?? DEFAULT_MODEL,
       maxTokens: config.maxTokens ?? DEFAULT_MAX_TOKENS,
@@ -68,4 +84,23 @@ function toAnthropicMessage(msg: import("./types.js").Message): Anthropic.Messag
     role: msg.role as "user" | "assistant",
     content: msg.content as string | Anthropic.ContentBlock[],
   };
+}
+
+function buildProxyAgent(proxyUrl: string): unknown {
+  // Node.js 22+ supports native fetch with proxy via NODE_OPTIONS / --env-file.
+  // For older setups, the caller can install `https-proxy-agent` and pass it here.
+  // We dynamically require to keep it an optional peer dep.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { HttpsProxyAgent } = require("https-proxy-agent") as {
+      HttpsProxyAgent: new (url: string) => unknown;
+    };
+    return new HttpsProxyAgent(proxyUrl);
+  } catch {
+    console.warn(
+      `[clawclaw] HTTPS_PROXY set but "https-proxy-agent" is not installed. ` +
+        `Run: npm install https-proxy-agent`,
+    );
+    return undefined;
+  }
 }

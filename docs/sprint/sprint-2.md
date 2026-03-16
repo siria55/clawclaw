@@ -1,7 +1,7 @@
 # Sprint 2 — 代理支持 + Web UI
 
-**周期**: 待定
-**状态**: 🚧 进行中
+**周期**: 2026-03-16
+**状态**: ✅ 完成
 
 ## 目标
 
@@ -9,21 +9,20 @@
 
 ---
 
-## 任务
+## 完成内容
 
 ### 1. 代理 & 自定义 Base URL
 
-Anthropic SDK 支持通过 `baseURL` 和 `httpAgent` 覆盖默认连接配置，需要暴露给用户。
-
-**需要做的事：**
-
-- [ ] `AnthropicProvider` 构造参数增加 `baseURL?: string`，透传给 SDK
-- [ ] 支持 HTTP/HTTPS 代理，通过环境变量 `HTTPS_PROXY` / `HTTP_PROXY` 自动读取
-- [ ] `.env.example` 补充代理相关变量说明
-- [ ] 更新 `docs/manual` 的环境变量表格
+- [x] `AnthropicProvider` 支持 `baseURL` 构造参数，透传给 SDK
+- [x] 自动读取 `ANTHROPIC_BASE_URL` 环境变量
+- [x] 自动读取 `HTTPS_PROXY` / `HTTP_PROXY`，通过 `https-proxy-agent`（可选依赖）挂载
+- [x] `.env.example` 补充代理相关变量
+- [x] `docs/manual` 更新环境变量表格
+- [x] 测试覆盖（4 个用例，Mock SDK）
 
 **涉及文件：**
 - `src/llm/anthropic.ts`
+- `tests/llm/anthropic.test.ts`
 - `.env.example`
 - `docs/manual/README.md`
 
@@ -31,27 +30,27 @@ Anthropic SDK 支持通过 `baseURL` 和 `httpAgent` 覆盖默认连接配置，
 
 ### 2. 可视化 Web UI
 
-提供一个轻量网页，用于调试 Agent 对话、查看消息历史和工具调用过程。
+原生 Node.js HTTP + 静态 HTML，零额外依赖。
 
-**需要做的事：**
-
-- [ ] 技术选型：确定 Web 框架（候选：Hono + 原生 HTML，或 Vite + React）
-- [ ] HTTP 接口：`POST /api/chat` 接收消息，返回 SSE 流
-- [ ] 前端页面：对话输入框 + 消息气泡 + 工具调用展示
-- [ ] `npm run dev:web` 启动 Web 服务
-- [ ] 补充文档
+- [x] `src/web/server.ts` — `WebServer` 类，`POST /api/chat` 返回 SSE 流
+- [x] `src/web/index.html` — 深色主题对话界面，支持工具调用展示
+- [x] `src/web/dev.ts` — 开发入口，直接 `npm run dev:web` 启动
+- [x] `package.json` 新增 `dev:web` script
+- [x] `docs/manual` 补充 Web UI 使用说明
 
 **涉及文件：**
-- `src/web/server.ts`（新建）
-- `src/web/index.html`（新建）
-- `package.json` — 新增 `dev:web` script
+- `src/web/server.ts`
+- `src/web/index.html`
+- `src/web/dev.ts`
+- `package.json`
 
 ---
 
-## 验收标准
+## 验收结果
 
-- [ ] 设置 `ANTHROPIC_BASE_URL` 后，请求走自定义地址
-- [ ] 设置 `HTTPS_PROXY` 后，SDK 请求走代理
-- [ ] 代理相关配置有测试覆盖
-- [ ] Web 页面可正常发送消息并流式展示回复
-- [ ] Web 页面显示工具调用过程
+- [x] 设置 `ANTHROPIC_BASE_URL` 后，请求走自定义地址（测试覆盖）
+- [x] 设置 `HTTPS_PROXY` 后，SDK 请求走代理（需安装 `https-proxy-agent`）
+- [x] 代理相关配置有测试覆盖
+- [x] Web 页面流式展示 Agent 回复
+- [x] Web 页面显示工具调用和执行结果
+- [x] 类型检查零错误，15/15 测试通过

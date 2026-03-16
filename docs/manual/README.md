@@ -15,6 +15,9 @@ cp .env.example .env
 | 变量 | 说明 |
 |------|------|
 | `ANTHROPIC_API_KEY` | Anthropic API Key，必填 |
+| `ANTHROPIC_BASE_URL` | 自定义 API 地址，用于代理或镜像站 |
+| `HTTPS_PROXY` | HTTPS 代理，格式 `http://host:port`，需安装 `https-proxy-agent` |
+| `HTTP_PROXY` | HTTP 代理（HTTPS_PROXY 未设置时生效） |
 
 ---
 
@@ -72,12 +75,27 @@ Tool 是 Agent 可调用的外部能力单元，每个 Tool 包含：
 
 ---
 
+## Web UI 调试界面
+
+本地调试时可启动可视化对话页面，支持工具调用过程展示和流式回复：
+
+```bash
+npm run dev:web
+```
+
+启动后访问 `http://localhost:3001`，页面提供：
+- 对话输入框（Enter 发送，Shift+Enter 换行）
+- 流式消息气泡
+- 工具调用 / 执行结果展示
+
+---
+
 ## 开发
 
 ```bash
-npm test            # 运行测试
-npm run typecheck   # 类型检查
-npm run lint        # ESLint 检查
-npm run build       # 编译输出到 dist/
+npm test               # 运行测试
+npm run typecheck      # 类型检查
+npm run lint           # ESLint 检查
+npm run build          # 编译输出到 dist/
 npm run test:coverage  # 生成覆盖率报告
 ```
