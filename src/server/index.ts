@@ -29,6 +29,7 @@ export class ClawServer {
   readonly #config: Required<ClawServerConfig>;
   readonly #server: ReturnType<typeof createServer>;
   #activeRequests = 0;
+  #shutdownHandler: (() => void) | undefined;
 
   constructor(config: ClawServerConfig) {
     this.#config = { port: 3000, ...config };
@@ -46,8 +47,20 @@ export class ClawServer {
     this.#registerShutdown();
   }
 
-  /** Stop the server, waiting for active requests to finish. */
+  /** The actual bound port (useful when port 0 was passed to get a random port). */
+  get port(): number {
+    const addr = this.#server.address();
+    if (!addr || typeof addr === "string") throw new Error("Server not started");
+    return addr.port;
+  }
+
+  /** Stop the server and remove signal handlers. */
   async stop(): Promise<void> {
+    if (this.#shutdownHandler) {
+      process.removeListener("SIGTERM", this.#shutdownHandler);
+      process.removeListener("SIGINT", this.#shutdownHandler);
+      this.#shutdownHandler = undefined;
+    }
     await new Promise<void>((resolve, reject) => {
       this.#server.close((err) => (err ? reject(err) : resolve()));
     });
@@ -90,7 +103,18 @@ export class ClawServer {
       return;
     }
 
-    const message = await route.platform.parse(body);
+    let message;
+    try {
+      message = await route.platform.parse(body);
+    } catch (err) {
+      // parse() may also throw FeishuChallenge (url_verification event)
+      if (err instanceof FeishuChallenge) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ challenge: err.challenge }));
+        return;
+      }
+      throw err;
+    }
     if (!message) {
       res.writeHead(200).end("ok");
       return;
@@ -118,7 +142,8 @@ export class ClawServer {
   }
 
   #registerShutdown(): void {
-    const shutdown = (): void => {
+    if (this.#shutdownHandler) return; // already registered
+    this.#shutdownHandler = (): void => {
       console.warn("ClawServer shutting down...");
       const poll = (): void => {
         if (this.#activeRequests === 0) {
@@ -129,8 +154,8 @@ export class ClawServer {
       };
       poll();
     };
-    process.once("SIGTERM", shutdown);
-    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", this.#shutdownHandler);
+    process.once("SIGINT", this.#shutdownHandler);
   }
 }
 

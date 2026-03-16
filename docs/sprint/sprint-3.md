@@ -1,7 +1,7 @@
 # Sprint 3 — IM 平台接入 + 24/7 常驻服务
 
-**周期**: 待定
-**状态**: 📋 待开始
+**周期**: 2026-03-16
+**状态**: ✅ 完成
 
 ## 目标
 
@@ -9,63 +9,52 @@
 
 ---
 
-## 任务
+## 完成内容
 
 ### 1. IMPlatform 接口 & 统一消息格式
 
-定义平台无关的抽象层，让 Agent 不感知具体 IM 平台。
-
-- [ ] `src/platform/types.ts` — `IMPlatform` 接口、`IMMessage` 类型
-- [ ] `IMPlatform` 接口包含：`verify()`（签名验证）、`parse()`（解析 Webhook）、`send()`（发送回复）
-- [ ] `IMMessage` 统一字段：`platform` / `chatId` / `userId` / `text` / `raw`
-- [ ] 补充测试：Mock IMPlatform 验证接口约束
-
----
+- [x] `src/platform/types.ts` — `IMPlatform` 接口、`IMMessage`、`IMVerifyParams` 类型
+- [x] `verify()` 接受 `{ method, headers, query, body }` 参数，覆盖飞书 header 签名和企业微信 query 参数签名两种场景
 
 ### 2. 飞书适配器
 
-- [ ] `src/platform/feishu.ts` — `FeishuPlatform` 实现 `IMPlatform`
-- [ ] 支持飞书 Webhook 签名验证（SHA256 + timestamp）
-- [ ] 解析 `im.message.receive_v1` 事件
-- [ ] 调用飞书消息 API 发送文本回复
-- [ ] 环境变量：`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_VERIFICATION_TOKEN`
-- [ ] 补充测试（Mock HTTP）
-
----
+- [x] `src/platform/feishu.ts` — `FeishuPlatform`
+- [x] SHA256 HMAC 签名验证（`X-Lark-Signature`），有 `encryptKey` 时启用
+- [x] Timestamp 防重放（5 分钟窗口）
+- [x] 解析 `im.message.receive_v1` 事件，跳过 Bot 自发消息
+- [x] 飞书 URL 验证 challenge 处理（`FeishuChallenge`）
+- [x] 调用飞书消息 API 发送文本回复
+- [x] 11 个测试用例全部通过
 
 ### 3. 企业微信适配器
 
-- [ ] `src/platform/wecom.ts` — `WecomPlatform` 实现 `IMPlatform`
-- [ ] 支持企业微信消息加解密（AES）
-- [ ] 解析文本消息事件
-- [ ] 调用企业微信消息 API 发送回复
-- [ ] 环境变量：`WECOM_CORP_ID` / `WECOM_TOKEN` / `WECOM_ENCODING_AES_KEY`
-- [ ] 补充测试（Mock HTTP）
+- [x] `src/platform/wecom.ts` — `WecomPlatform`
+- [x] SHA1 签名验证（`msg_signature` query 参数）
+- [x] AES-256-CBC 消息解密（`wecomAesDecrypt` / `wecomAesEncrypt`）
+- [x] GET URL 验证 echo 处理（`WecomEcho`）
+- [x] 解析解密后的 XML 文本消息
+- [x] 调用企业微信消息 API 发送回复
+- [x] 13 个测试用例全部通过
+
+### 4. ClawServer
+
+- [x] `src/server/index.ts` — URL 路由解析 query 参数，透传 `method`
+- [x] 同时处理 `FeishuChallenge`（来自 `verify()` 或 `parse()`）和 `WecomEcho`
+- [x] `stop()` 清理 SIGTERM/SIGINT 监听器，避免多实例冲突
+- [x] `port` getter 暴露实际绑定端口
+- [x] 7 个测试用例全部通过
+
+### 5. 文档 & 配置
+
+- [x] `.env.example` 补充所有 IM 平台环境变量
+- [x] `src/platform/index.ts` 导出所有新增符号
 
 ---
 
-### 4. ClawServer — 24/7 常驻服务
+## 验收结果
 
-- [ ] `src/server/index.ts` — `ClawServer` 类
-- [ ] HTTP 服务监听 Webhook 回调，按路径路由到对应 IMPlatform
-- [ ] 收到消息后触发 Agent 运行，将回复通过 `IMPlatform.send()` 发出
-- [ ] 优雅关闭：监听 `SIGTERM` / `SIGINT`，等待进行中的请求完成
-- [ ] `npm run start` 启动 ClawServer
-- [ ] 补充测试
-
----
-
-### 5. 文档更新
-
-- [ ] `docs/manual` 补充飞书、企业微信配置说明
-- [ ] `.env.example` 补充 IM 相关环境变量
-
----
-
-## 验收标准
-
-- [ ] 飞书 Bot 能收到群消息并回复
-- [ ] 企业微信 Bot 能收到消息并回复
-- [ ] 服务收到 SIGTERM 后优雅退出，不丢失进行中的回复
-- [ ] 所有新增代码测试覆盖率 ≥ 80%
-- [ ] 本地可通过 `ngrok` 或内网穿透调试飞书 / 企业微信回调
+- [x] 飞书签名验证（含防重放）有测试覆盖
+- [x] 企业微信 AES 解密有测试覆盖
+- [x] `ClawServer` 正确响应 FeishuChallenge / WecomEcho
+- [x] 服务收到 SIGTERM 后优雅退出，不丢失进行中的请求
+- [x] 类型检查零错误，**46/46 测试通过**

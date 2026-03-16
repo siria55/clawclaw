@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { ClawServer } from "../../src/server/index.js";
-import type { IMPlatform, IMVerifyParams } from "../../src/platform/types.js";
+import type { IMPlatform } from "../../src/platform/types.js";
 import type { Agent } from "../../src/core/agent.js";
 import { FeishuChallenge } from "../../src/platform/feishu.js";
 import { WecomEcho } from "../../src/platform/wecom.js";
@@ -29,51 +29,36 @@ function makeMockAgent(reply = "pong"): Agent {
   } as unknown as Agent;
 }
 
-async function doRequest(
-  server: ClawServer,
-  path: string,
-  options: { method?: string; body?: string; query?: string } = {},
-): Promise<{ status: number; body: string }> {
-  const { method = "POST", body = "", query = "" } = options;
-  const url = `http://localhost:${(server as unknown as { _config: { port: number } })._config?.port ?? 3000}${path}${query ? `?${query}` : ""}`;
-  const response = await fetch(url, {
-    method,
-    headers: { "content-type": "application/json" },
-    body: method === "POST" ? body : undefined,
-  });
-  return { status: response.status, body: await response.text() };
+async function startServer(routes: ClawServerConfig["routes"]): Promise<{ server: ClawServer; url: string }> {
+  const server = new ClawServer({ port: 0, routes });
+  await server.start();
+  return { server, url: `http://localhost:${server.port}` };
 }
 
+type ClawServerConfig = ConstructorParameters<typeof ClawServer>[0];
+
 describe("ClawServer", () => {
+  it("exposes bound port after start()", async () => {
+    const { server } = await startServer({});
+    expect(server.port).toBeGreaterThan(0);
+    await server.stop();
+  });
+
   it("returns 404 for unknown routes", async () => {
-    const server = new ClawServer({ port: 0, routes: {} });
-    await server.start();
-    const port = (server as unknown as { _server: { address(): { port: number } } })
-      ._server.address().port;
-    const res = await fetch(`http://localhost:${port}/unknown`, { method: "POST" });
+    const { server, url } = await startServer({});
+    const res = await fetch(`${url}/unknown`, { method: "POST", body: "{}" });
     expect(res.status).toBe(404);
     await server.stop();
   });
 
   it("responds with Feishu challenge JSON", async () => {
     const platform = makeMockPlatform({
-      verify: vi.fn(async () => {}),
-      parse: vi.fn(async () => {
-        throw new FeishuChallenge("challenge_value");
-      }),
+      parse: vi.fn(async () => { throw new FeishuChallenge("challenge_value"); }),
     });
-    const server = new ClawServer({ port: 0, routes: { "/feishu": { platform, agent: makeMockAgent() } } });
-    await server.start();
-    const port = (server as unknown as { _server: { address(): { port: number } } })
-      ._server.address().port;
-    const res = await fetch(`http://localhost:${port}/feishu`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    });
+    const { server, url } = await startServer({ "/feishu": { platform, agent: makeMockAgent() } });
+    const res = await fetch(`${url}/feishu`, { method: "POST", body: "{}" });
     expect(res.status).toBe(200);
-    const json = await res.json() as { challenge: string };
-    expect(json.challenge).toBe("challenge_value");
+    expect((await res.json() as { challenge: string }).challenge).toBe("challenge_value");
     await server.stop();
   });
 
@@ -81,13 +66,8 @@ describe("ClawServer", () => {
     const platform = makeMockPlatform({
       verify: vi.fn(async () => { throw new WecomEcho("echo_string"); }),
     });
-    const server = new ClawServer({ port: 0, routes: { "/wecom": { platform, agent: makeMockAgent() } } });
-    await server.start();
-    const port = (server as unknown as { _server: { address(): { port: number } } })
-      ._server.address().port;
-    const res = await fetch(`http://localhost:${port}/wecom?msg_signature=x&timestamp=1&nonce=1&echostr=x`, {
-      method: "GET",
-    });
+    const { server, url } = await startServer({ "/wecom": { platform, agent: makeMockAgent() } });
+    const res = await fetch(`${url}/wecom?msg_signature=x&timestamp=1&nonce=1&echostr=x`, { method: "GET" });
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("echo_string");
     await server.stop();
@@ -97,11 +77,8 @@ describe("ClawServer", () => {
     const platform = makeMockPlatform({
       verify: vi.fn(async () => { throw new Error("bad sig"); }),
     });
-    const server = new ClawServer({ port: 0, routes: { "/hook": { platform, agent: makeMockAgent() } } });
-    await server.start();
-    const port = (server as unknown as { _server: { address(): { port: number } } })
-      ._server.address().port;
-    const res = await fetch(`http://localhost:${port}/hook`, { method: "POST", body: "{}" });
+    const { server, url } = await startServer({ "/hook": { platform, agent: makeMockAgent() } });
+    const res = await fetch(`${url}/hook`, { method: "POST", body: "{}" });
     expect(res.status).toBe(401);
     await server.stop();
   });
@@ -109,23 +86,22 @@ describe("ClawServer", () => {
   it("returns 200 and dispatches message to agent", async () => {
     const agent = makeMockAgent("hello back");
     const platform = makeMockPlatform({
-      parse: vi.fn(async () => ({
-        platform: "mock",
-        chatId: "chat1",
-        userId: "user1",
-        text: "ping",
-        raw: {},
-      })),
+      parse: vi.fn(async () => ({ platform: "mock", chatId: "chat1", userId: "user1", text: "ping", raw: {} })),
     });
-    const server = new ClawServer({ port: 0, routes: { "/hook": { platform, agent } } });
-    await server.start();
-    const port = (server as unknown as { _server: { address(): { port: number } } })
-      ._server.address().port;
-    const res = await fetch(`http://localhost:${port}/hook`, { method: "POST", body: "{}" });
+    const { server, url } = await startServer({ "/hook": { platform, agent } });
+    const res = await fetch(`${url}/hook`, { method: "POST", body: "{}" });
     expect(res.status).toBe(200);
-    // Give the async agent dispatch a moment to run
     await new Promise((r) => setTimeout(r, 50));
     expect(vi.mocked(agent.run)).toHaveBeenCalledWith("ping");
+    await server.stop();
+  });
+
+  it("returns 200 ok and skips agent when parse returns null", async () => {
+    const agent = makeMockAgent();
+    const { server, url } = await startServer({ "/hook": { platform: makeMockPlatform(), agent } });
+    const res = await fetch(`${url}/hook`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    expect(vi.mocked(agent.run)).not.toHaveBeenCalled();
     await server.stop();
   });
 });

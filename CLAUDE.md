@@ -16,6 +16,7 @@ OpenClaw 的超级优化版 AI Agent 框架，TypeScript 实现。
 - **技术**: [docs/tech/](docs/tech/)
 - **使用说明**：[docs/manual](docs/manual)
     - 使用说明不要有代码示例，可以有命令行指令和相关说明
+- **IM 等接口参考文档**：[docs/im-docs](docs/im-docs)
 - **参考文献**: [docs/references](docs/references/)
 
 ## 权限

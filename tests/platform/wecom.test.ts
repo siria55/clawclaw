@@ -8,8 +8,12 @@ import {
   wecomAesEncrypt,
 } from "../../src/platform/wecom.js";
 
-// 43-char base64 key (WeCom requires exactly this length before padding)
-const TEST_KEY = "abcdefghijklmnopqrstuvwxyz0123456789ABCDE";
+/**
+ * Valid 43-char base64 encodingAesKey.
+ * Buffer.from(TEST_KEY + "=", "base64") decodes to exactly 32 bytes.
+ * Derivation: base64(Buffer.alloc(32, 0x01)) = "AQEB...AQE=" → strip "=" → 43 chars.
+ */
+const TEST_KEY = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE";
 const TEST_CORP_ID = "wx_corp_test";
 const TEST_TOKEN = "mytoken";
 
@@ -21,20 +25,26 @@ const BASE_CONFIG = {
   corpSecret: "secret",
 };
 
-function sha1Sign(token: string, timestamp: string, nonce: string, encrypt: string): string {
-  const sorted = [token, timestamp, nonce, encrypt].sort().join("");
-  return createHash("sha1").update(sorted).digest("hex");
+function sha1Sign(token: string, ts: string, nonce: string, encrypt: string): string {
+  return createHash("sha1").update([token, ts, nonce, encrypt].sort().join("")).digest("hex");
 }
 
-function makeXmlBody(content: string): string {
-  return `<xml><Encrypt><![CDATA[${content}]]></Encrypt></xml>`;
+function makeXmlBody(encrypted: string): string {
+  return `<xml><Encrypt><![CDATA[${encrypted}]]></Encrypt></xml>`;
 }
 
 function makeInnerXml(fromUser: string, text: string, toUser: string): string {
-  return `<xml><ToUserName><![CDATA[${toUser}]]></ToUserName><FromUserName><![CDATA[${fromUser}]]></FromUserName><MsgType><![CDATA[text]]></MsgType><Content><![CDATA[${text}]]></Content></xml>`;
+  return [
+    "<xml>",
+    `<ToUserName><![CDATA[${toUser}]]></ToUserName>`,
+    `<FromUserName><![CDATA[${fromUser}]]></FromUserName>`,
+    `<MsgType><![CDATA[text]]></MsgType>`,
+    `<Content><![CDATA[${text}]]></Content>`,
+    "</xml>",
+  ].join("");
 }
 
-describe("wecomAesDecrypt / wecomAesEncrypt roundtrip", () => {
+describe("wecomAesEncrypt / wecomAesDecrypt roundtrip", () => {
   it("decrypts what was encrypted", () => {
     const original = makeInnerXml("user1", "hello world", "bot1");
     const encrypted = wecomAesEncrypt(original, TEST_CORP_ID, TEST_KEY);
@@ -45,22 +55,21 @@ describe("wecomAesDecrypt / wecomAesEncrypt roundtrip", () => {
 
   it("handles multi-byte UTF-8 content", () => {
     const original = makeInnerXml("u1", "你好世界 🎉", "bot");
-    const encrypted = wecomAesEncrypt(original, TEST_CORP_ID, TEST_KEY);
-    const { message } = wecomAesDecrypt(encrypted, TEST_KEY);
+    const { message } = wecomAesDecrypt(wecomAesEncrypt(original, TEST_CORP_ID, TEST_KEY), TEST_KEY);
     expect(message).toBe(original);
   });
 });
 
 describe("verifyWecomSignature()", () => {
   it("passes for a correct signature", () => {
-    const [timestamp, nonce, encrypt] = ["1700000000", "testnonce", "encrypted_str"];
-    const sig = sha1Sign(TEST_TOKEN, timestamp, nonce, encrypt);
-    expect(() => verifyWecomSignature(TEST_TOKEN, timestamp, nonce, encrypt, sig)).not.toThrow();
+    const [ts, nonce, enc] = ["1700000000", "testnonce", "some_encrypted_str"];
+    const sig = sha1Sign(TEST_TOKEN, ts, nonce, enc);
+    expect(() => verifyWecomSignature(TEST_TOKEN, ts, nonce, enc, sig)).not.toThrow();
   });
 
   it("throws for a wrong signature", () => {
     expect(() =>
-      verifyWecomSignature(TEST_TOKEN, "ts", "nonce", "encrypt", "bad_sig"),
+      verifyWecomSignature(TEST_TOKEN, "ts", "nonce", "enc", "bad_sig"),
     ).toThrow("signature mismatch");
   });
 });
@@ -69,41 +78,30 @@ describe("WecomPlatform.verify()", () => {
   it("throws WecomEcho for GET URL verification", async () => {
     const platform = new WecomPlatform(BASE_CONFIG);
     const echoMsg = makeInnerXml("", "echo_content", "");
-    const echoEncrypted = wecomAesEncrypt(echoMsg, TEST_CORP_ID, TEST_KEY);
-    const timestamp = "1700000000";
+    const echoEnc = wecomAesEncrypt(echoMsg, TEST_CORP_ID, TEST_KEY);
+    const ts = "1700000000";
     const nonce = "testnonce";
-    const sig = sha1Sign(TEST_TOKEN, timestamp, nonce, echoEncrypted);
+    const sig = sha1Sign(TEST_TOKEN, ts, nonce, echoEnc);
 
     await expect(
-      platform.verify({
-        method: "GET",
-        headers: {},
-        query: { msg_signature: sig, timestamp, nonce, echostr: echoEncrypted },
-        body: "",
-      }),
+      platform.verify({ method: "GET", headers: {}, query: { msg_signature: sig, timestamp: ts, nonce, echostr: echoEnc }, body: "" }),
     ).rejects.toThrow(WecomEcho);
   });
 
-  it("WecomEcho contains the decrypted echostr", async () => {
+  it("WecomEcho carries the decrypted plaintext", async () => {
     const platform = new WecomPlatform(BASE_CONFIG);
-    const echoMsg = makeInnerXml("", "my_echo", "");
-    const echoEncrypted = wecomAesEncrypt(echoMsg, TEST_CORP_ID, TEST_KEY);
-    const timestamp = "1700000000";
-    const nonce = "testnonce";
-    const sig = sha1Sign(TEST_TOKEN, timestamp, nonce, echoEncrypted);
+    const echoMsg = makeInnerXml("", "my_echo_value", "");
+    const echoEnc = wecomAesEncrypt(echoMsg, TEST_CORP_ID, TEST_KEY);
+    const ts = "1700000000";
+    const nonce = "n1";
+    const sig = sha1Sign(TEST_TOKEN, ts, nonce, echoEnc);
 
     let echo: WecomEcho | undefined;
     try {
-      await platform.verify({
-        method: "GET",
-        headers: {},
-        query: { msg_signature: sig, timestamp, nonce, echostr: echoEncrypted },
-        body: "",
-      });
-    } catch (err) {
-      if (err instanceof WecomEcho) echo = err;
+      await platform.verify({ method: "GET", headers: {}, query: { msg_signature: sig, timestamp: ts, nonce, echostr: echoEnc }, body: "" });
+    } catch (e) {
+      if (e instanceof WecomEcho) echo = e;
     }
-
     expect(echo?.echostr).toBe(echoMsg);
   });
 
@@ -112,30 +110,19 @@ describe("WecomPlatform.verify()", () => {
     const innerXml = makeInnerXml("user1", "hello", "bot");
     const encrypted = wecomAesEncrypt(innerXml, TEST_CORP_ID, TEST_KEY);
     const body = makeXmlBody(encrypted);
-    const timestamp = "1700000000";
+    const ts = "1700000000";
     const nonce = "testnonce";
-    const sig = sha1Sign(TEST_TOKEN, timestamp, nonce, encrypted);
+    const sig = sha1Sign(TEST_TOKEN, ts, nonce, encrypted);
 
     await expect(
-      platform.verify({
-        method: "POST",
-        headers: {},
-        query: { msg_signature: sig, timestamp, nonce },
-        body,
-      }),
+      platform.verify({ method: "POST", headers: {}, query: { msg_signature: sig, timestamp: ts, nonce }, body }),
     ).resolves.toBeUndefined();
   });
 
   it("rejects POST with bad signature", async () => {
     const platform = new WecomPlatform(BASE_CONFIG);
-    const body = makeXmlBody("some_encrypted");
     await expect(
-      platform.verify({
-        method: "POST",
-        headers: {},
-        query: { msg_signature: "bad", timestamp: "1700000000", nonce: "nonce" },
-        body,
-      }),
+      platform.verify({ method: "POST", headers: {}, query: { msg_signature: "bad", timestamp: "1700000000", nonce: "n" }, body: makeXmlBody("enc") }),
     ).rejects.toThrow("signature mismatch");
   });
 
@@ -151,31 +138,22 @@ describe("WecomPlatform.parse()", () => {
   it("returns IMMessage for a valid encrypted text message", async () => {
     const platform = new WecomPlatform(BASE_CONFIG);
     const innerXml = makeInnerXml("user_open_id", "  hi there  ", "bot_id");
-    const encrypted = wecomAesEncrypt(innerXml, TEST_CORP_ID, TEST_KEY);
-    const body = makeXmlBody(encrypted);
+    const body = makeXmlBody(wecomAesEncrypt(innerXml, TEST_CORP_ID, TEST_KEY));
 
     const msg = await platform.parse(body);
-
-    expect(msg).toMatchObject({
-      platform: "wecom",
-      userId: "user_open_id",
-      text: "hi there",
-    });
+    expect(msg).toMatchObject({ platform: "wecom", userId: "user_open_id", text: "hi there" });
   });
 
   it("returns null when corp ID does not match", async () => {
     const platform = new WecomPlatform(BASE_CONFIG);
-    const innerXml = makeInnerXml("user1", "hello", "bot");
-    const encrypted = wecomAesEncrypt(innerXml, "wrong_corp", TEST_KEY);
-    const body = makeXmlBody(encrypted);
+    const body = makeXmlBody(wecomAesEncrypt(makeInnerXml("u1", "hi", "bot"), "wrong_corp", TEST_KEY));
     expect(await platform.parse(body)).toBeNull();
   });
 
   it("returns null for non-text message types", async () => {
     const platform = new WecomPlatform(BASE_CONFIG);
     const innerXml = `<xml><FromUserName><![CDATA[u1]]></FromUserName><MsgType><![CDATA[image]]></MsgType></xml>`;
-    const encrypted = wecomAesEncrypt(innerXml, TEST_CORP_ID, TEST_KEY);
-    const body = makeXmlBody(encrypted);
+    const body = makeXmlBody(wecomAesEncrypt(innerXml, TEST_CORP_ID, TEST_KEY));
     expect(await platform.parse(body)).toBeNull();
   });
 

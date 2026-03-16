@@ -7,20 +7,18 @@ const BASE_CONFIG = {
   verificationToken: "test_token",
 };
 
-function makeMessageEvent(overrides: Record<string, unknown> = {}): string {
+/** Fresh timestamp string (seconds) that passes the 5-min age check. */
+function nowTs(): string {
+  return String(Math.floor(Date.now() / 1000));
+}
+
+function makeMessageEvent(): string {
   return JSON.stringify({
     schema: "2.0",
     header: { event_type: "im.message.receive_v1" },
     event: {
-      sender: {
-        sender_id: { open_id: "ou_user123" },
-        sender_type: "user",
-      },
-      message: {
-        chat_id: "oc_chat456",
-        content: JSON.stringify({ text: "hello" }),
-        ...overrides,
-      },
+      sender: { sender_id: { open_id: "ou_user123" }, sender_type: "user" },
+      message: { chat_id: "oc_chat456", content: JSON.stringify({ text: "hello" }) },
     },
   });
 }
@@ -35,7 +33,7 @@ describe("FeishuPlatform.verify()", () => {
 
   it("passes with valid HMAC-SHA256 signature", async () => {
     const encryptKey = "my_encrypt_key";
-    const timestamp = "1700000000";
+    const timestamp = nowTs();
     const nonce = "abc123";
     const body = '{"type":"event"}';
     const signature = computeFeishuSignature(timestamp, nonce, encryptKey, body);
@@ -62,7 +60,7 @@ describe("FeishuPlatform.verify()", () => {
         method: "POST",
         headers: {
           "x-lark-signature": "bad_sig",
-          "x-lark-request-timestamp": "1700000000",
+          "x-lark-request-timestamp": nowTs(),
           "x-lark-request-nonce": "nonce",
         },
         query: {},
@@ -73,7 +71,7 @@ describe("FeishuPlatform.verify()", () => {
 
   it("rejects stale timestamp", async () => {
     const platform = new FeishuPlatform(BASE_CONFIG);
-    const staleTimestamp = String(Math.floor(Date.now() / 1000) - 400); // 6+ min ago
+    const staleTimestamp = String(Math.floor(Date.now() / 1000) - 400);
     await expect(
       platform.verify({
         method: "POST",
@@ -89,7 +87,6 @@ describe("FeishuPlatform.parse()", () => {
   it("returns IMMessage for a valid message event", async () => {
     const platform = new FeishuPlatform(BASE_CONFIG);
     const msg = await platform.parse(makeMessageEvent());
-
     expect(msg).toMatchObject({
       platform: "feishu",
       chatId: "oc_chat456",
@@ -100,14 +97,25 @@ describe("FeishuPlatform.parse()", () => {
 
   it("throws FeishuChallenge for url_verification", async () => {
     const platform = new FeishuPlatform(BASE_CONFIG);
-    const body = JSON.stringify({ type: "url_verification", challenge: "xyz" });
-    await expect(platform.parse(body)).rejects.toThrow(FeishuChallenge);
+    await expect(
+      platform.parse(JSON.stringify({ type: "url_verification", challenge: "xyz" })),
+    ).rejects.toThrow(FeishuChallenge);
+  });
+
+  it("FeishuChallenge carries the challenge value", async () => {
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    let caught: FeishuChallenge | undefined;
+    try {
+      await platform.parse(JSON.stringify({ type: "url_verification", challenge: "abc123" }));
+    } catch (e) {
+      if (e instanceof FeishuChallenge) caught = e;
+    }
+    expect(caught?.challenge).toBe("abc123");
   });
 
   it("returns null for bot's own message", async () => {
     const platform = new FeishuPlatform(BASE_CONFIG);
     const body = JSON.stringify({
-      schema: "2.0",
       header: { event_type: "im.message.receive_v1" },
       event: {
         sender: { sender_type: "app", sender_id: { open_id: "bot" } },
@@ -119,16 +127,17 @@ describe("FeishuPlatform.parse()", () => {
 
   it("returns null for unknown event types", async () => {
     const platform = new FeishuPlatform(BASE_CONFIG);
-    const body = JSON.stringify({ header: { event_type: "some.other.event" }, event: {} });
-    expect(await platform.parse(body)).toBeNull();
+    expect(
+      await platform.parse(JSON.stringify({ header: { event_type: "other" }, event: {} })),
+    ).toBeNull();
   });
 });
 
 describe("computeFeishuSignature()", () => {
   it("is deterministic for the same inputs", () => {
-    const sig1 = computeFeishuSignature("ts", "nonce", "key", "body");
-    const sig2 = computeFeishuSignature("ts", "nonce", "key", "body");
-    expect(sig1).toBe(sig2);
+    const s1 = computeFeishuSignature("ts", "nonce", "key", "body");
+    const s2 = computeFeishuSignature("ts", "nonce", "key", "body");
+    expect(s1).toBe(s2);
   });
 
   it("changes when any input changes", () => {
