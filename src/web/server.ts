@@ -23,7 +23,7 @@ export class WebServer {
   readonly #server: ReturnType<typeof createServer>;
 
   constructor(config: WebServerConfig) {
-    this.#config = { port: 3001, ...config };
+    this.#config = { port: 3000, ...config };
     this.#server = createServer((req, res) => {
       void this.#handleRequest(req, res);
     });

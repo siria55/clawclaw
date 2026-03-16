@@ -126,7 +126,7 @@ ngrok http 3000
 npm run dev:web
 ```
 
-启动后访问 `http://localhost:3001`，页面提供：
+启动后访问 `http://localhost:3000`，页面提供：
 - 对话输入框（Enter 发送，Shift+Enter 换行）
 - 流式消息气泡
 - 工具调用 / 执行结果展示

@@ -16,5 +16,5 @@ const agent = new Agent({
   llm,
 });
 
-const server = new WebServer({ agent, port: 3001 });
+const server = new WebServer({ agent, port: 3000 });
 await server.start();
