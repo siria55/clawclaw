@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import type { AgentConfig } from "../core/types.js";
+import type { NewsStorage } from "../news/storage.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +43,8 @@ export interface WebServerConfig {
   staticDir?: string;
   /** Return current system status for GET /api/status. */
   getStatus?: () => SystemStatus;
+  /** News storage instance for GET /api/news. */
+  newsStorage?: NewsStorage;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -63,7 +66,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus">> & { agentConfig: AgentConfig | undefined; getStatus: (() => SystemStatus) | undefined };
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage">> & { agentConfig: AgentConfig | undefined; getStatus: (() => SystemStatus) | undefined; newsStorage: NewsStorage | undefined };
   readonly #server: ReturnType<typeof createServer>;
 
   constructor(config: WebServerConfig) {
@@ -72,6 +75,7 @@ export class WebServer {
       agentConfig: undefined,
       staticDir: join(__dirname, "dist"),
       getStatus: undefined,
+      newsStorage: undefined,
       ...config,
     };
     this.#server = createServer((req, res) => {
@@ -109,6 +113,11 @@ export class WebServer {
 
     if (req.method === "GET" && path === "/api/status") {
       this.#handleStatus(res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/news") {
+      this.#handleNews(req, res);
       return;
     }
 
@@ -151,6 +160,19 @@ export class WebServer {
       : { cronJobs: [], connections: [] };
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(status));
+  }
+
+  #handleNews(req: IncomingMessage, res: ServerResponse): void {
+    const qs = new URL(req.url ?? "/", "http://localhost").searchParams;
+    const page = parseIntParam(qs.get("page"), 1);
+    const pageSize = parseIntParam(qs.get("pageSize"), 20);
+    const q = qs.get("q") ?? undefined;
+    const tag = qs.get("tag") ?? undefined;
+    const result = this.#config.newsStorage
+      ? this.#config.newsStorage.query({ ...(q !== undefined && { q }), ...(tag !== undefined && { tag }), page, pageSize })
+      : { articles: [], total: 0, page, pageSize };
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify(result));
   }
 
   async #handleChat(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -247,6 +269,12 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
+}
+
+function parseIntParam(value: string | null, fallback: number): number {
+  if (value === null) return fallback;
+  const n = parseInt(value, 10);
+  return Number.isNaN(n) ? fallback : n;
 }
 
 function extractText(content: unknown): string {

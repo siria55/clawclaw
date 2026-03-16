@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { ChatView } from "./ChatView";
 import { InputBar } from "./InputBar";
+import { NewsView } from "./NewsView";
 import { SettingsPanel } from "./SettingsPanel";
 import { StatusPanel } from "./StatusPanel";
 import { useChatStream, loadConfig, saveConfig } from "./useChatStream";
 import type { ClawConfig } from "./types";
 import styles from "./App.module.css";
 
+type View = "chat" | "news";
+
 export function App(): React.JSX.Element {
   const { entries, streaming, send } = useChatStream();
+  const [view, setView] = useState<View>("chat");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [config, setConfig] = useState<ClawConfig>(loadConfig);
@@ -32,6 +36,22 @@ export function App(): React.JSX.Element {
           <span className={styles.name}>clawclaw</span>
           <span className={styles.badge}>debug</span>
         </div>
+
+        <nav className={styles.tabs}>
+          <button
+            className={`${styles.tab} ${view === "chat" ? styles.tabActive : ""}`}
+            onClick={() => setView("chat")}
+          >
+            对话
+          </button>
+          <button
+            className={`${styles.tab} ${view === "news" ? styles.tabActive : ""}`}
+            onClick={() => setView("news")}
+          >
+            新闻库
+          </button>
+        </nav>
+
         <div className={styles.actions}>
           {hasConfig && <span className={styles.configDot} title="已配置自定义 LLM" />}
           <button
@@ -65,9 +85,14 @@ export function App(): React.JSX.Element {
         </div>
       </header>
 
-      <ChatView entries={entries} />
-
-      <InputBar disabled={streaming} onSend={handleSend} />
+      {view === "chat" ? (
+        <>
+          <ChatView entries={entries} />
+          <InputBar disabled={streaming} onSend={handleSend} />
+        </>
+      ) : (
+        <NewsView />
+      )}
 
       <SettingsPanel
         open={settingsOpen}
