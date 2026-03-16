@@ -1,15 +1,26 @@
-import type { IMPlatform, IMMessage } from "./types.js";
+import { createHmac } from "node:crypto";
+import type { IMPlatform, IMMessage, IMVerifyParams } from "./types.js";
 
 interface FeishuConfig {
   appId: string;
   appSecret: string;
+  /** Verification token from Feishu open platform console */
   verificationToken: string;
+  /**
+   * Encrypt key for signature verification (optional).
+   * When set, requests without a valid X-Lark-Signature are rejected.
+   */
+  encryptKey?: string;
 }
+
+/** Max age of a Feishu request timestamp before it's considered a replay attack. */
+const MAX_TIMESTAMP_AGE_MS = 5 * 60 * 1000;
 
 /**
  * Feishu (Lark) IM platform adapter.
  *
  * Required env vars: FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_VERIFICATION_TOKEN
+ * Optional env var:  FEISHU_ENCRYPT_KEY (enables request signature verification)
  */
 export class FeishuPlatform implements IMPlatform {
   readonly name = "feishu";
@@ -20,22 +31,42 @@ export class FeishuPlatform implements IMPlatform {
       appId: config?.appId ?? requireEnv("FEISHU_APP_ID"),
       appSecret: config?.appSecret ?? requireEnv("FEISHU_APP_SECRET"),
       verificationToken: config?.verificationToken ?? requireEnv("FEISHU_VERIFICATION_TOKEN"),
+      encryptKey: config?.encryptKey ?? process.env["FEISHU_ENCRYPT_KEY"],
     };
   }
 
-  async verify(headers: Record<string, string>, body: string): Promise<void> {
-    // Feishu sends a challenge request on first setup — handled in parse().
-    // Signature verification uses timestamp + token + body HMAC-SHA256.
-    // TODO: implement full signature verification in Sprint 3.
-    void headers;
-    void body;
-    void this.#config;
+  async verify(params: IMVerifyParams): Promise<void> {
+    const { headers, body } = params;
+
+    // Reject stale requests (replay protection)
+    const timestamp = headers["x-lark-request-timestamp"];
+    if (timestamp) {
+      const age = Date.now() - Number(timestamp) * 1000;
+      if (Math.abs(age) > MAX_TIMESTAMP_AGE_MS) {
+        throw new Error("Feishu request timestamp too old");
+      }
+    }
+
+    // Signature verification when encryptKey is configured
+    const signature = headers["x-lark-signature"];
+    if (this.#config.encryptKey) {
+      if (!signature || !timestamp) {
+        throw new Error("Feishu signature headers missing");
+      }
+      const nonce = headers["x-lark-request-nonce"] ?? "";
+      const expected = computeFeishuSignature(timestamp, nonce, this.#config.encryptKey, body);
+      if (signature !== expected) {
+        throw new Error("Feishu signature mismatch");
+      }
+    }
+
+    // url_verification challenge is handled in parse() via FeishuChallenge
   }
 
   async parse(body: string): Promise<IMMessage | null> {
     const event = JSON.parse(body) as Record<string, unknown>;
 
-    // Respond to Feishu URL verification challenge
+    // Feishu URL verification challenge on first setup
     if (event["type"] === "url_verification") {
       throw new FeishuChallenge(event["challenge"] as string);
     }
@@ -66,38 +97,59 @@ export class FeishuPlatform implements IMPlatform {
 
   async send(chatId: string, text: string): Promise<void> {
     const token = await this.#getAccessToken();
-    const response = await fetch("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const response = await fetch(
+      "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          receive_id: chatId,
+          msg_type: "text",
+          content: JSON.stringify({ text }),
+        }),
       },
-      body: JSON.stringify({
-        receive_id: chatId,
-        msg_type: "text",
-        content: JSON.stringify({ text }),
-      }),
-    });
+    );
     if (!response.ok) {
       throw new Error(`Feishu send failed: ${response.status}`);
     }
   }
 
   async #getAccessToken(): Promise<string> {
-    const response = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        app_id: this.#config.appId,
-        app_secret: this.#config.appSecret,
-      }),
-    });
+    const response = await fetch(
+      "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          app_id: this.#config.appId,
+          app_secret: this.#config.appSecret,
+        }),
+      },
+    );
     const data = (await response.json()) as { tenant_access_token: string };
     return data.tenant_access_token;
   }
 }
 
-/** Thrown when Feishu sends a URL verification challenge. */
+/**
+ * Compute Feishu request signature.
+ * signature = HMAC-SHA256(encryptKey, timestamp + nonce + body)
+ */
+export function computeFeishuSignature(
+  timestamp: string,
+  nonce: string,
+  encryptKey: string,
+  body: string,
+): string {
+  return createHmac("sha256", encryptKey)
+    .update(timestamp + nonce + body)
+    .digest("hex");
+}
+
+/** Thrown when Feishu sends a URL verification challenge. Server must echo back `challenge`. */
 export class FeishuChallenge extends Error {
   constructor(readonly challenge: string) {
     super("feishu_challenge");

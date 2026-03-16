@@ -12,6 +12,14 @@ export interface IMMessage {
   raw: unknown;
 }
 
+export interface IMVerifyParams {
+  method: "GET" | "POST";
+  headers: Record<string, string>;
+  /** Parsed URL query parameters */
+  query: Record<string, string>;
+  body: string;
+}
+
 /**
  * Interface every IM platform adapter must implement.
  *
@@ -24,10 +32,12 @@ export interface IMPlatform {
   readonly name: string;
 
   /**
-   * Verify the authenticity of an incoming Webhook request.
-   * Throws if the request fails verification.
+   * Verify the authenticity of an incoming request.
+   * Throws if verification fails.
+   * May throw a platform-specific challenge (e.g. `FeishuChallenge`, `WecomEcho`)
+   * that the server must respond to instead of processing a message.
    */
-  verify(headers: Record<string, string>, body: string): Promise<void>;
+  verify(params: IMVerifyParams): Promise<void>;
 
   /**
    * Parse a verified Webhook body into a unified IMMessage.
