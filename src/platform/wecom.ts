@@ -1,4 +1,5 @@
-import type { IMPlatform, IMMessage } from "./types.js";
+import { createDecipheriv, createCipheriv, createHash } from "node:crypto";
+import type { IMPlatform, IMMessage, IMVerifyParams } from "./types.js";
 
 interface WecomConfig {
   corpId: string;
@@ -29,21 +30,44 @@ export class WecomPlatform implements IMPlatform {
     };
   }
 
-  async verify(headers: Record<string, string>, body: string): Promise<void> {
-    // WeCom uses msg_signature + timestamp + nonce for verification.
-    // TODO: implement AES decrypt + signature verification in Sprint 3.
-    void headers;
-    void body;
-    void this.#config;
+  async verify(params: IMVerifyParams): Promise<void> {
+    const { method, query } = params;
+
+    const msgSignature = query["msg_signature"] ?? "";
+    const timestamp = query["timestamp"] ?? "";
+    const nonce = query["nonce"] ?? "";
+
+    if (!msgSignature || !timestamp || !nonce) {
+      throw new Error("WeCom: missing signature query params");
+    }
+
+    // GET = URL verification; decrypt echostr and return it
+    if (method === "GET") {
+      const echostr = query["echostr"] ?? "";
+      if (!echostr) throw new Error("WeCom: missing echostr");
+      verifyWecomSignature(this.#config.token, timestamp, nonce, echostr, msgSignature);
+      const plain = wecomAesDecrypt(echostr, this.#config.encodingAesKey);
+      throw new WecomEcho(plain.message);
+    }
+
+    // POST = incoming message; verify signature over the Encrypt tag
+    const encryptTag = extractXmlTag(params.body, "Encrypt") ?? "";
+    verifyWecomSignature(this.#config.token, timestamp, nonce, encryptTag, msgSignature);
   }
 
   async parse(body: string): Promise<IMMessage | null> {
-    // WeCom sends XML; full AES decryption TODO in Sprint 3.
-    // Skeleton: parse MsgType and extract basic fields.
-    const fromUser = extractXmlTag(body, "FromUserName");
-    const msgType = extractXmlTag(body, "MsgType");
-    const content = extractXmlTag(body, "Content");
-    const toUser = extractXmlTag(body, "ToUserName");
+    const encryptTag = extractXmlTag(body, "Encrypt");
+    if (!encryptTag) return null;
+
+    const plain = wecomAesDecrypt(encryptTag, this.#config.encodingAesKey);
+
+    // Discard messages not for this corp
+    if (plain.corpId !== this.#config.corpId) return null;
+
+    const fromUser = extractXmlTag(plain.message, "FromUserName");
+    const msgType = extractXmlTag(plain.message, "MsgType");
+    const content = extractXmlTag(plain.message, "Content");
+    const toUser = extractXmlTag(plain.message, "ToUserName");
 
     if (!fromUser || msgType !== "text" || !content) return null;
 
@@ -52,7 +76,7 @@ export class WecomPlatform implements IMPlatform {
       chatId: toUser ?? fromUser,
       userId: fromUser,
       text: content.trim(),
-      raw: body,
+      raw: plain.message,
     };
   }
 
@@ -84,9 +108,101 @@ export class WecomPlatform implements IMPlatform {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Crypto helpers (exported for testing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify WeCom request signature.
+ * signature = SHA1(sorted([token, timestamp, nonce, encryptedMsg]).join(""))
+ */
+export function verifyWecomSignature(
+  token: string,
+  timestamp: string,
+  nonce: string,
+  encryptedMsg: string,
+  expected: string,
+): void {
+  const sorted = [token, timestamp, nonce, encryptedMsg].sort().join("");
+  const actual = createHash("sha1").update(sorted).digest("hex");
+  if (actual !== expected) {
+    throw new Error("WeCom signature mismatch");
+  }
+}
+
+interface WecomDecryptResult {
+  message: string;
+  corpId: string;
+}
+
+/**
+ * Decrypt a WeCom AES-256-CBC encrypted message.
+ *
+ * Plaintext format (after PKCS7 unpad):
+ *   16 random bytes | 4 bytes msg length (big-endian) | msg bytes | corpId bytes
+ */
+export function wecomAesDecrypt(encrypted: string, encodingAesKey: string): WecomDecryptResult {
+  const key = Buffer.from(encodingAesKey + "=", "base64"); // 32 bytes
+  const iv = key.subarray(0, 16);
+  const ciphertext = Buffer.from(encrypted, "base64");
+
+  const decipher = createDecipheriv("aes-256-cbc", key, iv);
+  decipher.setAutoPadding(false);
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+
+  const padLen = decrypted[decrypted.length - 1] ?? 0;
+  const content = decrypted.subarray(0, decrypted.length - padLen);
+
+  const msgLen = content.readUInt32BE(16);
+  const message = content.subarray(20, 20 + msgLen).toString("utf8");
+  const corpId = content.subarray(20 + msgLen).toString("utf8");
+
+  return { message, corpId };
+}
+
+/**
+ * Encrypt a message using WeCom AES-256-CBC.
+ * Used for generating test vectors.
+ */
+export function wecomAesEncrypt(message: string, corpId: string, encodingAesKey: string): string {
+  const key = Buffer.from(encodingAesKey + "=", "base64");
+  const iv = key.subarray(0, 16);
+
+  const random = Buffer.alloc(16, 0x42); // deterministic for tests
+  const msgBuf = Buffer.from(message, "utf8");
+  const corpBuf = Buffer.from(corpId, "utf8");
+  const lenBuf = Buffer.allocUnsafe(4);
+  lenBuf.writeUInt32BE(msgBuf.length);
+
+  const plain = Buffer.concat([random, lenBuf, msgBuf, corpBuf]);
+
+  const blockSize = 32;
+  const padLen = blockSize - (plain.length % blockSize);
+  const padded = Buffer.concat([plain, Buffer.alloc(padLen, padLen)]);
+
+  const cipher = createCipheriv("aes-256-cbc", key, iv);
+  cipher.setAutoPadding(false);
+  return Buffer.concat([cipher.update(padded), cipher.final()]).toString("base64");
+}
+
+// ---------------------------------------------------------------------------
+// XML helpers
+// ---------------------------------------------------------------------------
+
 function extractXmlTag(xml: string, tag: string): string | null {
-  const match = xml.match(new RegExp(`<${tag}><!\\[CDATA\\[([^\\]]+)\\]\\]></${tag}>`));
-  return match?.[1] ?? null;
+  const cdataMatch = xml.match(new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]></${tag}>`));
+  if (cdataMatch) return cdataMatch[1] ?? null;
+  const plainMatch = xml.match(new RegExp(`<${tag}>([^<]*)</${tag}>`));
+  return plainMatch?.[1] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+
+/** Thrown during GET URL verification. Server must respond with the plain echostr. */
+export class WecomEcho extends Error {
+  constructor(readonly echostr: string) {
+    super("wecom_echo");
+  }
 }
 
 function requireEnv(key: string): string {

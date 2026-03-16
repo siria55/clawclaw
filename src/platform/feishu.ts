@@ -10,7 +10,7 @@ interface FeishuConfig {
    * Encrypt key for signature verification (optional).
    * When set, requests without a valid X-Lark-Signature are rejected.
    */
-  encryptKey?: string;
+  encryptKey: string | undefined;
 }
 
 /** Max age of a Feishu request timestamp before it's considered a replay attack. */

@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Agent } from "../core/agent.js";
 import { FeishuChallenge } from "../platform/feishu.js";
+import { WecomEcho } from "../platform/wecom.js";
 import type { IMPlatform } from "../platform/types.js";
 
 export interface ClawServerConfig {
@@ -53,23 +54,36 @@ export class ClawServer {
   }
 
   async #handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const path = req.url?.split("?")[0] ?? "/";
+    const url = new URL(req.url ?? "/", "http://localhost");
+    const path = url.pathname;
     const route = this.#config.routes[path];
 
-    if (!route || req.method !== "POST") {
+    if (!route) {
       res.writeHead(404).end();
       return;
     }
 
-    const body = await readBody(req);
+    const method = req.method === "GET" ? "GET" : "POST";
+    if (method === "POST" && req.method !== "POST") {
+      res.writeHead(405).end();
+      return;
+    }
+
+    const body = method === "POST" ? await readBody(req) : "";
     const headers = headersToRecord(req.headers);
+    const query = Object.fromEntries(url.searchParams.entries());
 
     try {
-      await route.platform.verify(headers, body);
+      await route.platform.verify({ method, headers, query, body });
     } catch (err) {
       if (err instanceof FeishuChallenge) {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ challenge: err.challenge }));
+        return;
+      }
+      if (err instanceof WecomEcho) {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end(err.echostr);
         return;
       }
       res.writeHead(401).end("Unauthorized");
@@ -82,15 +96,17 @@ export class ClawServer {
       return;
     }
 
-    // Acknowledge immediately; run agent asynchronously.
+    // Acknowledge immediately; run agent asynchronously
     res.writeHead(200).end("ok");
 
     this.#activeRequests++;
     route.agent
       .run(message.text)
       .then(async (result) => {
-        const lastMessage = result.messages.findLast((m: import("../llm/types.js").Message) => m.role === "assistant");
-        const reply = extractText(lastMessage?.content);
+        const lastMsg = result.messages.findLast(
+          (m: import("../llm/types.js").Message) => m.role === "assistant",
+        );
+        const reply = extractText(lastMsg?.content);
         if (reply) await route.platform.send(message.chatId, reply);
       })
       .catch((err: unknown) => {
