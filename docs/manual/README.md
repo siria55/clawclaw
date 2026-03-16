@@ -118,6 +118,37 @@ ngrok http 3000
 
 ---
 
+## Context Compression — 上下文压缩
+
+对话轮数过多时，历史 token 会超出模型上限。`LLMContextCompressor` 自动压缩中间历史，保留关键信息。
+
+在 `AgentConfig` 中传入 `compressor` 即可启用：
+
+- **threshold** — 触发压缩的 token 估算阈值，默认 6000（约 24000 字符）
+- **keepRecentPairs** — 压缩后保留最近 N 轮完整对话，默认 4
+
+当 token 超过阈值时，压缩器会：
+1. 保留第一条用户消息（保留原始意图）
+2. 将中间消息通过 LLM 生成摘要
+3. 保留最近 N 轮完整对话
+
+---
+
+## Cron Job — 定时任务
+
+`CronScheduler` 让 Agent 主动触发任务，不再只等待消息。支持标准 5 字段 cron 表达式（分 时 日 月 周）。
+
+支持的语法：
+- `*` — 每个时间单位
+- `*/n` — 每 n 个单位
+- `a-b` — 范围
+- `a,b,c` — 列举
+- `a-b/n` — 范围内步进
+
+任务触发后，Agent 执行 `message` 并将回复通过 `IMPlatform.send()` 发送到指定 `chatId`。
+
+---
+
 ## Web UI 调试界面
 
 本地调试时可启动可视化对话页面，支持工具调用过程展示和流式回复：
@@ -130,6 +161,9 @@ npm run dev:web
 - 对话输入框（Enter 发送，Shift+Enter 换行）
 - 流式消息气泡
 - 工具调用 / 执行结果展示
+- 右上角「⚙ 设置」面板：可配置 API Key、Base URL、HTTPS Proxy、模型名称
+  - 配置保存在 `localStorage`，刷新后自动恢复
+  - 每次发消息时通过 `X-Claw-Config` 请求头传给服务端，覆盖服务端默认配置
 
 ---
 

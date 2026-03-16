@@ -151,11 +151,11 @@ export class WebServer {
     const hasOverride = clawConfig.apiKey ?? clawConfig.baseURL ?? clawConfig.httpsProxy ?? clawConfig.model;
     if (!hasOverride) return this.#config.agent;
 
-    const llm = new AnthropicProvider({
-      apiKey: clawConfig.apiKey,
-      baseURL: clawConfig.baseURL,
-      model: clawConfig.model,
-    });
+    const llmConfig: import("../llm/anthropic.js").AnthropicConfig = {};
+    if (clawConfig.apiKey) llmConfig.apiKey = clawConfig.apiKey;
+    if (clawConfig.baseURL) llmConfig.baseURL = clawConfig.baseURL;
+    if (clawConfig.model) llmConfig.model = clawConfig.model;
+    const llm = new AnthropicProvider(llmConfig);
 
     return new Agent({ ...this.#config.agentConfig, llm });
   }

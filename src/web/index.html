@@ -25,6 +25,47 @@
     }
     header h1 { font-size: 15px; font-weight: 600; color: #fff; }
     header span { font-size: 12px; color: #666; }
+    header .spacer { flex: 1; }
+    #settings-btn {
+      background: none;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #888;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px 10px;
+      transition: border-color .15s, color .15s;
+    }
+    #settings-btn:hover { border-color: #555; color: #ccc; }
+
+    #settings-panel {
+      display: none;
+      border-bottom: 1px solid #222;
+      padding: 16px 20px;
+      background: #111;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    #settings-panel.open { display: flex; }
+    .setting-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 200px;
+      flex: 1;
+    }
+    .setting-field label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: .05em; }
+    .setting-field input {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #e8e8e8;
+      font-size: 13px;
+      padding: 7px 10px;
+      outline: none;
+    }
+    .setting-field input:focus { border-color: #555; }
+    .setting-field input::placeholder { color: #444; }
 
     #messages {
       flex: 1;
@@ -123,7 +164,28 @@
   <header>
     <h1>clawclaw</h1>
     <span>debug console</span>
+    <div class="spacer"></div>
+    <button id="settings-btn">⚙ 设置</button>
   </header>
+
+  <div id="settings-panel">
+    <div class="setting-field">
+      <label>API Key</label>
+      <input id="cfg-api-key" type="password" placeholder="sk-ant-..." />
+    </div>
+    <div class="setting-field">
+      <label>Base URL</label>
+      <input id="cfg-base-url" type="text" placeholder="https://api.anthropic.com" />
+    </div>
+    <div class="setting-field">
+      <label>HTTPS Proxy</label>
+      <input id="cfg-proxy" type="text" placeholder="http://127.0.0.1:7890" />
+    </div>
+    <div class="setting-field">
+      <label>Model</label>
+      <input id="cfg-model" type="text" placeholder="claude-opus-4-6" />
+    </div>
+  </div>
 
   <div id="messages"></div>
 
@@ -133,6 +195,48 @@
   </div>
 
   <script>
+    const settingsBtn = document.getElementById('settings-btn');
+    const settingsPanel = document.getElementById('settings-panel');
+    const cfgApiKey = document.getElementById('cfg-api-key');
+    const cfgBaseUrl = document.getElementById('cfg-base-url');
+    const cfgProxy = document.getElementById('cfg-proxy');
+    const cfgModel = document.getElementById('cfg-model');
+
+    // Load persisted settings
+    const STORAGE_KEY = 'clawclaw_config';
+    function loadSettings() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+        cfgApiKey.value = saved.apiKey ?? '';
+        cfgBaseUrl.value = saved.baseURL ?? '';
+        cfgProxy.value = saved.httpsProxy ?? '';
+        cfgModel.value = saved.model ?? '';
+      } catch { /* ignore */ }
+    }
+    function saveSettings() {
+      const cfg = {};
+      if (cfgApiKey.value) cfg.apiKey = cfgApiKey.value;
+      if (cfgBaseUrl.value) cfg.baseURL = cfgBaseUrl.value;
+      if (cfgProxy.value) cfg.httpsProxy = cfgProxy.value;
+      if (cfgModel.value) cfg.model = cfgModel.value;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    }
+    function getClawConfig() {
+      const cfg = {};
+      if (cfgApiKey.value) cfg.apiKey = cfgApiKey.value;
+      if (cfgBaseUrl.value) cfg.baseURL = cfgBaseUrl.value;
+      if (cfgProxy.value) cfg.httpsProxy = cfgProxy.value;
+      if (cfgModel.value) cfg.model = cfgModel.value;
+      return Object.keys(cfg).length > 0 ? cfg : null;
+    }
+
+    loadSettings();
+    [cfgApiKey, cfgBaseUrl, cfgProxy, cfgModel].forEach(el => el.addEventListener('input', saveSettings));
+
+    settingsBtn.addEventListener('click', () => {
+      settingsPanel.classList.toggle('open');
+    });
+
     const messagesEl = document.getElementById('messages');
     const inputEl = document.getElementById('input');
     const sendBtn = document.getElementById('send');
@@ -189,9 +293,13 @@
       // EventSource only supports GET; use fetch + ReadableStream for POST SSE
       es.close();
 
+      const clawConfig = getClawConfig();
+      const headers = { 'Content-Type': 'application/json' };
+      if (clawConfig) headers['X-Claw-Config'] = JSON.stringify(clawConfig);
+
       const resp = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ message: text }),
       });
 

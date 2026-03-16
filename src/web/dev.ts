@@ -10,11 +10,14 @@ import { WebServer } from "./server.js";
 
 const llm = new AnthropicProvider();
 
-const agent = new Agent({
+const agentConfig = {
   name: "debug-agent",
   system: "你是一个有帮助的助手，回答简洁清晰。",
   llm,
-});
+  compressor: undefined,
+};
 
-const server = new WebServer({ agent, port: 3000 });
+const agent = new Agent(agentConfig);
+
+const server = new WebServer({ agent, agentConfig, port: 3000 });
 await server.start();

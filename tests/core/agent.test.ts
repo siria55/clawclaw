@@ -33,7 +33,7 @@ function makeToolCallResponse(toolName: string, input: unknown): LLMResponse {
 describe("Agent", () => {
   it("returns result after single LLM turn with no tools", async () => {
     const llm = makeMockLLM([makeTextResponse("Hello!")]);
-    const agent = new Agent({ name: "test", system: "You are helpful.", llm });
+    const agent = new Agent({ name: "test", system: "You are helpful.", llm, compressor: undefined });
 
     const result = await agent.run("Hi");
 
@@ -54,7 +54,7 @@ describe("Agent", () => {
       makeTextResponse("pong"),
     ]);
 
-    const agent = new Agent({ name: "test", system: "You are helpful.", llm, tools: [echoTool] });
+    const agent = new Agent({ name: "test", system: "You are helpful.", llm, tools: [echoTool], compressor: undefined });
     const result = await agent.run("Echo ping");
 
     expect(result.turns).toBe(2);
@@ -66,7 +66,7 @@ describe("Agent", () => {
       makeTextResponse("done"),
     ]);
 
-    const agent = new Agent({ name: "test", system: "You are helpful.", llm });
+    const agent = new Agent({ name: "test", system: "You are helpful.", llm, compressor: undefined });
     const result = await agent.run("Call missing tool");
 
     expect(result.turns).toBe(2);
@@ -84,7 +84,7 @@ describe("Agent", () => {
     };
 
     const llm = makeMockLLM([...responses, makeTextResponse("done")]);
-    const agent = new Agent({ name: "test", system: "You are helpful.", llm, tools: [echoTool] });
+    const agent = new Agent({ name: "test", system: "You are helpful.", llm, tools: [echoTool], compressor: undefined });
 
     const result = await agent.run("Go", { maxTurns: 3 });
 
@@ -93,7 +93,7 @@ describe("Agent", () => {
 
   it("emits events in stream mode", async () => {
     const llm = makeMockLLM([makeTextResponse("Hello!")]);
-    const agent = new Agent({ name: "test", system: "You are helpful.", llm });
+    const agent = new Agent({ name: "test", system: "You are helpful.", llm, compressor: undefined });
 
     const events: string[] = [];
     for await (const event of agent.stream("Hi")) {
@@ -106,7 +106,7 @@ describe("Agent", () => {
   describe("constructor", () => {
     it("sets agent name from config", () => {
       const llm = makeMockLLM([]);
-      const agent = new Agent({ name: "my-agent", system: "sys", llm });
+      const agent = new Agent({ name: "my-agent", system: "sys", llm, compressor: undefined });
       expect(agent.name).toBe("my-agent");
     });
   });
