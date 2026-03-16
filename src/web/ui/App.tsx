@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChatView } from "./ChatView";
 import { InputBar } from "./InputBar";
 import { SettingsPanel } from "./SettingsPanel";
+import { StatusPanel } from "./StatusPanel";
 import { useChatStream, loadConfig, saveConfig } from "./useChatStream";
 import type { ClawConfig } from "./types";
 import styles from "./App.module.css";
@@ -9,6 +10,7 @@ import styles from "./App.module.css";
 export function App(): React.JSX.Element {
   const { entries, streaming, send } = useChatStream();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
   const [config, setConfig] = useState<ClawConfig>(loadConfig);
 
   const handleConfigChange = (next: ClawConfig): void => {
@@ -33,8 +35,23 @@ export function App(): React.JSX.Element {
         <div className={styles.actions}>
           {hasConfig && <span className={styles.configDot} title="已配置自定义 LLM" />}
           <button
+            className={`${styles.settingsBtn} ${statusOpen ? styles.settingsBtnActive : ""}`}
+            onClick={() => { setStatusOpen((v) => !v); setSettingsOpen(false); }}
+            aria-label="系统状态"
+          >
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <circle cx="7.5" cy="7.5" r="2" fill="currentColor" />
+              <circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
+              <line x1="7.5" y1="2" x2="7.5" y2="0.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              <line x1="7.5" y1="13" x2="7.5" y2="14.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              <line x1="2" y1="7.5" x2="0.5" y2="7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              <line x1="13" y1="7.5" x2="14.5" y2="7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+            状态
+          </button>
+          <button
             className={`${styles.settingsBtn} ${settingsOpen ? styles.settingsBtnActive : ""}`}
-            onClick={() => setSettingsOpen((v) => !v)}
+            onClick={() => { setSettingsOpen((v) => !v); setStatusOpen(false); }}
             aria-label="设置"
           >
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -57,6 +74,11 @@ export function App(): React.JSX.Element {
         config={config}
         onChange={handleConfigChange}
         onClose={() => setSettingsOpen(false)}
+      />
+
+      <StatusPanel
+        open={statusOpen}
+        onClose={() => setStatusOpen(false)}
       />
     </div>
   );

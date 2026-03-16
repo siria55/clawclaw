@@ -1,7 +1,7 @@
 # Sprint 6 — Web UI 增强：系统状态面板 + 思考 Bubble
 
 **周期**: Sprint 6
-**状态**: 📋 待开始
+**状态**: ✅ 完成
 
 ## 目标
 
@@ -56,10 +56,10 @@ export interface ConnectionStatus {
 
 ### 任务清单
 
-- [ ] `src/web/server.ts` — 新增 `SystemStatus` / `CronJobStatus` / `ConnectionStatus` 类型，`WebServerConfig.getStatus` 字段，`GET /api/status` 路由
-- [ ] `src/web/ui/StatusPanel.tsx` + `StatusPanel.module.css` — 状态抽屉组件
-- [ ] `src/web/ui/App.tsx` — header 新增状态按钮，挂载 `StatusPanel`
-- [ ] `tests/web/server.test.ts` — 补充 `/api/status` 路由测试
+- [x] `src/web/server.ts` — 新增 `SystemStatus` / `CronJobStatus` / `ConnectionStatus` 类型，`WebServerConfig.getStatus` 字段，`GET /api/status` 路由
+- [x] `src/web/ui/StatusPanel.tsx` + `StatusPanel.module.css` — 状态抽屉组件
+- [x] `src/web/ui/App.tsx` — header 新增状态按钮，挂载 `StatusPanel`
+- [x] `tests/web/server.test.ts` — 补充 `/api/status` 路由测试
 
 ---
 
@@ -111,20 +111,20 @@ export type ChatEntry = ChatMessageItem | ToolEventItem | ThinkingItem;
 
 ### 任务清单
 
-- [ ] `src/web/server.ts` — `#handleChat` 提取并 emit `thinking` SSE 事件
-- [ ] `src/web/ui/types.ts` — 新增 `ThinkingItem`，更新 `ChatEntry`
-- [ ] `src/web/ui/ThinkingBubble.tsx` + `ThinkingBubble.module.css`
-- [ ] `src/web/ui/useChatStream.ts` — 处理 `thinking` 事件
-- [ ] `src/web/ui/ChatView.tsx` — 渲染 `ThinkingBubble`
-- [ ] `tests/web/server.test.ts` — thinking 事件 SSE 测试
-- [ ] `tests/web/useChatStream.test.ts` — thinking 事件处理测试
+- [x] `src/web/server.ts` — `#handleChat` 提取并 emit `thinking` SSE 事件
+- [x] `src/web/ui/types.ts` — 新增 `ThinkingItem`，更新 `ChatEntry`
+- [x] `src/web/ui/ThinkingBubble.tsx` + `ThinkingBubble.module.css`
+- [x] `src/web/ui/useChatStream.ts` — 处理 `thinking` 事件
+- [x] `src/web/ui/ChatView.tsx` — 渲染 `ThinkingBubble`
+- [x] `tests/web/server.test.ts` — thinking 事件 SSE 测试
+- [x] `tests/web/useChatStream.test.ts` — thinking 事件处理测试
 
 ---
 
 ## 验收标准
 
-- [ ] `GET /api/status` 正确返回 cron 和连接数据
-- [ ] 状态面板打开后展示 cron 列表和 IM 连接状态
-- [ ] 当 Agent 使用 extended thinking 时，对话中出现折叠的"思考过程"气泡
-- [ ] 思考气泡默认折叠，点击展开，再次点击折叠
-- [ ] 所有现有测试继续通过
+- [x] `GET /api/status` 正确返回 cron 和连接数据
+- [x] 状态面板打开后展示 cron 列表和 IM 连接状态
+- [x] 当 Agent 使用 extended thinking 时，对话中出现折叠的"思考过程"气泡
+- [x] 思考气泡默认折叠，点击展开，再次点击折叠
+- [x] 所有现有测试继续通过

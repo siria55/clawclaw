@@ -26,7 +26,14 @@ export interface ToolEventItem {
   event: ToolEvent;
 }
 
-export type ChatEntry = ChatMessageItem | ToolEventItem;
+export interface ThinkingItem {
+  kind: "thinking";
+  id: string;
+  text: string;
+  streaming?: boolean;
+}
+
+export type ChatEntry = ChatMessageItem | ToolEventItem | ThinkingItem;
 
 export interface ClawConfig {
   apiKey?: string;

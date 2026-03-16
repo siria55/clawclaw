@@ -170,4 +170,68 @@ describe("WebServer", () => {
     expect(vi.mocked(defaultAgent.stream)).not.toHaveBeenCalled();
     await server.stop();
   });
+
+  it("GET /api/status returns empty arrays when getStatus is not provided", async () => {
+    const agent = makeMockAgent();
+    const { server, url } = await startWebServer(agent);
+    const res = await fetch(`${url}/api/status`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const body = await res.json() as { cronJobs: unknown[]; connections: unknown[] };
+    expect(body.cronJobs).toEqual([]);
+    expect(body.connections).toEqual([]);
+    await server.stop();
+  });
+
+  it("GET /api/status calls getStatus and returns its result", async () => {
+    const agent = makeMockAgent();
+    const getStatus = vi.fn(() => ({
+      cronJobs: [{ id: "daily", schedule: "0 9 * * *", message: "report", timezone: "Asia/Shanghai" }],
+      connections: [{ platform: "feishu", label: "飞书 Bot", connected: true }],
+    }));
+    const server = new WebServer({ agent, port: 0, staticDir, getStatus });
+    await server.start();
+    const url = `http://localhost:${server.port}`;
+    const res = await fetch(`${url}/api/status`);
+    const body = await res.json() as { cronJobs: unknown[]; connections: unknown[] };
+    expect(body.cronJobs).toHaveLength(1);
+    expect(body.connections).toHaveLength(1);
+    expect(getStatus).toHaveBeenCalled();
+    await server.stop();
+  });
+
+  it("emits thinking SSE event for thinking content blocks", async () => {
+    const agent = {
+      name: "mock",
+      run: vi.fn(),
+      stream: vi.fn(async function* (): AsyncGenerator<AgentEvent> {
+        yield {
+          type: "message",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "let me think..." },
+              { type: "text", text: "answer" },
+            ],
+          },
+        };
+        yield { type: "done", result: { messages: [], turns: 1 } };
+      }),
+    } as unknown as Agent;
+
+    const server = new WebServer({ agent, port: 0, staticDir });
+    await server.start();
+    const url = `http://localhost:${server.port}`;
+
+    const res = await fetch(`${url}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "hi" }),
+    });
+    const body = await res.text();
+    expect(body).toContain("event: thinking");
+    expect(body).toContain("let me think...");
+    expect(body).toContain("event: message");
+    await server.stop();
+  });
 });

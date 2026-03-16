@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { ChatEntry, ClawConfig } from "./types";
+import type { ChatEntry, ClawConfig, ThinkingItem } from "./types";
 
 const STORAGE_KEY = "clawclaw_config";
 
@@ -50,6 +50,7 @@ export function useChatStream(): {
     }
 
     let assistantId: string | null = null;
+    let thinkingId: string | null = null;
 
     try {
       const resp = await fetch("/api/chat", {
@@ -84,7 +85,23 @@ export function useChatStream(): {
           if (!raw) continue;
           try { data = JSON.parse(raw); } catch { continue; }
 
-          if (event === "message") {
+          if (event === "thinking") {
+            const d = data as { text: string };
+            if (thinkingId === null) {
+              thinkingId = nextId();
+              const item: ThinkingItem = { kind: "thinking", id: thinkingId, text: d.text, streaming: true };
+              setEntries((prev) => [...prev, item]);
+            } else {
+              const id = thinkingId;
+              setEntries((prev) =>
+                prev.map((e) =>
+                  e.kind === "thinking" && e.id === id
+                    ? { ...e, text: e.text + d.text }
+                    : e,
+                ),
+              );
+            }
+          } else if (event === "message") {
             const d = data as { content: string };
             if (assistantId === null) {
               assistantId = nextId();
@@ -122,6 +139,12 @@ export function useChatStream(): {
               { kind: "event", event: { id: nextId(), type: "error", data: d.message } },
             ]);
           } else if (event === "done") {
+            if (thinkingId !== null) {
+              const id = thinkingId;
+              setEntries((prev) =>
+                prev.map((e) => e.kind === "thinking" && e.id === id ? { ...e, streaming: false } : e),
+              );
+            }
             if (assistantId !== null) {
               const id = assistantId;
               setEntries((prev) =>
@@ -143,6 +166,12 @@ export function useChatStream(): {
         ]);
       }
     } finally {
+      if (thinkingId !== null) {
+        const id = thinkingId;
+        setEntries((prev) =>
+          prev.map((e) => e.kind === "thinking" && e.id === id ? { ...e, streaming: false } : e),
+        );
+      }
       if (assistantId !== null) {
         const id = assistantId;
         setEntries((prev) =>

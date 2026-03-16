@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ChatEntry } from "./types";
 import { EventBadge } from "./EventBadge";
+import { ThinkingBubble } from "./ThinkingBubble";
 import styles from "./ChatView.module.css";
 
 interface Props {
@@ -26,6 +27,9 @@ export function ChatView({ entries }: Props): React.JSX.Element {
       {entries.map((entry) => {
         if (entry.kind === "event") {
           return <EventBadge key={entry.event.id} event={entry.event} />;
+        }
+        if (entry.kind === "thinking") {
+          return <ThinkingBubble key={entry.id} item={entry} />;
         }
         const { message } = entry;
         return (

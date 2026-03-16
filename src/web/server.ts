@@ -8,6 +8,27 @@ import type { AgentConfig } from "../core/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/** Cron job info exposed via /api/status */
+export interface CronJobStatus {
+  id: string;
+  schedule: string;
+  message: string;
+  timezone: string;
+}
+
+/** IM platform connection info exposed via /api/status */
+export interface ConnectionStatus {
+  platform: string;
+  label: string;
+  connected: boolean;
+}
+
+/** Payload returned by GET /api/status */
+export interface SystemStatus {
+  cronJobs: CronJobStatus[];
+  connections: ConnectionStatus[];
+}
+
 export interface WebServerConfig {
   agent: Agent;
   /**
@@ -19,6 +40,8 @@ export interface WebServerConfig {
   port?: number;
   /** Override static file directory (default: `<__dirname>/dist`). Used in tests. */
   staticDir?: string;
+  /** Return current system status for GET /api/status. */
+  getStatus?: () => SystemStatus;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -40,7 +63,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig">> & { agentConfig: AgentConfig | undefined };
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus">> & { agentConfig: AgentConfig | undefined; getStatus: (() => SystemStatus) | undefined };
   readonly #server: ReturnType<typeof createServer>;
 
   constructor(config: WebServerConfig) {
@@ -48,6 +71,7 @@ export class WebServer {
       port: 3000,
       agentConfig: undefined,
       staticDir: join(__dirname, "dist"),
+      getStatus: undefined,
       ...config,
     };
     this.#server = createServer((req, res) => {
@@ -80,6 +104,11 @@ export class WebServer {
 
     if (req.method === "POST" && path === "/api/chat") {
       await this.#handleChat(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/status") {
+      this.#handleStatus(res);
       return;
     }
 
@@ -116,6 +145,14 @@ export class WebServer {
     res.end(readFileSync(filePath));
   }
 
+  #handleStatus(res: ServerResponse): void {
+    const status: SystemStatus = this.#config.getStatus
+      ? this.#config.getStatus()
+      : { cronJobs: [], connections: [] };
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify(status));
+  }
+
   async #handleChat(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await readBody(req);
     const { message } = JSON.parse(body) as { message: string };
@@ -136,6 +173,9 @@ export class WebServer {
       for await (const event of agent.stream(message)) {
         switch (event.type) {
           case "message":
+            for (const block of extractThinking(event.message.content)) {
+              send("thinking", { text: block });
+            }
             send("message", { content: extractText(event.message.content) });
             break;
           case "tool_call":
@@ -218,4 +258,11 @@ function extractText(content: unknown): string {
       .join("");
   }
   return "";
+}
+
+function extractThinking(content: unknown): string[] {
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter((b): b is { type: "thinking"; thinking: string } => (b as { type: string }).type === "thinking")
+    .map((b) => b.thinking);
 }

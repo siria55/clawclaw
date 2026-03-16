@@ -207,4 +207,40 @@ describe("useChatStream", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers["X-Claw-Config"]).toBeUndefined();
   });
+
+  it("appends thinking item on thinking SSE event", async () => {
+    mockFetch([
+      sseFrame("thinking", { text: "let me reason..." }),
+      sseFrame("message", { content: "answer" }),
+      sseFrame("done", { turns: 1 }),
+    ]);
+
+    const { result } = renderHook(() => useChatStream());
+
+    await act(async () => {
+      await result.current.send("hi", {});
+    });
+
+    const thinking = result.current.entries.find((e) => e.kind === "thinking");
+    expect(thinking).toBeDefined();
+    expect(thinking?.kind === "thinking" && thinking.text).toBe("let me reason...");
+    expect(thinking?.kind === "thinking" && thinking.streaming).toBe(false);
+  });
+
+  it("accumulates multiple thinking chunks", async () => {
+    mockFetch([
+      sseFrame("thinking", { text: "part1 " }),
+      sseFrame("thinking", { text: "part2" }),
+      sseFrame("done", { turns: 1 }),
+    ]);
+
+    const { result } = renderHook(() => useChatStream());
+
+    await act(async () => {
+      await result.current.send("hi", {});
+    });
+
+    const thinking = result.current.entries.find((e) => e.kind === "thinking");
+    expect(thinking?.kind === "thinking" && thinking.text).toBe("part1 part2");
+  });
 });
