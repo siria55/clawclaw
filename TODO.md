@@ -1,3 +1,4 @@
 ## 这个文件是我自己看的，你（Agent）不要改
 
-1. 参考 openclaw技术总结，你也要有 cron job 和 context compression
+1. webui 可以看到 prd 里的核心概念和部分：cron 管理和 飞书链接等
+2. 新闻搜索和新闻库的规划

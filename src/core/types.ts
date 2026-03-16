@@ -1,5 +1,6 @@
 import type { Message, LLMProvider } from "../llm/types.js";
 import type { Tool, ToolResult } from "../tools/types.js";
+import type { ContextCompressor } from "./compressor.js";
 
 export interface AgentConfig {
   /** Display name for this agent */
@@ -10,6 +11,8 @@ export interface AgentConfig {
   llm: LLMProvider;
   /** Available tools */
   tools?: Tool[];
+  /** Optional context compressor, applied before each LLM call */
+  compressor: ContextCompressor | undefined;
 }
 
 export interface AgentOptions {

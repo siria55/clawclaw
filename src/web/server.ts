@@ -2,13 +2,29 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Agent } from "../core/agent.js";
+import { Agent } from "../core/agent.js";
+import { AnthropicProvider } from "../llm/anthropic.js";
+import type { AgentConfig } from "../core/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export interface WebServerConfig {
   agent: Agent;
+  /**
+   * Original AgentConfig used to create the agent.
+   * When provided, the server can clone it with overridden LLM credentials
+   * from the X-Claw-Config request header.
+   */
+  agentConfig?: AgentConfig;
   port?: number;
+}
+
+/** Config passed from browser via X-Claw-Config header */
+interface ClawConfig {
+  apiKey?: string;
+  baseURL?: string;
+  httpsProxy?: string;
+  model?: string;
 }
 
 /**
@@ -17,13 +33,16 @@ export interface WebServerConfig {
  * Routes:
  *   GET  /          → index.html
  *   POST /api/chat  → SSE stream of agent events
+ *
+ * The browser may send an `X-Claw-Config` header (JSON) to override
+ * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<WebServerConfig>;
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig">> & { agentConfig: AgentConfig | undefined };
   readonly #server: ReturnType<typeof createServer>;
 
   constructor(config: WebServerConfig) {
-    this.#config = { port: 3000, ...config };
+    this.#config = { port: 3000, agentConfig: undefined, ...config };
     this.#server = createServer((req, res) => {
       void this.#handleRequest(req, res);
     });
@@ -40,6 +59,13 @@ export class WebServer {
     await new Promise<void>((resolve, reject) => {
       this.#server.close((err) => (err ? reject(err) : resolve()));
     });
+  }
+
+  /** Bound port (useful when port 0 was passed). */
+  get port(): number {
+    const addr = this.#server.address();
+    if (!addr || typeof addr === "string") throw new Error("Server not started");
+    return addr.port;
   }
 
   async #handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -59,8 +85,7 @@ export class WebServer {
   }
 
   #serveHtml(res: ServerResponse): void {
-    const htmlPath = join(__dirname, "index.html");
-    const html = readFileSync(htmlPath, "utf8");
+    const html = readFileSync(join(__dirname, "index.html"), "utf8");
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(html);
   }
@@ -68,6 +93,7 @@ export class WebServer {
   async #handleChat(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await readBody(req);
     const { message } = JSON.parse(body) as { message: string };
+    const agent = this.#resolveAgent(req.headers);
 
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -81,7 +107,7 @@ export class WebServer {
     };
 
     try {
-      for await (const event of this.#config.agent.stream(message)) {
+      for await (const event of agent.stream(message)) {
         switch (event.type) {
           case "message":
             send("message", { content: extractText(event.message.content) });
@@ -102,6 +128,36 @@ export class WebServer {
     } finally {
       res.end();
     }
+  }
+
+  /**
+   * Build an agent for this request.
+   * If X-Claw-Config header is present and agentConfig was provided,
+   * override the LLM with caller-supplied credentials.
+   */
+  #resolveAgent(headers: IncomingMessage["headers"]): Agent {
+    const configHeader = headers["x-claw-config"];
+    if (!configHeader || typeof configHeader !== "string" || !this.#config.agentConfig) {
+      return this.#config.agent;
+    }
+
+    let clawConfig: ClawConfig;
+    try {
+      clawConfig = JSON.parse(configHeader) as ClawConfig;
+    } catch {
+      return this.#config.agent;
+    }
+
+    const hasOverride = clawConfig.apiKey ?? clawConfig.baseURL ?? clawConfig.httpsProxy ?? clawConfig.model;
+    if (!hasOverride) return this.#config.agent;
+
+    const llm = new AnthropicProvider({
+      apiKey: clawConfig.apiKey,
+      baseURL: clawConfig.baseURL,
+      model: clawConfig.model,
+    });
+
+    return new Agent({ ...this.#config.agentConfig, llm });
   }
 }
 

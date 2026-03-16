@@ -26,10 +26,14 @@ export class Agent {
    */
   async run(userMessage: string, options: AgentOptions = {}): Promise<AgentRunResult> {
     const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
-    const messages: Message[] = [{ role: "user", content: userMessage }];
+    let messages: Message[] = [{ role: "user", content: userMessage }];
     let turns = 0;
 
     while (turns < maxTurns) {
+      if (this.#config.compressor) {
+        messages = await this.#config.compressor.compress(messages);
+      }
+
       const response = await this.#config.llm.complete({
         system: this.#config.system,
         messages,
@@ -55,10 +59,14 @@ export class Agent {
    */
   async *stream(userMessage: string, options: AgentOptions = {}): AsyncGenerator<AgentEvent> {
     const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
-    const messages: Message[] = [{ role: "user", content: userMessage }];
+    let messages: Message[] = [{ role: "user", content: userMessage }];
     let turns = 0;
 
     while (turns < maxTurns) {
+      if (this.#config.compressor) {
+        messages = await this.#config.compressor.compress(messages);
+      }
+
       const response = await this.#config.llm.complete({
         system: this.#config.system,
         messages,
