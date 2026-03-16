@@ -1,12 +1,16 @@
-# eeo_claw
+# clawclaw
 
 OpenClaw 的超级优化版 AI Agent 框架，TypeScript 实现。
+
+核心：能 24 小时运行，并连接飞书、企业微信等 IM
 
 ## 文档
 
 - **Sprint**: [docs/sprint/](docs/sprint/)
 - **产品**: [docs/prd/](docs/prd/)
 - **技术**: [docs/tech/](docs/tech/)
+- **使用说明**：[docs/manual](docs/manual)
+    - 使用说明不要有代码示例，可以有命令行指令和相关说明
 - **参考文献**: [docs/references](docs/references/)
 
 ## 开发规范
