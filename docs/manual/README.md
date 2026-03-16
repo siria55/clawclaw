@@ -75,6 +75,49 @@ Tool 是 Agent 可调用的外部能力单元，每个 Tool 包含：
 
 ---
 
+## IM 平台接入
+
+clawclaw 通过 `ClawServer` 以 Bot 形式常驻在 IM 平台，监听 Webhook 并自动调用 Agent 回复。
+
+### 飞书（Feishu/Lark）
+
+在飞书开放平台创建企业自建应用，开启「接收消息」事件权限，配置 Webhook 回调地址。
+
+| 变量 | 说明 |
+|------|------|
+| `FEISHU_APP_ID` | 应用 App ID |
+| `FEISHU_APP_SECRET` | 应用 App Secret |
+| `FEISHU_VERIFICATION_TOKEN` | 事件验证 Token |
+| `FEISHU_ENCRYPT_KEY` | 加密密钥（可选，启用后开启签名验证） |
+
+Webhook 路径默认为 `/feishu`，可在 `ClawServer` 路由配置中自定义。
+
+飞书首次配置时会发送 URL 验证请求，`ClawServer` 会自动响应，无需额外处理。
+
+### 企业微信（WeCom）
+
+在企业微信管理后台创建应用，开启接收消息功能，配置回调地址（需支持 GET/POST）。
+
+| 变量 | 说明 |
+|------|------|
+| `WECOM_CORP_ID` | 企业 ID |
+| `WECOM_CORP_SECRET` | 应用 Secret |
+| `WECOM_AGENT_ID` | 应用 AgentId |
+| `WECOM_TOKEN` | 消息加解密 Token |
+| `WECOM_ENCODING_AES_KEY` | 消息加解密 Key（43 位） |
+
+企业微信所有消息均经过 AES-256-CBC 加密，`ClawServer` 会自动解密，无需额外配置。
+
+### 本地调试
+
+使用 `ngrok` 或 `frp` 将本地端口暴露到公网，填入飞书/企业微信的回调地址：
+
+```bash
+ngrok http 3000
+```
+
+---
+
 ## Web UI 调试界面
 
 本地调试时可启动可视化对话页面，支持工具调用过程展示和流式回复：
