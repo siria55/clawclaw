@@ -7,6 +7,7 @@ OpenClaw 的超级优化版 AI Agent 框架，TypeScript 实现。
 - **Sprint**: [docs/sprint/](docs/sprint/)
 - **产品**: [docs/prd/](docs/prd/)
 - **技术**: [docs/tech/](docs/tech/)
+- **参考文献**: [docs/references](docs/references/)
 
 ## 开发规范
 
