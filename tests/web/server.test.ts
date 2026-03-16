@@ -65,12 +65,20 @@ describe("WebServer", () => {
     await server.stop();
   });
 
-  it("returns 404 for unknown routes", async () => {
-    const agent = makeMockAgent();
-    const { server, url } = await startWebServer(agent);
-    const res = await fetch(`${url}/unknown`);
-    expect(res.status).toBe(404);
-    await server.stop();
+  it("returns 404 when staticDir has no index.html", async () => {
+    const emptyDir = join(tmpdir(), `clawclaw-empty-${Date.now()}`);
+    mkdirSync(emptyDir, { recursive: true });
+    try {
+      const agent = makeMockAgent();
+      const server = new WebServer({ agent, port: 0, staticDir: emptyDir });
+      await server.start();
+      const url = `http://localhost:${server.port}`;
+      const res = await fetch(`${url}/missing.js`);
+      expect(res.status).toBe(404);
+      await server.stop();
+    } finally {
+      rmSync(emptyDir, { recursive: true, force: true });
+    }
   });
 
   it("streams SSE events on POST /api/chat", async () => {
