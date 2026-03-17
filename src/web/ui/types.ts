@@ -34,10 +34,3 @@ export interface ThinkingItem {
 }
 
 export type ChatEntry = ChatMessageItem | ToolEventItem | ThinkingItem;
-
-export interface ClawConfig {
-  apiKey?: string;
-  baseURL?: string;
-  httpsProxy?: string;
-  model?: string;
-}

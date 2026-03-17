@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useChatStream, loadConfig, saveConfig } from "../../src/web/ui/useChatStream.js";
-import type { ClawConfig } from "../../src/web/ui/types.js";
+import { useChatStream } from "../../src/web/ui/useChatStream.js";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,29 +32,6 @@ function mockFetch(chunks: string[]): void {
   );
 }
 
-// ── loadConfig / saveConfig ───────────────────────────────────────────────────
-
-describe("loadConfig / saveConfig", () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
-  it("returns empty object when storage is empty", () => {
-    expect(loadConfig()).toEqual({});
-  });
-
-  it("round-trips a config through localStorage", () => {
-    const cfg: ClawConfig = { apiKey: "key-1", model: "claude-sonnet-4-6" };
-    saveConfig(cfg);
-    expect(loadConfig()).toEqual(cfg);
-  });
-
-  it("returns empty object when stored value is invalid JSON", () => {
-    localStorage.setItem("clawclaw_config", "not-json");
-    expect(loadConfig()).toEqual({});
-  });
-});
-
 // ── useChatStream ─────────────────────────────────────────────────────────────
 
 describe("useChatStream", () => {
@@ -78,7 +54,7 @@ describe("useChatStream", () => {
     const { result } = renderHook(() => useChatStream());
 
     await act(async () => {
-      await result.current.send("hi", {});
+      await result.current.send("hi");
     });
 
     expect(result.current.streaming).toBe(false);
@@ -99,7 +75,7 @@ describe("useChatStream", () => {
     const { result } = renderHook(() => useChatStream());
 
     await act(async () => {
-      await result.current.send("test", {});
+      await result.current.send("test");
     });
 
     const assistant = result.current.entries.find(
@@ -117,7 +93,7 @@ describe("useChatStream", () => {
     const { result } = renderHook(() => useChatStream());
 
     await act(async () => {
-      await result.current.send("browse", {});
+      await result.current.send("browse");
     });
 
     const events = result.current.entries.filter((e) => e.kind === "event");
@@ -135,7 +111,7 @@ describe("useChatStream", () => {
     const { result } = renderHook(() => useChatStream());
 
     await act(async () => {
-      await result.current.send("browse", {});
+      await result.current.send("browse");
     });
 
     const events = result.current.entries.filter((e) => e.kind === "event");
@@ -148,7 +124,7 @@ describe("useChatStream", () => {
     const { result } = renderHook(() => useChatStream());
 
     await act(async () => {
-      await result.current.send("hi", {});
+      await result.current.send("hi");
     });
 
     const err = result.current.entries.find(
@@ -163,7 +139,7 @@ describe("useChatStream", () => {
     const { result } = renderHook(() => useChatStream());
 
     await act(async () => {
-      await result.current.send("hi", {});
+      await result.current.send("hi");
     });
 
     const err = result.current.entries.find(
@@ -171,41 +147,6 @@ describe("useChatStream", () => {
     );
     expect(err).toBeDefined();
     expect(err?.kind === "event" && err.event.data).toBe("network error");
-  });
-
-  it("sends X-Claw-Config header when config has values", async () => {
-    const fetchMock = vi.fn(async () => ({
-      body: makeStream([sseFrame("done", { turns: 1 })]),
-    }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { result } = renderHook(() => useChatStream());
-    const cfg: ClawConfig = { apiKey: "sk-123" };
-
-    await act(async () => {
-      await result.current.send("hi", cfg);
-    });
-
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
-    expect(headers["X-Claw-Config"]).toBe(JSON.stringify(cfg));
-  });
-
-  it("does not send X-Claw-Config header when config is empty", async () => {
-    const fetchMock = vi.fn(async () => ({
-      body: makeStream([sseFrame("done", { turns: 1 })]),
-    }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { result } = renderHook(() => useChatStream());
-
-    await act(async () => {
-      await result.current.send("hi", {});
-    });
-
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
-    expect(headers["X-Claw-Config"]).toBeUndefined();
   });
 
   it("appends thinking item on thinking SSE event", async () => {
@@ -218,7 +159,7 @@ describe("useChatStream", () => {
     const { result } = renderHook(() => useChatStream());
 
     await act(async () => {
-      await result.current.send("hi", {});
+      await result.current.send("hi");
     });
 
     const thinking = result.current.entries.find((e) => e.kind === "thinking");
@@ -237,7 +178,7 @@ describe("useChatStream", () => {
     const { result } = renderHook(() => useChatStream());
 
     await act(async () => {
-      await result.current.send("hi", {});
+      await result.current.send("hi");
     });
 
     const thinking = result.current.entries.find((e) => e.kind === "thinking");
