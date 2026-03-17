@@ -34,9 +34,12 @@ export class Agent {
         messages = await this.#config.compressor.compress(messages);
       }
 
+      const system = await this.#resolveSystem();
+      const contextMessages = this.#config.getContext ? await this.#config.getContext(messages) : [];
+
       const response = await this.#config.llm.complete({
-        system: this.#config.system,
-        messages,
+        system,
+        messages: [...messages, ...contextMessages],
         ...(this.#config.tools ? { tools: this.#config.tools } : {}),
       });
 
@@ -67,9 +70,12 @@ export class Agent {
         messages = await this.#config.compressor.compress(messages);
       }
 
+      const system = await this.#resolveSystem();
+      const contextMessages = this.#config.getContext ? await this.#config.getContext(messages) : [];
+
       const response = await this.#config.llm.complete({
-        system: this.#config.system,
-        messages,
+        system,
+        messages: [...messages, ...contextMessages],
         ...(this.#config.tools ? { tools: this.#config.tools } : {}),
       });
 
@@ -95,6 +101,12 @@ export class Agent {
 
     const result: AgentRunResult = { messages, turns };
     yield { type: "done", result };
+  }
+
+  async #resolveSystem(): Promise<string> {
+    return typeof this.#config.system === "function"
+      ? this.#config.system()
+      : this.#config.system;
   }
 
   async #executeTools(

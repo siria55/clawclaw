@@ -110,4 +110,81 @@ describe("Agent", () => {
       expect(agent.name).toBe("my-agent");
     });
   });
+
+  describe("dynamic system prompt", () => {
+    it("calls system function before each LLM turn", async () => {
+      let callCount = 0;
+      const systemFn = vi.fn(() => {
+        callCount++;
+        return `system v${callCount}`;
+      });
+
+      const llm = makeMockLLM([
+        makeToolCallResponse("echo", {}),
+        makeTextResponse("done"),
+      ]);
+      const echoTool: Tool = {
+        name: "echo",
+        description: "Echo",
+        inputSchema: {},
+        execute: async () => ({ output: "ok" }),
+      };
+
+      const agent = new Agent({ name: "test", system: systemFn, llm, tools: [echoTool], compressor: undefined });
+      await agent.run("go");
+
+      expect(systemFn).toHaveBeenCalledTimes(2);
+      const calls = vi.mocked(llm.complete).mock.calls;
+      expect(calls[0][0].system).toBe("system v1");
+      expect(calls[1][0].system).toBe("system v2");
+    });
+
+    it("supports async system function", async () => {
+      const systemFn = async () => "async system";
+      const llm = makeMockLLM([makeTextResponse("ok")]);
+      const agent = new Agent({ name: "test", system: systemFn, llm, compressor: undefined });
+      await agent.run("hi");
+      expect(vi.mocked(llm.complete).mock.calls[0][0].system).toBe("async system");
+    });
+  });
+
+  describe("getContext hook", () => {
+    it("injects context messages into LLM call", async () => {
+      const injected: Message = { role: "user", content: "[context] relevant info" };
+      const getContext = vi.fn(async () => [injected]);
+
+      const llm = makeMockLLM([makeTextResponse("ok")]);
+      const agent = new Agent({ name: "test", system: "sys", llm, compressor: undefined, getContext });
+      await agent.run("hi");
+
+      const callMessages = vi.mocked(llm.complete).mock.calls[0][0].messages;
+      expect(callMessages).toContainEqual(injected);
+    });
+
+    it("context messages are NOT written into AgentRunResult.messages", async () => {
+      const injected: Message = { role: "user", content: "[ephemeral context]" };
+      const getContext = vi.fn(async () => [injected]);
+
+      const llm = makeMockLLM([makeTextResponse("ok")]);
+      const agent = new Agent({ name: "test", system: "sys", llm, compressor: undefined, getContext });
+      const result = await agent.run("hi");
+
+      const contents = result.messages.map((m) => m.content);
+      expect(contents).not.toContain("[ephemeral context]");
+    });
+
+    it("getContext receives current message history", async () => {
+      const captured: Message[][] = [];
+      const getContext = vi.fn(async (msgs: Message[]) => {
+        captured.push([...msgs]);
+        return [];
+      });
+
+      const llm = makeMockLLM([makeTextResponse("ok")]);
+      const agent = new Agent({ name: "test", system: "sys", llm, compressor: undefined, getContext });
+      await agent.run("hello");
+
+      expect(captured[0][0].content).toBe("hello");
+    });
+  });
 });
