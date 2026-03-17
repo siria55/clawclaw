@@ -10,12 +10,17 @@ import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import { ConfigStorage } from "../config/storage.js";
 import { MemoryStorage } from "../memory/storage.js";
+import { NewsStorage } from "../news/storage.js";
+import { createMemoryTools } from "../tools/memory.js";
+import { createSaveNewsTool } from "../tools/news.js";
+import type { Message } from "../llm/types.js";
 import type { LLMConfig, IMConfig, AgentMetaConfig } from "../config/types.js";
 import { WebServer } from "./server.js";
 
 mkdirSync("./data", { recursive: true });
 
 const memoryStorage = new MemoryStorage("./data/memory.json");
+const newsStorage = new NewsStorage("./data/news.json");
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/llm-config.json");
 const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent-config.json");
@@ -37,6 +42,18 @@ const agentConfig = {
   name: "debug-agent",
   system: () => agentConfigStorage.read().systemPrompt ?? DEFAULT_SYSTEM,
   llm,
+  tools: [
+    createSaveNewsTool(newsStorage),
+    ...createMemoryTools(memoryStorage),
+  ],
+  getContext: async (messages: Message[]) => {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUser || typeof lastUser.content !== "string") return [];
+    const hits = memoryStorage.search({ q: lastUser.content, limit: 3 });
+    if (hits.length === 0) return [];
+    const snippets = hits.map((h) => `- [${h.id}] ${h.snippet}`).join("\n");
+    return [{ role: "user" as const, content: `[相关记忆]\n${snippets}` }];
+  },
   compressor: undefined,
 };
 
@@ -46,6 +63,7 @@ const server = new WebServer({
   agent,
   agentConfig,
   port: 3000,
+  newsStorage,
   memoryStorage,
   imConfigStorage,
   llmConfigStorage,

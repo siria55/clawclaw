@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import type { ChatEntry } from "./types";
 import { EventBadge } from "./EventBadge";
 import { ThinkingBubble } from "./ThinkingBubble";
@@ -34,14 +35,18 @@ export function ChatView({ entries, streaming }: Props): React.JSX.Element {
           return <ThinkingBubble key={entry.id} item={entry} />;
         }
         const { message } = entry;
+        const isUser = message.role === "user";
         return (
           <div
             key={message.id}
             className={`${styles.bubble} ${
-              message.role === "user" ? styles.user : styles.assistant
+              isUser ? styles.user : styles.assistant
             } ${message.streaming ? styles.streaming : ""}`}
           >
-            {message.content}
+            {isUser
+              ? message.content
+              : <ReactMarkdown className={styles.md}>{message.content}</ReactMarkdown>
+            }
           </div>
         );
       })}

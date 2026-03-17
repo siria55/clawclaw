@@ -30,6 +30,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-markdown": "^10.1.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
