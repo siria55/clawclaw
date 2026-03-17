@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createDecipheriv, createHash } from "node:crypto";
 import type { IMPlatform, IMMessage, IMVerifyParams } from "./types.js";
 
 interface FeishuConfig {
@@ -7,8 +7,8 @@ interface FeishuConfig {
   /** Verification token from Feishu open platform console */
   verificationToken: string;
   /**
-   * Encrypt key for signature verification (optional).
-   * When set, requests without a valid X-Lark-Signature are rejected.
+   * Encrypt key for AES body decryption and signature verification (optional).
+   * When set, all request bodies are AES-256-CBC encrypted by Feishu.
    */
   encryptKey: string | undefined;
 }
@@ -20,7 +20,7 @@ const MAX_TIMESTAMP_AGE_MS = 5 * 60 * 1000;
  * Feishu (Lark) IM platform adapter.
  *
  * Required env vars: FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_VERIFICATION_TOKEN
- * Optional env var:  FEISHU_ENCRYPT_KEY (enables request signature verification)
+ * Optional env var:  FEISHU_ENCRYPT_KEY (enables AES body decryption + signature verification)
  */
 export class FeishuPlatform implements IMPlatform {
   readonly name = "feishu";
@@ -38,16 +38,20 @@ export class FeishuPlatform implements IMPlatform {
   async verify(params: IMVerifyParams): Promise<void> {
     const { headers, body } = params;
 
-    // URL verification challenge from Feishu is sent without signature headers.
-    // Handle it early so encryptKey does not block the initial endpoint setup.
+    // Decrypt body first if encryptKey is configured — Feishu encrypts ALL events including
+    // the initial url_verification challenge.
+    const plainBody = this.#decrypt(body);
+
+    // Handle url_verification before any signature check.
+    // Feishu sends the challenge without x-lark-signature headers.
     try {
-      const event = JSON.parse(body) as Record<string, unknown>;
+      const event = JSON.parse(plainBody) as Record<string, unknown>;
       if (event["type"] === "url_verification") {
         throw new FeishuChallenge(event["challenge"] as string);
       }
     } catch (err) {
       if (err instanceof FeishuChallenge) throw err;
-      // Body is not JSON — continue to signature check
+      // Not JSON — fall through to signature check
     }
 
     // Reject stale requests (replay protection)
@@ -74,7 +78,8 @@ export class FeishuPlatform implements IMPlatform {
   }
 
   async parse(body: string): Promise<IMMessage | null> {
-    const event = JSON.parse(body) as Record<string, unknown>;
+    const plainBody = this.#decrypt(body);
+    const event = JSON.parse(plainBody) as Record<string, unknown>;
 
     // Feishu URL verification challenge on first setup
     if (event["type"] === "url_verification") {
@@ -127,6 +132,21 @@ export class FeishuPlatform implements IMPlatform {
     }
   }
 
+  /**
+   * Decrypt body if it contains an `{"encrypt":"..."}` wrapper and encryptKey is set.
+   * Returns the original body string unchanged otherwise.
+   */
+  #decrypt(body: string): string {
+    if (!this.#config.encryptKey) return body;
+    try {
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      if (typeof parsed["encrypt"] !== "string") return body;
+      return feishuAesDecrypt(parsed["encrypt"], this.#config.encryptKey);
+    } catch {
+      return body;
+    }
+  }
+
   async #getAccessToken(): Promise<string> {
     const response = await fetch(
       "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
@@ -145,8 +165,23 @@ export class FeishuPlatform implements IMPlatform {
 }
 
 /**
+ * Decrypt a Feishu AES-256-CBC encrypted event body.
+ * Key  = SHA256(encryptKey) — 32 bytes
+ * Data = base64decode(encryptedStr): first 16 bytes = IV, rest = ciphertext
+ */
+export function feishuAesDecrypt(encryptedStr: string, encryptKey: string): string {
+  const key = createHash("sha256").update(encryptKey).digest();
+  const data = Buffer.from(encryptedStr, "base64");
+  const iv = data.subarray(0, 16);
+  const ciphertext = data.subarray(16);
+  const decipher = createDecipheriv("aes-256-cbc", key, iv);
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  return decrypted.toString("utf8");
+}
+
+/**
  * Compute Feishu request signature.
- * signature = HMAC-SHA256(encryptKey, timestamp + nonce + body)
+ * signature = SHA256(timestamp + nonce + encryptKey + body)
  */
 export function computeFeishuSignature(
   timestamp: string,
@@ -154,8 +189,8 @@ export function computeFeishuSignature(
   encryptKey: string,
   body: string,
 ): string {
-  return createHmac("sha256", encryptKey)
-    .update(timestamp + nonce + body)
+  return createHash("sha256")
+    .update(timestamp + nonce + encryptKey + body)
     .digest("hex");
 }
 

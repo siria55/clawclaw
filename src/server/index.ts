@@ -82,9 +82,11 @@ export class ClawServer {
   async #handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
+    console.log(`[ClawServer] ${req.method} ${path}`);
     const route = this.#routes[path];
 
     if (!route) {
+      console.log(`[ClawServer] 404 no route for ${path}, registered: ${Object.keys(this.#routes).join(", ")}`);
       res.writeHead(404).end();
       return;
     }
@@ -99,12 +101,17 @@ export class ClawServer {
     const headers = headersToRecord(req.headers);
     const query = Object.fromEntries(url.searchParams.entries());
 
+    console.log(`[${path}] ← ${method} headers:`, JSON.stringify(headers, null, 2));
+    console.log(`[${path}] ← body:`, body.slice(0, 500));
+
     try {
       await route.platform.verify({ method, headers, query, body });
     } catch (err) {
       if (err instanceof FeishuChallenge) {
+        const resp = JSON.stringify({ challenge: err.challenge });
+        console.log(`[${path}] → 200 challenge:`, resp);
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ challenge: err.challenge }));
+        res.end(resp);
         return;
       }
       if (err instanceof WecomEcho) {
@@ -112,6 +119,7 @@ export class ClawServer {
         res.end(err.echostr);
         return;
       }
+      console.log(`[${path}] → 401 verify error:`, err instanceof Error ? err.message : err);
       res.writeHead(401).end("Unauthorized");
       return;
     }
