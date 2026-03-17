@@ -21,3 +21,9 @@ export interface LLMConfig {
 export interface IMConfig {
   feishu?: FeishuConfig;
 }
+
+/** Agent persona and system prompt configurable from WebUI. */
+export interface AgentMetaConfig {
+  name?: string;
+  systemPrompt?: string;
+}

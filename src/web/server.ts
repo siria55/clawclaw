@@ -7,7 +7,7 @@ import { AnthropicProvider } from "../llm/anthropic.js";
 import type { AgentConfig } from "../core/types.js";
 import type { NewsStorage } from "../news/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
-import type { IMConfig, LLMConfig } from "../config/types.js";
+import type { IMConfig, LLMConfig, AgentMetaConfig } from "../config/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -55,6 +55,10 @@ export interface WebServerConfig {
   llmConfigStorage?: ConfigStorage<LLMConfig>;
   /** Called after POST /api/config/llm to hot-reload the LLM provider. */
   onLLMConfig?: (config: LLMConfig) => void;
+  /** Agent meta config storage for GET/POST /api/config/agent (data/agent-config.json). */
+  agentConfigStorage?: ConfigStorage<AgentMetaConfig>;
+  /** Called after POST /api/config/agent to hot-reload agent name/system prompt. */
+  onAgentConfig?: (config: AgentMetaConfig) => void;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -76,7 +80,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     newsStorage: NewsStorage | undefined;
@@ -84,6 +88,8 @@ export class WebServer {
     onIMConfig: ((config: IMConfig) => void) | undefined;
     llmConfigStorage: ConfigStorage<LLMConfig> | undefined;
     onLLMConfig: ((config: LLMConfig) => void) | undefined;
+    agentConfigStorage: ConfigStorage<AgentMetaConfig> | undefined;
+    onAgentConfig: ((config: AgentMetaConfig) => void) | undefined;
   };
   readonly #server: ReturnType<typeof createServer>;
 
@@ -98,6 +104,8 @@ export class WebServer {
       onIMConfig: undefined,
       llmConfigStorage: undefined,
       onLLMConfig: undefined,
+      agentConfigStorage: undefined,
+      onAgentConfig: undefined,
       ...config,
     };
     this.#server = createServer((req, res) => {
@@ -160,6 +168,16 @@ export class WebServer {
 
     if (req.method === "POST" && path === "/api/config/llm") {
       await this.#handlePostLLMConfig(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/config/agent") {
+      this.#handleGetAgentConfig(res);
+      return;
+    }
+
+    if (req.method === "POST" && path === "/api/config/agent") {
+      await this.#handlePostAgentConfig(req, res);
       return;
     }
 
@@ -273,6 +291,39 @@ export class WebServer {
     const merged = mergeLLMConfig(existing, incoming);
     this.#config.llmConfigStorage.write(merged);
     this.#config.onLLMConfig?.(merged);
+
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ ok: true }));
+  }
+
+  #handleGetAgentConfig(res: ServerResponse): void {
+    const config = this.#config.agentConfigStorage?.read() ?? {};
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify(config));
+  }
+
+  async #handlePostAgentConfig(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readBody(req);
+    let incoming: AgentMetaConfig;
+    try {
+      incoming = JSON.parse(body) as AgentMetaConfig;
+    } catch {
+      res.writeHead(400).end("Invalid JSON");
+      return;
+    }
+
+    if (!this.#config.agentConfigStorage) {
+      res.writeHead(503).end("Agent config storage not configured");
+      return;
+    }
+
+    const existing = this.#config.agentConfigStorage.read();
+    const merged: AgentMetaConfig = {
+      ...(incoming.name !== undefined ? { name: incoming.name } : existing.name !== undefined ? { name: existing.name } : {}),
+      ...(incoming.systemPrompt !== undefined ? { systemPrompt: incoming.systemPrompt } : existing.systemPrompt !== undefined ? { systemPrompt: existing.systemPrompt } : {}),
+    };
+    this.#config.agentConfigStorage.write(merged);
+    this.#config.onAgentConfig?.(merged);
 
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ ok: true }));

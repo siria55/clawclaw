@@ -17,6 +17,7 @@ export class Agent {
   readonly name: string;
   readonly #config: AgentConfig;
   #llm: LLMProvider;
+  #systemFn: (() => string) | undefined;
 
   constructor(config: AgentConfig) {
     this.name = config.name;
@@ -27,6 +28,11 @@ export class Agent {
   /** Hot-swap the LLM provider without restarting the agent. */
   updateLLM(provider: LLMProvider): void {
     this.#llm = provider;
+  }
+
+  /** Hot-replace the system prompt function without restarting the agent. */
+  updateSystem(fn: () => string): void {
+    this.#systemFn = fn;
   }
 
   /**
@@ -112,6 +118,7 @@ export class Agent {
   }
 
   async #resolveSystem(): Promise<string> {
+    if (this.#systemFn) return this.#systemFn();
     return typeof this.#config.system === "function"
       ? this.#config.system()
       : this.#config.system;

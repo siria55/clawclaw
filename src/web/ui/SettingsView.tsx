@@ -22,8 +22,93 @@ export function SettingsView(): React.JSX.Element {
     <div className={styles.page}>
       <div className={styles.inner}>
         <h2 className={styles.title}>设置</h2>
+        <AgentSection />
         <LLMSection />
         <FeishuSection />
+      </div>
+    </div>
+  );
+}
+
+interface AgentFields {
+  name: string;
+  systemPrompt: string;
+}
+
+/** Agent meta config — name and system prompt, saved to data/agent-config.json. */
+function AgentSection(): React.JSX.Element {
+  const [fields, setFields] = useState<AgentFields>({ name: "", systemPrompt: "" });
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/config/agent")
+      .then((r) => r.json() as Promise<Partial<AgentFields>>)
+      .then((data) => {
+        setFields((f) => ({
+          name: data.name ?? f.name,
+          systemPrompt: data.systemPrompt ?? f.systemPrompt,
+        }));
+      })
+      .catch(() => { /* no config yet */ });
+  }, []);
+
+  const setField = (key: keyof AgentFields, value: string): void => {
+    setFields((f) => ({ ...f, [key]: value }));
+  };
+
+  const save = (): void => {
+    setSaving(true);
+    fetch("/api/config/agent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...(fields.name ? { name: fields.name } : {}),
+        ...(fields.systemPrompt ? { systemPrompt: fields.systemPrompt } : {}),
+      }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        setStatus({ type: "ok", msg: "已保存，下一轮对话即生效" });
+      })
+      .catch((e: unknown) => {
+        setStatus({ type: "err", msg: e instanceof Error ? e.message : String(e) });
+      })
+      .finally(() => {
+        setSaving(false);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setStatus(null), 4000);
+      });
+  };
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionTitle}>Agent</div>
+      <div className={styles.sectionHint}>
+        配置保存在服务端 data/agent-config.json，保存后下一轮对话即生效，无需重启。<br />
+        留空则使用默认系统提示词。
+      </div>
+      <div className={styles.fields}>
+        <Field label="名称" placeholder="debug-agent" value={fields.name} onChange={(v) => setField("name", v)} />
+        <div className={styles.field}>
+          <label className={styles.fieldLabel}>系统提示词（System Prompt）</label>
+          <textarea
+            className={styles.fieldInput}
+            placeholder="你是一个有帮助的助手，回答简洁清晰。"
+            value={fields.systemPrompt}
+            onChange={(e) => setField("systemPrompt", e.target.value)}
+            rows={6}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+      </div>
+      <div className={styles.saveRow}>
+        <button className={styles.saveBtn} onClick={save} disabled={saving}>
+          {saving ? "保存中…" : "保存 Agent 配置"}
+        </button>
+        {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
       </div>
     </div>
   );

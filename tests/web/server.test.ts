@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { WebServer } from "../../src/web/server.js";
 import { NewsStorage } from "../../src/news/storage.js";
 import { ConfigStorage } from "../../src/config/storage.js";
-import type { IMConfig } from "../../src/config/types.js";
+import type { IMConfig, AgentMetaConfig } from "../../src/config/types.js";
 import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";
@@ -369,5 +369,58 @@ describe("WebServer", () => {
 
     await server.stop();
     rmSync(imDir, { recursive: true, force: true });
+  });
+
+  it("GET /api/config/agent returns empty object when no agentConfigStorage", async () => {
+    const agent = makeMockAgent();
+    const { server, url } = await startWebServer(agent);
+    const res = await fetch(`${url}/api/config/agent`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body).toEqual({});
+    await server.stop();
+  });
+
+  it("POST /api/config/agent saves config and calls onAgentConfig", async () => {
+    const agent = makeMockAgent();
+    const agentDir = join(tmpdir(), `clawclaw-agent-${Date.now()}`);
+    mkdirSync(agentDir, { recursive: true });
+    const agentConfigStorage = new ConfigStorage<AgentMetaConfig>(join(agentDir, "agent-config.json"));
+    const onAgentConfig = vi.fn();
+
+    const server = new WebServer({ agent, port: 0, staticDir, agentConfigStorage, onAgentConfig });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/agent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "my-bot", systemPrompt: "Be concise." }),
+    });
+    expect(res.status).toBe(200);
+    expect(onAgentConfig).toHaveBeenCalledOnce();
+    expect(agentConfigStorage.read().systemPrompt).toBe("Be concise.");
+    expect(agentConfigStorage.read().name).toBe("my-bot");
+
+    await server.stop();
+    rmSync(agentDir, { recursive: true, force: true });
+  });
+
+  it("GET /api/config/agent returns saved config", async () => {
+    const agent = makeMockAgent();
+    const agentDir = join(tmpdir(), `clawclaw-agent-get-${Date.now()}`);
+    mkdirSync(agentDir, { recursive: true });
+    const agentConfigStorage = new ConfigStorage<AgentMetaConfig>(join(agentDir, "agent-config.json"));
+    agentConfigStorage.write({ name: "bot", systemPrompt: "You are helpful." });
+
+    const server = new WebServer({ agent, port: 0, staticDir, agentConfigStorage });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/agent`);
+    const body = await res.json() as AgentMetaConfig;
+    expect(body.name).toBe("bot");
+    expect(body.systemPrompt).toBe("You are helpful.");
+
+    await server.stop();
+    rmSync(agentDir, { recursive: true, force: true });
   });
 });

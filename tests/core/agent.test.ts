@@ -146,6 +146,18 @@ describe("Agent", () => {
       await agent.run("hi");
       expect(vi.mocked(llm.complete).mock.calls[0][0].system).toBe("async system");
     });
+
+    it("updateSystem() overrides system prompt from next run", async () => {
+      const llm = makeMockLLM([makeTextResponse("ok"), makeTextResponse("ok2")]);
+      const agent = new Agent({ name: "test", system: "original", llm, compressor: undefined });
+
+      await agent.run("first");
+      expect(vi.mocked(llm.complete).mock.calls[0][0].system).toBe("original");
+
+      agent.updateSystem(() => "updated");
+      await agent.run("second");
+      expect(vi.mocked(llm.complete).mock.calls[1][0].system).toBe("updated");
+    });
   });
 
   describe("getContext hook", () => {
