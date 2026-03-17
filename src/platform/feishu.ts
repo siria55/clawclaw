@@ -38,6 +38,18 @@ export class FeishuPlatform implements IMPlatform {
   async verify(params: IMVerifyParams): Promise<void> {
     const { headers, body } = params;
 
+    // URL verification challenge from Feishu is sent without signature headers.
+    // Handle it early so encryptKey does not block the initial endpoint setup.
+    try {
+      const event = JSON.parse(body) as Record<string, unknown>;
+      if (event["type"] === "url_verification") {
+        throw new FeishuChallenge(event["challenge"] as string);
+      }
+    } catch (err) {
+      if (err instanceof FeishuChallenge) throw err;
+      // Body is not JSON — continue to signature check
+    }
+
     // Reject stale requests (replay protection)
     const timestamp = headers["x-lark-request-timestamp"];
     if (timestamp) {
@@ -59,8 +71,6 @@ export class FeishuPlatform implements IMPlatform {
         throw new Error("Feishu signature mismatch");
       }
     }
-
-    // url_verification challenge is handled in parse() via FeishuChallenge
   }
 
   async parse(body: string): Promise<IMMessage | null> {
