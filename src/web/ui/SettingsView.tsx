@@ -84,8 +84,7 @@ function LLMSection(): React.JSX.Element {
     <div className={styles.section}>
       <div className={styles.sectionTitle}>模型（LLM）</div>
       <div className={styles.sectionHint}>
-        配置保存在服务端 data/im-config.json，保存后立即生效，无需重启。<br />
-        API Key 显示为脱敏值，修改后重新保存即可更新。
+        配置保存在服务端 data/llm-config.json，保存后立即生效，无需重启。<br />
       </div>
       <div className={styles.fields}>
         <Field label="API Key" type="password" placeholder="sk-ant-..." value={fields.apiKey} onChange={(v) => setField("apiKey", v)} />

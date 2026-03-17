@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { WebServer } from "../../src/web/server.js";
 import { NewsStorage } from "../../src/news/storage.js";
 import { ConfigStorage } from "../../src/config/storage.js";
+import type { IMConfig } from "../../src/config/types.js";
 import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";

@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ConfigStorage } from "../../src/config/storage.js";
+import type { IMConfig } from "../../src/config/types.js";
 
 let dir: string;
 let storage: ConfigStorage<IMConfig>;

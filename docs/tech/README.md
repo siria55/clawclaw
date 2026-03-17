@@ -89,20 +89,23 @@ getContext?: (messages: Message[]) => Message[] | Promise<Message[]>
 
 ---
 
-## NewsStorage / MemoryStorage
+## NewsStorage / MemoryStorage / ConfigStorage
 
-两个存储类设计完全对称，均基于 JSON 文件：
+三个存储类均基于 JSON 文件：
+
+**NewsStorage / MemoryStorage** 设计对称：
 
 ```
 读 → filter/sort/page → 返回
 写 → 读全部 → push → 写全部
 ```
 
-适合千级以内条目，无需外部数据库。如需扩展到更大规模，替换 `all()` / `save()` 实现即可，对上层工具和 API 透明。
+**ConfigStorage\<T\>**（`src/config/storage.ts`）：泛型 JSON 配置文件读写。
 
-**NewsStorage** (`src/news/storage.ts`)：存储新闻文章，支持关键词（title + summary）、标签过滤，分页，按 `savedAt` 降序。
+- `new ConfigStorage<IMConfig>("./data/im-config.json")` — IM 凭证
+- `new ConfigStorage<LLMConfig>("./data/llm-config.json")` — LLM 配置
 
-**MemoryStorage** (`src/memory/storage.ts`)：存储任意文本记忆，支持关键词（content）过滤，limit，按 `createdAt` 降序；支持按 id 精确查找。
+两个配置文件职责分离，互不干扰。WebServer 通过 `imConfigStorage` 和 `llmConfigStorage` 两个独立注入点访问。
 
 ---
 
@@ -135,6 +138,8 @@ defineTool({
 | `/api/chat` | POST | SSE 流式对话，body `{message}` |
 | `/api/status` | GET | 系统状态 JSON |
 | `/api/news` | GET | 新闻库查询，query: `q / tag / page / pageSize` |
+| `/api/im-config` | GET/POST | 飞书等 IM 凭证（读写 `data/im-config.json`） |
+| `/api/config/llm` | GET/POST | LLM 配置（读写 `data/llm-config.json`） |
 | `*` | GET | 静态文件或 SPA fallback |
 
 SPA fallback 规则：请求路径无扩展名 → 返回 `index.html`（支持前端路由）；有扩展名且文件不存在 → 404。
