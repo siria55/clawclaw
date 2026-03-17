@@ -27,15 +27,28 @@ export interface ClawServerConfig {
  */
 export class ClawServer {
   readonly #config: Required<ClawServerConfig>;
+  readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   readonly #server: ReturnType<typeof createServer>;
   #activeRequests = 0;
   #shutdownHandler: (() => void) | undefined;
 
   constructor(config: ClawServerConfig) {
     this.#config = { port: 3000, ...config };
+    this.#routes = { ...config.routes };
     this.#server = createServer((req, res) => {
       void this.#handleRequest(req, res);
     });
+  }
+
+  /** Dynamically add or replace a route at runtime. */
+  setRoute(path: string, route: { platform: IMPlatform; agent: Agent }): void {
+    this.#routes[path] = route;
+  }
+
+  /** Remove a route at runtime. */
+  removeRoute(path: string): void {
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete this.#routes[path];
   }
 
   /** Start listening and register graceful shutdown handlers. */
@@ -69,7 +82,7 @@ export class ClawServer {
   async #handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname;
-    const route = this.#config.routes[path];
+    const route = this.#routes[path];
 
     if (!route) {
       res.writeHead(404).end();

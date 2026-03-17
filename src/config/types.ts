@@ -1,0 +1,15 @@
+/** Feishu (Lark) IM platform credentials stored in im-config.json. */
+export interface FeishuConfig {
+  appId: string;
+  appSecret: string;
+  verificationToken: string;
+  /** Optional: enables request signature verification when set. */
+  encryptKey?: string;
+  /** Optional: target chat ID for CronScheduler delivery. */
+  chatId?: string;
+}
+
+/** Persisted IM configuration (all platforms optional). */
+export interface IMConfig {
+  feishu?: FeishuConfig;
+}

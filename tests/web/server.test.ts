@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebServer } from "../../src/web/server.js";
 import { NewsStorage } from "../../src/news/storage.js";
+import { IMConfigStorage } from "../../src/config/storage.js";
 import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";
@@ -286,5 +287,86 @@ describe("WebServer", () => {
 
     await server.stop();
     rmSync(newsDir, { recursive: true, force: true });
+  });
+
+  it("GET /api/im-config returns empty object when no imConfigStorage", async () => {
+    const agent = makeMockAgent();
+    const { server, url } = await startWebServer(agent);
+    const res = await fetch(`${url}/api/im-config`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body).toEqual({});
+    await server.stop();
+  });
+
+  it("GET /api/im-config returns masked feishu config", async () => {
+    const agent = makeMockAgent();
+    const imDir = join(tmpdir(), `clawclaw-im-${Date.now()}`);
+    mkdirSync(imDir, { recursive: true });
+    const imConfigStorage = new IMConfigStorage(join(imDir, "im-config.json"));
+    imConfigStorage.write({
+      feishu: { appId: "cli_abcdefg", appSecret: "secretXYZ", verificationToken: "tokenABC" },
+    });
+
+    const server = new WebServer({ agent, port: 0, staticDir, imConfigStorage });
+    await server.start();
+    const res = await fetch(`http://localhost:${server.port}/api/im-config`);
+    const body = await res.json() as { feishu: { appId: string; appSecret: string } };
+    expect(body.feishu.appId).toMatch(/\*{4}$/);      // ends with ****
+    expect(body.feishu.appSecret).toMatch(/\*{4}$/);
+
+    await server.stop();
+    rmSync(imDir, { recursive: true, force: true });
+  });
+
+  it("POST /api/im-config saves config and calls onIMConfig", async () => {
+    const agent = makeMockAgent();
+    const imDir = join(tmpdir(), `clawclaw-im-post-${Date.now()}`);
+    mkdirSync(imDir, { recursive: true });
+    const imConfigStorage = new IMConfigStorage(join(imDir, "im-config.json"));
+    const onIMConfig = vi.fn();
+
+    const server = new WebServer({ agent, port: 0, staticDir, imConfigStorage, onIMConfig });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/im-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feishu: { appId: "cli_new", appSecret: "sec", verificationToken: "tok" } }),
+    });
+    expect(res.status).toBe(200);
+    expect(onIMConfig).toHaveBeenCalledOnce();
+    expect(imConfigStorage.read().feishu?.appId).toBe("cli_new");
+
+    await server.stop();
+    rmSync(imDir, { recursive: true, force: true });
+  });
+
+  it("POST /api/im-config preserves masked sentinel values", async () => {
+    const agent = makeMockAgent();
+    const imDir = join(tmpdir(), `clawclaw-im-mask-${Date.now()}`);
+    mkdirSync(imDir, { recursive: true });
+    const imConfigStorage = new IMConfigStorage(join(imDir, "im-config.json"));
+    imConfigStorage.write({
+      feishu: { appId: "cli_orig", appSecret: "original_secret", verificationToken: "orig_token" },
+    });
+    const onIMConfig = vi.fn();
+
+    const server = new WebServer({ agent, port: 0, staticDir, imConfigStorage, onIMConfig });
+    await server.start();
+
+    // Simulate sending back a masked secret (user didn't change it)
+    await fetch(`http://localhost:${server.port}/api/im-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feishu: { appId: "cli_orig", appSecret: "orig****", verificationToken: "orig****" } }),
+    });
+
+    const saved = imConfigStorage.read().feishu;
+    expect(saved?.appSecret).toBe("original_secret");   // preserved
+    expect(saved?.verificationToken).toBe("orig_token"); // preserved
+
+    await server.stop();
+    rmSync(imDir, { recursive: true, force: true });
   });
 });

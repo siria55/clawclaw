@@ -25,9 +25,11 @@ import { WebServer } from "./web/server.js";
 import { CronScheduler } from "./cron/scheduler.js";
 import { NewsStorage } from "./news/storage.js";
 import { MemoryStorage } from "./memory/storage.js";
+import { IMConfigStorage } from "./config/storage.js";
 import { createSaveNewsTool } from "./tools/news.js";
 import { createMemoryTools } from "./tools/memory.js";
 import type { Message } from "./llm/types.js";
+import type { IMConfig } from "./config/types.js";
 
 // ── 存储 ──────────────────────────────────────────────────────────────────────
 
@@ -35,6 +37,7 @@ mkdirSync("./data", { recursive: true });
 
 const newsStorage = new NewsStorage("./data/news.json");
 const memoryStorage = new MemoryStorage("./data/memory.json");
+const imConfigStorage = new IMConfigStorage("./data/im-config.json");
 
 // ── LLM ───────────────────────────────────────────────────────────────────────
 
@@ -74,18 +77,29 @@ const agent = new Agent({
 
 // ── ClawServer（IM 接入，24/7 常驻）─────────────────────────────────────────
 
-// 仅在飞书环境变量齐全时才创建平台实例，否则跳过注册
-const feishu = process.env["FEISHU_APP_ID"] && process.env["FEISHU_APP_SECRET"] && process.env["FEISHU_VERIFICATION_TOKEN"]
-  ? new FeishuPlatform()
-  : undefined;
+/**
+ * Build a FeishuPlatform from the persisted IM config file (highest priority)
+ * or fall back to environment variables.
+ */
+function buildFeishu(): FeishuPlatform | undefined {
+  const saved = imConfigStorage.read().feishu;
+  if (saved?.appId && saved.appSecret && saved.verificationToken) {
+    return new FeishuPlatform(saved);
+  }
+  if (process.env["FEISHU_APP_ID"] && process.env["FEISHU_APP_SECRET"] && process.env["FEISHU_VERIFICATION_TOKEN"]) {
+    return new FeishuPlatform();
+  }
+  return undefined;
+}
+
+let feishu = buildFeishu();
 
 const clawServer = new ClawServer({
   port: Number(process.env["PORT"] ?? 3000),
-  routes: {
-    ...(feishu ? { "/feishu": { platform: feishu, agent } } : {}),
-    // ...(wecom ? { "/wecom": { platform: wecom, agent } } : {}),
-  },
+  routes: {},
 });
+
+if (feishu) clawServer.setRoute("/feishu", { platform: feishu, agent });
 
 // ── WebServer（本地调试界面）─────────────────────────────────────────────────
 
@@ -93,6 +107,18 @@ const webServer = new WebServer({
   agent,
   port: 3001,
   newsStorage,
+  imConfigStorage,
+  onIMConfig: (config: IMConfig) => {
+    const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
+      ? new FeishuPlatform(config.feishu)
+      : undefined;
+    feishu = newFeishu;
+    if (newFeishu) {
+      clawServer.setRoute("/feishu", { platform: newFeishu, agent });
+    } else {
+      clawServer.removeRoute("/feishu");
+    }
+  },
   getStatus: () => ({
     cronJobs: cron.jobIds.map((id) => ({
       id,
@@ -110,14 +136,15 @@ const webServer = new WebServer({
 
 const cron = new CronScheduler({ timezone: "Asia/Shanghai" });
 
-// 每天早上 9:00 发送日报（仅在飞书配置后启用）
+// 每天早上 9:00 发送日报（仅在飞书初始配置后启用）
 if (feishu) {
+  const chatId = imConfigStorage.read().feishu?.chatId ?? process.env["FEISHU_CHAT_ID"] ?? "";
   cron.add({
     id: "daily-digest",
     schedule: "0 9 * * *",
     message: "请搜索今天的科技新闻头条，保存到新闻库，并生成一份简短的日报摘要。",
     agent,
-    delivery: { platform: feishu, chatId: process.env["FEISHU_CHAT_ID"] ?? "" },
+    delivery: { platform: feishu, chatId },
   });
 }
 

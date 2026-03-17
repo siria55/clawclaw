@@ -6,6 +6,8 @@ import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import type { AgentConfig } from "../core/types.js";
 import type { NewsStorage } from "../news/storage.js";
+import type { IMConfigStorage } from "../config/storage.js";
+import type { IMConfig } from "../config/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -45,6 +47,10 @@ export interface WebServerConfig {
   getStatus?: () => SystemStatus;
   /** News storage instance for GET /api/news. */
   newsStorage?: NewsStorage;
+  /** IM config storage for GET/POST /api/im-config. */
+  imConfigStorage?: IMConfigStorage;
+  /** Called after POST /api/im-config to hot-reload IM platform routes. */
+  onIMConfig?: (config: IMConfig) => void;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -66,7 +72,13 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage">> & { agentConfig: AgentConfig | undefined; getStatus: (() => SystemStatus) | undefined; newsStorage: NewsStorage | undefined };
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "imConfigStorage" | "onIMConfig">> & {
+    agentConfig: AgentConfig | undefined;
+    getStatus: (() => SystemStatus) | undefined;
+    newsStorage: NewsStorage | undefined;
+    imConfigStorage: IMConfigStorage | undefined;
+    onIMConfig: ((config: IMConfig) => void) | undefined;
+  };
   readonly #server: ReturnType<typeof createServer>;
 
   constructor(config: WebServerConfig) {
@@ -76,6 +88,8 @@ export class WebServer {
       staticDir: join(__dirname, "dist"),
       getStatus: undefined,
       newsStorage: undefined,
+      imConfigStorage: undefined,
+      onIMConfig: undefined,
       ...config,
     };
     this.#server = createServer((req, res) => {
@@ -118,6 +132,16 @@ export class WebServer {
 
     if (req.method === "GET" && path === "/api/news") {
       this.#handleNews(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/im-config") {
+      this.#handleGetIMConfig(res);
+      return;
+    }
+
+    if (req.method === "POST" && path === "/api/im-config") {
+      await this.#handlePostIMConfig(req, res);
       return;
     }
 
@@ -173,6 +197,37 @@ export class WebServer {
       : { articles: [], total: 0, page, pageSize };
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(result));
+  }
+
+  #handleGetIMConfig(res: ServerResponse): void {
+    const config = this.#config.imConfigStorage?.read() ?? {};
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify(maskIMConfig(config)));
+  }
+
+  async #handlePostIMConfig(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readBody(req);
+    let incoming: IMConfig;
+    try {
+      incoming = JSON.parse(body) as IMConfig;
+    } catch {
+      res.writeHead(400).end("Invalid JSON");
+      return;
+    }
+
+    if (!this.#config.imConfigStorage) {
+      res.writeHead(503).end("IM config storage not configured");
+      return;
+    }
+
+    // Merge with existing — skip fields that still carry the masked sentinel "****"
+    const existing = this.#config.imConfigStorage.read();
+    const merged = mergeIMConfig(existing, incoming);
+    this.#config.imConfigStorage.write(merged);
+    this.#config.onIMConfig?.(merged);
+
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ ok: true }));
   }
 
   async #handleChat(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -293,4 +348,49 @@ function extractThinking(content: unknown): string[] {
   return content
     .filter((b): b is { type: "thinking"; thinking: string } => (b as { type: string }).type === "thinking")
     .map((b) => b.thinking);
+}
+
+/** Mask sensitive string: show first 4 chars + "****". */
+function mask(value: string): string {
+  return value.length > 4 ? value.slice(0, 4) + "****" : "****";
+}
+
+/** Returns true if the value was left as a masked sentinel (ends with "****"). */
+function isMasked(value: string): boolean {
+  return value.endsWith("****");
+}
+
+/** Replace sensitive fields with masked values for safe GET response. */
+function maskIMConfig(config: IMConfig): IMConfig {
+  if (!config.feishu) return config;
+  const { feishu } = config;
+  return {
+    feishu: {
+      appId: feishu.appId ? mask(feishu.appId) : "",
+      appSecret: feishu.appSecret ? mask(feishu.appSecret) : "",
+      verificationToken: feishu.verificationToken ? mask(feishu.verificationToken) : "",
+      ...(feishu.encryptKey !== undefined && { encryptKey: mask(feishu.encryptKey) }),
+      ...(feishu.chatId !== undefined && { chatId: feishu.chatId }),
+    },
+  };
+}
+
+/**
+ * Merge incoming config into existing, preserving masked sentinel values
+ * (i.e. don't overwrite an existing secret when the client sends "****").
+ */
+function mergeIMConfig(existing: IMConfig, incoming: IMConfig): IMConfig {
+  const result: IMConfig = { ...existing };
+  if (incoming.feishu) {
+    const ex = existing.feishu ?? { appId: "", appSecret: "", verificationToken: "" };
+    const inc = incoming.feishu;
+    result.feishu = {
+      appId: inc.appId && !isMasked(inc.appId) ? inc.appId : ex.appId,
+      appSecret: inc.appSecret && !isMasked(inc.appSecret) ? inc.appSecret : ex.appSecret,
+      verificationToken: inc.verificationToken && !isMasked(inc.verificationToken) ? inc.verificationToken : ex.verificationToken,
+      ...(inc.encryptKey !== undefined && !isMasked(inc.encryptKey) ? { encryptKey: inc.encryptKey } : ex.encryptKey !== undefined ? { encryptKey: ex.encryptKey } : {}),
+      ...(inc.chatId !== undefined ? { chatId: inc.chatId } : ex.chatId !== undefined ? { chatId: ex.chatId } : {}),
+    };
+  }
+  return result;
 }
