@@ -429,11 +429,15 @@ function maskLLMConfig(config: LLMConfig): LLMConfig {
 }
 
 function mergeLLMConfig(existing: LLMConfig, incoming: LLMConfig): LLMConfig {
+  const apiKey = incoming.apiKey && !isMasked(incoming.apiKey) ? incoming.apiKey : existing.apiKey;
+  const baseURL = incoming.baseURL !== undefined ? incoming.baseURL : existing.baseURL;
+  const httpsProxy = incoming.httpsProxy !== undefined ? incoming.httpsProxy : existing.httpsProxy;
+  const model = incoming.model !== undefined ? incoming.model : existing.model;
   return {
-    apiKey: incoming.apiKey && !isMasked(incoming.apiKey) ? incoming.apiKey : existing.apiKey,
-    ...(incoming.baseURL !== undefined ? { baseURL: incoming.baseURL } : existing.baseURL !== undefined ? { baseURL: existing.baseURL } : {}),
-    ...(incoming.httpsProxy !== undefined ? { httpsProxy: incoming.httpsProxy } : existing.httpsProxy !== undefined ? { httpsProxy: existing.httpsProxy } : {}),
-    ...(incoming.model !== undefined ? { model: incoming.model } : existing.model !== undefined ? { model: existing.model } : {}),
+    ...(apiKey !== undefined && { apiKey }),
+    ...(baseURL !== undefined && { baseURL }),
+    ...(httpsProxy !== undefined && { httpsProxy }),
+    ...(model !== undefined && { model }),
   };
 }
 
