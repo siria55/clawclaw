@@ -1,4 +1,5 @@
 import type { AgentConfig, AgentOptions, AgentRunResult, AgentEvent } from "./types.js";
+import type { LLMProvider } from "../llm/types.js";
 import type { Message } from "../llm/types.js";
 
 const DEFAULT_MAX_TURNS = 20;
@@ -15,10 +16,17 @@ const DEFAULT_MAX_TURNS = 20;
 export class Agent {
   readonly name: string;
   readonly #config: AgentConfig;
+  #llm: LLMProvider;
 
   constructor(config: AgentConfig) {
     this.name = config.name;
     this.#config = config;
+    this.#llm = config.llm;
+  }
+
+  /** Hot-swap the LLM provider without restarting the agent. */
+  updateLLM(provider: LLMProvider): void {
+    this.#llm = provider;
   }
 
   /**
@@ -37,7 +45,7 @@ export class Agent {
       const system = await this.#resolveSystem();
       const contextMessages = this.#config.getContext ? await this.#config.getContext(messages) : [];
 
-      const response = await this.#config.llm.complete({
+      const response = await this.#llm.complete({
         system,
         messages: [...messages, ...contextMessages],
         ...(this.#config.tools ? { tools: this.#config.tools } : {}),
@@ -73,7 +81,7 @@ export class Agent {
       const system = await this.#resolveSystem();
       const contextMessages = this.#config.getContext ? await this.#config.getContext(messages) : [];
 
-      const response = await this.#config.llm.complete({
+      const response = await this.#llm.complete({
         system,
         messages: [...messages, ...contextMessages],
         ...(this.#config.tools ? { tools: this.#config.tools } : {}),

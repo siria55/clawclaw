@@ -9,7 +9,16 @@ export interface FeishuConfig {
   chatId?: string;
 }
 
-/** Persisted IM configuration (all platforms optional). */
+/** LLM provider configuration saved server-side. */
+export interface LLMConfig {
+  apiKey?: string;
+  baseURL?: string;
+  httpsProxy?: string;
+  model?: string;
+}
+
+/** Persisted application configuration (all sections optional). */
 export interface IMConfig {
   feishu?: FeishuConfig;
+  llm?: LLMConfig;
 }

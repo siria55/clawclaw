@@ -41,7 +41,16 @@ const imConfigStorage = new IMConfigStorage("./data/im-config.json");
 
 // ── LLM ───────────────────────────────────────────────────────────────────────
 
-const llm = new AnthropicProvider();
+function buildLLM(): AnthropicProvider {
+  const saved = imConfigStorage.read().llm;
+  return new AnthropicProvider({
+    ...(saved?.apiKey && { apiKey: saved.apiKey }),
+    ...(saved?.baseURL && { baseURL: saved.baseURL }),
+    ...(saved?.model && { model: saved.model }),
+  });
+}
+
+const llm = buildLLM();
 
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
@@ -118,6 +127,13 @@ const webServer = new WebServer({
     } else {
       clawServer.removeRoute("/feishu");
     }
+  },
+  onLLMConfig: (config) => {
+    agent.updateLLM(new AnthropicProvider({
+      ...(config.apiKey && { apiKey: config.apiKey }),
+      ...(config.baseURL && { baseURL: config.baseURL }),
+      ...(config.model && { model: config.model }),
+    }));
   },
   getStatus: () => ({
     cronJobs: cron.jobIds.map((id) => ({

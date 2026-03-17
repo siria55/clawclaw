@@ -7,7 +7,7 @@ import { AnthropicProvider } from "../llm/anthropic.js";
 import type { AgentConfig } from "../core/types.js";
 import type { NewsStorage } from "../news/storage.js";
 import type { IMConfigStorage } from "../config/storage.js";
-import type { IMConfig } from "../config/types.js";
+import type { IMConfig, LLMConfig } from "../config/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -51,6 +51,8 @@ export interface WebServerConfig {
   imConfigStorage?: IMConfigStorage;
   /** Called after POST /api/im-config to hot-reload IM platform routes. */
   onIMConfig?: (config: IMConfig) => void;
+  /** Called after POST /api/config/llm to hot-reload the LLM provider. */
+  onLLMConfig?: (config: LLMConfig) => void;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -72,12 +74,13 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "imConfigStorage" | "onIMConfig">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "imConfigStorage" | "onIMConfig" | "onLLMConfig">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     newsStorage: NewsStorage | undefined;
     imConfigStorage: IMConfigStorage | undefined;
     onIMConfig: ((config: IMConfig) => void) | undefined;
+    onLLMConfig: ((config: LLMConfig) => void) | undefined;
   };
   readonly #server: ReturnType<typeof createServer>;
 
@@ -90,6 +93,7 @@ export class WebServer {
       newsStorage: undefined,
       imConfigStorage: undefined,
       onIMConfig: undefined,
+      onLLMConfig: undefined,
       ...config,
     };
     this.#server = createServer((req, res) => {
@@ -142,6 +146,16 @@ export class WebServer {
 
     if (req.method === "POST" && path === "/api/im-config") {
       await this.#handlePostIMConfig(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/config/llm") {
+      this.#handleGetLLMConfig(res);
+      return;
+    }
+
+    if (req.method === "POST" && path === "/api/config/llm") {
+      await this.#handlePostLLMConfig(req, res);
       return;
     }
 
@@ -225,6 +239,36 @@ export class WebServer {
     const merged = mergeIMConfig(existing, incoming);
     this.#config.imConfigStorage.write(merged);
     this.#config.onIMConfig?.(merged);
+
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ ok: true }));
+  }
+
+  #handleGetLLMConfig(res: ServerResponse): void {
+    const llm = this.#config.imConfigStorage?.read().llm ?? {};
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify(maskLLMConfig(llm)));
+  }
+
+  async #handlePostLLMConfig(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readBody(req);
+    let incoming: LLMConfig;
+    try {
+      incoming = JSON.parse(body) as LLMConfig;
+    } catch {
+      res.writeHead(400).end("Invalid JSON");
+      return;
+    }
+
+    if (!this.#config.imConfigStorage) {
+      res.writeHead(503).end("Config storage not configured");
+      return;
+    }
+
+    const existing = this.#config.imConfigStorage.read();
+    const mergedLLM = mergeLLMConfig(existing.llm ?? {}, incoming);
+    this.#config.imConfigStorage.write({ ...existing, llm: mergedLLM });
+    this.#config.onLLMConfig?.(mergedLLM);
 
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ ok: true }));
@@ -372,6 +416,24 @@ function maskIMConfig(config: IMConfig): IMConfig {
       ...(feishu.encryptKey !== undefined && { encryptKey: mask(feishu.encryptKey) }),
       ...(feishu.chatId !== undefined && { chatId: feishu.chatId }),
     },
+  };
+}
+
+function maskLLMConfig(config: LLMConfig): LLMConfig {
+  return {
+    ...(config.apiKey !== undefined && { apiKey: mask(config.apiKey) }),
+    ...(config.baseURL !== undefined && { baseURL: config.baseURL }),
+    ...(config.httpsProxy !== undefined && { httpsProxy: config.httpsProxy }),
+    ...(config.model !== undefined && { model: config.model }),
+  };
+}
+
+function mergeLLMConfig(existing: LLMConfig, incoming: LLMConfig): LLMConfig {
+  return {
+    apiKey: incoming.apiKey && !isMasked(incoming.apiKey) ? incoming.apiKey : existing.apiKey,
+    ...(incoming.baseURL !== undefined ? { baseURL: incoming.baseURL } : existing.baseURL !== undefined ? { baseURL: existing.baseURL } : {}),
+    ...(incoming.httpsProxy !== undefined ? { httpsProxy: incoming.httpsProxy } : existing.httpsProxy !== undefined ? { httpsProxy: existing.httpsProxy } : {}),
+    ...(incoming.model !== undefined ? { model: incoming.model } : existing.model !== undefined ? { model: existing.model } : {}),
   };
 }
 
