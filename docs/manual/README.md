@@ -42,11 +42,11 @@ pnpm start
 | `HTTPS_PROXY` | HTTPS 代理，格式 `http://host:port` | 可选 |
 | `HTTP_PROXY` | HTTP 代理（HTTPS_PROXY 未设置时生效） | 可选 |
 | `PORT` | ClawServer 监听端口，默认 `3000` | 可选 |
-| `FEISHU_APP_ID` | 飞书应用 App ID | 接飞书时必填 |
-| `FEISHU_APP_SECRET` | 飞书应用 App Secret | 接飞书时必填 |
-| `FEISHU_VERIFICATION_TOKEN` | 飞书事件验证 Token | 接飞书时必填 |
+| `FEISHU_APP_ID` | 飞书应用 App ID | 可选（WebUI 设置页可替代） |
+| `FEISHU_APP_SECRET` | 飞书应用 App Secret | 可选（WebUI 设置页可替代） |
+| `FEISHU_VERIFICATION_TOKEN` | 飞书事件验证 Token | 可选（WebUI 设置页可替代） |
 | `FEISHU_ENCRYPT_KEY` | 飞书消息加密密钥 | 可选 |
-| `FEISHU_CHAT_ID` | Cron 任务推送目标会话 ID | 使用 Cron 时必填 |
+| `FEISHU_CHAT_ID` | Cron 任务推送目标会话 ID | 可选（WebUI 设置页可替代） |
 | `WECOM_CORP_ID` | 企业微信企业 ID | 接企业微信时必填 |
 | `WECOM_CORP_SECRET` | 企业微信应用 Secret | 接企业微信时必填 |
 | `WECOM_AGENT_ID` | 企业微信应用 AgentId | 接企业微信时必填 |
@@ -100,10 +100,17 @@ pnpm start
 
 ### 设置
 
-调整 Agent 运行参数（保存在浏览器本地，无需重启服务）：
-- API Key / Base URL / HTTPS Proxy
-- 模型名称（默认 `claude-sonnet-4-6`）
-- 点击「清除配置」恢复服务端默认设置
+两类配置，保存方式不同：
+
+**LLM 配置**（保存在浏览器 localStorage，刷新后自动恢复）：
+- API Key / Base URL / HTTPS Proxy / 模型名称
+- 每次发消息时通过请求头传给服务端，覆盖服务端默认值
+- 点击「清除配置」恢复使用服务端默认设置
+
+**飞书 IM 配置**（保存在服务端 `data/im-config.json`）：
+- App ID / App Secret / Verification Token / Encrypt Key / Chat ID
+- 保存后立即生效，无需重启
+- 重启后自动恢复
 
 ---
 
@@ -165,28 +172,55 @@ Agent 是框架的核心单元，负责 LLM 调用与工具执行的编排。
 
 ## IM 平台接入
 
-### 飞书（Feishu/Lark）
+IM 凭证支持两种配置方式，**优先级：WebUI 设置 > 环境变量**。
 
-1. 在飞书开放平台创建企业自建应用
-2. 开启「接收消息」事件权限
-3. 配置事件 Webhook 地址：`http://your-server/feishu`
-4. 将 `FEISHU_*` 环境变量填入 `.env`
+未配置任何 IM 平台时，应用仍可正常启动，WebServer 调试界面照常使用。
 
-飞书首次配置时会发送 URL 验证请求，服务会自动响应。
+### 方式一：WebUI 设置页（推荐）
 
-本地调试时，使用 ngrok 暴露端口：
+启动后访问 `http://localhost:5173` → **设置** 标签页 → **飞书（Feishu）** 分区，填入凭证后点击「保存飞书配置」：
+
+- 保存后**立即生效**，无需重启
+- 凭证加密存储在 `data/im-config.json`，重启后自动恢复
+- 已保存的敏感字段显示为脱敏值（如 `cli_****`），修改后重新保存即可更新
+
+### 方式二：环境变量（适合生产部署）
+
+编辑 `.env`：
+
+```
+FEISHU_APP_ID=cli_xxxxxxxxxx
+FEISHU_APP_SECRET=xxxxxxxxxxxxxxxx
+FEISHU_VERIFICATION_TOKEN=xxxxxxxxxxxxxxxx
+FEISHU_ENCRYPT_KEY=         # 可选
+FEISHU_CHAT_ID=oc_xxxxxxxxxx  # 可选，Cron 日报推送目标群
+```
+
+### 飞书开放平台配置步骤
+
+1. 进入[飞书开放平台](https://open.feishu.cn) → 创建**企业自建应用**
+2. 「添加应用能力」→ 选**机器人**
+3. 「事件与回调」→ 添加事件：`im.message.receive_v1`
+4. 配置 Webhook 回调地址：`http://your-server:3000/feishu`
+5. 记录 App ID、App Secret、Verification Token，填入 WebUI 或 `.env`
+
+飞书首次配置时会发送 URL 验证请求，服务自动响应，无需手动处理。
+
+**本地调试**（让飞书能回调到本机）：
 
 ```bash
 ngrok http 3000
 ```
 
+将 ngrok 生成的 `https://xxxx.ngrok.io/feishu` 填入飞书回调地址。
+
 ### 企业微信（WeCom）
 
-1. 在企业微信管理后台创建应用
-2. 开启「接收消息」功能，配置回调地址：`http://your-server/wecom`
-3. 将 `WECOM_*` 环境变量填入 `.env`
+1. 在企业微信管理后台创建应用，开启「接收消息」
+2. 配置回调地址：`http://your-server:3000/wecom`
+3. 将 `WECOM_*` 环境变量填入 `.env`（企业微信暂不支持 WebUI 配置）
 
-企业微信所有消息均经 AES-256-CBC 加密，服务会自动解密。
+企业微信所有消息均经 AES-256-CBC 加密，服务自动解密。
 
 ---
 

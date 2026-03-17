@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ClawConfig } from "./types";
 import styles from "./SettingsView.module.css";
 
@@ -15,10 +15,28 @@ interface Props {
   onChange: (config: ClawConfig) => void;
 }
 
-/** Full-page settings view (replaces SettingsPanel floating sidebar). */
+/** Full-page settings view. */
 export function SettingsView({ config, onChange }: Props): React.JSX.Element {
+  // Local draft — only written to parent (localStorage) on explicit save
+  const [draft, setDraft] = useState<ClawConfig>(config);
+  const [saved, setSaved] = useState(false);
+
+  // Keep draft in sync if parent config changes externally (e.g. clear)
+  useEffect(() => { setDraft(config); }, [config]);
+
   const set = (key: keyof ClawConfig, value: string): void => {
-    onChange({ ...config, [key]: value || undefined });
+    setDraft((d) => ({ ...d, [key]: value || undefined }));
+  };
+
+  const save = (): void => {
+    onChange(draft);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const clear = (): void => {
+    onChange({});
+    setDraft({});
   };
 
   return (
@@ -27,40 +45,44 @@ export function SettingsView({ config, onChange }: Props): React.JSX.Element {
         <h2 className={styles.title}>设置</h2>
         <p className={styles.hint}>
           配置将通过请求头发送给服务端，覆盖服务端默认的 LLM 配置。<br />
-          保存在 localStorage，刷新后自动恢复。
+          点击「保存配置」后写入 localStorage，刷新后自动恢复。
         </p>
         <div className={styles.fields}>
           <Field
             label="API Key"
             type="password"
             placeholder="sk-ant-..."
-            value={config.apiKey ?? ""}
+            value={draft.apiKey ?? ""}
             onChange={(v) => set("apiKey", v)}
           />
           <Field
             label="Base URL"
             placeholder="https://api.anthropic.com"
-            value={config.baseURL ?? ""}
+            value={draft.baseURL ?? ""}
             onChange={(v) => set("baseURL", v)}
           />
           <Field
             label="HTTPS Proxy"
             placeholder="http://127.0.0.1:7890"
-            value={config.httpsProxy ?? ""}
+            value={draft.httpsProxy ?? ""}
             onChange={(v) => set("httpsProxy", v)}
           />
           <Field
             label="Model"
             placeholder="claude-sonnet-4-6"
-            value={config.model ?? ""}
+            value={draft.model ?? ""}
             onChange={(v) => set("model", v)}
           />
+        </div>
+        <div className={styles.saveRow}>
+          <button className={styles.saveBtn} onClick={save}>保存配置</button>
+          {saved && <span className={`${styles.saveStatus} ${styles.ok}`}>已保存</span>}
         </div>
 
         <FeishuSection />
 
         <div className={styles.footer}>
-          <button className={styles.clearBtn} onClick={() => onChange({})}>清除配置</button>
+          <button className={styles.clearBtn} onClick={clear}>清除全部配置</button>
         </div>
       </div>
     </div>
@@ -198,18 +220,34 @@ interface FieldProps {
 }
 
 function Field({ label, placeholder, value, onChange, type = "text" }: FieldProps): React.JSX.Element {
+  const [show, setShow] = useState(false);
+  const isPassword = type === "password";
+
   return (
     <div className={styles.field}>
       <label className={styles.fieldLabel}>{label}</label>
-      <input
-        className={styles.fieldInput}
-        type={type}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        autoComplete="off"
-        spellCheck={false}
-      />
+      <div className={styles.fieldRow}>
+        <input
+          className={styles.fieldInput}
+          type={isPassword && !show ? "password" : "text"}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            className={styles.eyeBtn}
+            onClick={() => setShow((s) => !s)}
+            tabIndex={-1}
+            aria-label={show ? "隐藏" : "显示"}
+          >
+            {show ? "🙈" : "👁"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
