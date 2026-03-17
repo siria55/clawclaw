@@ -1,19 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { ChatEntry, ClawConfig, ThinkingItem } from "./types";
-
-const STORAGE_KEY = "clawclaw_config";
-
-export function loadConfig(): ClawConfig {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as ClawConfig;
-  } catch {
-    return {};
-  }
-}
-
-export function saveConfig(config: ClawConfig): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-}
+import type { ChatEntry, ThinkingItem } from "./types";
 
 let _idCounter = 0;
 function nextId(): string {
@@ -23,13 +9,13 @@ function nextId(): string {
 export function useChatStream(): {
   entries: ChatEntry[];
   streaming: boolean;
-  send: (text: string, config: ClawConfig) => Promise<void>;
+  send: (text: string) => Promise<void>;
 } {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const send = useCallback(async (text: string, config: ClawConfig): Promise<void> => {
+  const send = useCallback(async (text: string): Promise<void> => {
     if (streaming) return;
 
     // Append user message
@@ -43,19 +29,13 @@ export function useChatStream(): {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    const configKeys = Object.keys(config) as (keyof ClawConfig)[];
-    if (configKeys.some((k) => config[k])) {
-      headers["X-Claw-Config"] = JSON.stringify(config);
-    }
-
     let assistantId: string | null = null;
     let thinkingId: string | null = null;
 
     try {
       const resp = await fetch("/api/chat", {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
         signal: ctrl.signal,
       });

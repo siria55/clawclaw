@@ -4,8 +4,7 @@ import { InputBar } from "./InputBar";
 import { NewsView } from "./NewsView";
 import { SettingsView } from "./SettingsView";
 import { StatusView } from "./StatusView";
-import { useChatStream, loadConfig, saveConfig } from "./useChatStream";
-import type { ClawConfig } from "./types";
+import { useChatStream } from "./useChatStream";
 import styles from "./App.module.css";
 
 type View = "chat" | "news" | "status" | "settings";
@@ -13,15 +12,9 @@ type View = "chat" | "news" | "status" | "settings";
 export function App(): React.JSX.Element {
   const { entries, streaming, send } = useChatStream();
   const [view, setView] = useState<View>("chat");
-  const [config, setConfig] = useState<ClawConfig>(loadConfig);
-
-  const handleConfigChange = (next: ClawConfig): void => {
-    setConfig(next);
-    saveConfig(next);
-  };
 
   const handleSend = (text: string): void => {
-    void send(text, config);
+    void send(text);
   };
 
   return (
@@ -71,7 +64,7 @@ export function App(): React.JSX.Element {
       ) : view === "status" ? (
         <StatusView />
       ) : (
-        <SettingsView config={config} onChange={handleConfigChange} />
+        <SettingsView />
       )}
     </div>
   );
