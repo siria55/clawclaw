@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebServer } from "../../src/web/server.js";
 import { NewsStorage } from "../../src/news/storage.js";
-import { IMConfigStorage } from "../../src/config/storage.js";
+import { ConfigStorage } from "../../src/config/storage.js";
 import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";
@@ -303,7 +303,7 @@ describe("WebServer", () => {
     const agent = makeMockAgent();
     const imDir = join(tmpdir(), `clawclaw-im-${Date.now()}`);
     mkdirSync(imDir, { recursive: true });
-    const imConfigStorage = new IMConfigStorage(join(imDir, "im-config.json"));
+    const imConfigStorage: ConfigStorage<IMConfig> = new ConfigStorage<IMConfig>(join(imDir, "im-config.json"));
     imConfigStorage.write({
       feishu: { appId: "cli_abcdefg", appSecret: "secretXYZ", verificationToken: "tokenABC" },
     });
@@ -323,7 +323,7 @@ describe("WebServer", () => {
     const agent = makeMockAgent();
     const imDir = join(tmpdir(), `clawclaw-im-post-${Date.now()}`);
     mkdirSync(imDir, { recursive: true });
-    const imConfigStorage = new IMConfigStorage(join(imDir, "im-config.json"));
+    const imConfigStorage: ConfigStorage<IMConfig> = new ConfigStorage<IMConfig>(join(imDir, "im-config.json"));
     const onIMConfig = vi.fn();
 
     const server = new WebServer({ agent, port: 0, staticDir, imConfigStorage, onIMConfig });
@@ -346,7 +346,7 @@ describe("WebServer", () => {
     const agent = makeMockAgent();
     const imDir = join(tmpdir(), `clawclaw-im-mask-${Date.now()}`);
     mkdirSync(imDir, { recursive: true });
-    const imConfigStorage = new IMConfigStorage(join(imDir, "im-config.json"));
+    const imConfigStorage: ConfigStorage<IMConfig> = new ConfigStorage<IMConfig>(join(imDir, "im-config.json"));
     imConfigStorage.write({
       feishu: { appId: "cli_orig", appSecret: "original_secret", verificationToken: "orig_token" },
     });

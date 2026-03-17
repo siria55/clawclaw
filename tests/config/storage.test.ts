@@ -2,15 +2,15 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { IMConfigStorage } from "../../src/config/storage.js";
+import { ConfigStorage } from "../../src/config/storage.js";
 
 let dir: string;
-let storage: IMConfigStorage;
+let storage: ConfigStorage<IMConfig>;
 
 beforeEach(() => {
   dir = join(tmpdir(), `clawclaw-config-test-${Date.now()}`);
   mkdirSync(dir, { recursive: true });
-  storage = new IMConfigStorage(join(dir, "im-config.json"));
+  storage = new ConfigStorage<IMConfig>(join(dir, "im-config.json"));
 });
 
 afterEach(() => {
@@ -38,7 +38,7 @@ describe("IMConfigStorage", () => {
 
   it("persists across instances", () => {
     storage.write({ feishu: { appId: "a", appSecret: "b", verificationToken: "c" } });
-    const storage2 = new IMConfigStorage(join(dir, "im-config.json"));
+    const storage2 = new ConfigStorage<IMConfig>(join(dir, "im-config.json"));
     expect(storage2.read().feishu?.appId).toBe("a");
   });
 
@@ -66,7 +66,7 @@ describe("IMConfigStorage", () => {
   it("returns empty object on corrupt file", () => {
     const { writeFileSync } = require("node:fs") as typeof import("node:fs");
     writeFileSync(join(dir, "im-config.json"), "not json", "utf8");
-    const s = new IMConfigStorage(join(dir, "im-config.json"));
+    const s = new ConfigStorage<IMConfig>(join(dir, "im-config.json"));
     expect(s.read()).toEqual({});
   });
 });

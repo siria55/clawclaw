@@ -8,21 +8,21 @@
 import { mkdirSync } from "node:fs";
 import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
-import { IMConfigStorage } from "../config/storage.js";
-import type { LLMConfig } from "../config/types.js";
+import { ConfigStorage } from "../config/storage.js";
+import type { LLMConfig, IMConfig } from "../config/types.js";
 import { WebServer } from "./server.js";
 
 mkdirSync("./data", { recursive: true });
 
-const imConfigStorage = new IMConfigStorage("./data/im-config.json");
+const imConfigStorage = new ConfigStorage<IMConfig>("./data/im-config.json");
+const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/llm-config.json");
 
 function buildLLM(): AnthropicProvider {
-  const config = imConfigStorage.read();
-  const llm: LLMConfig = config.llm ?? {};
+  const saved: LLMConfig = llmConfigStorage.read();
   return new AnthropicProvider({
-    ...(llm.apiKey !== undefined && { apiKey: llm.apiKey }),
-    ...(llm.baseURL !== undefined && { baseURL: llm.baseURL }),
-    ...(llm.model !== undefined && { model: llm.model }),
+    ...(saved.apiKey !== undefined && { apiKey: saved.apiKey }),
+    ...(saved.baseURL !== undefined && { baseURL: saved.baseURL }),
+    ...(saved.model !== undefined && { model: saved.model }),
   });
 }
 

@@ -6,7 +6,7 @@ import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import type { AgentConfig } from "../core/types.js";
 import type { NewsStorage } from "../news/storage.js";
-import type { IMConfigStorage } from "../config/storage.js";
+import type { ConfigStorage } from "../config/storage.js";
 import type { IMConfig, LLMConfig } from "../config/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -48,9 +48,11 @@ export interface WebServerConfig {
   /** News storage instance for GET /api/news. */
   newsStorage?: NewsStorage;
   /** IM config storage for GET/POST /api/im-config. */
-  imConfigStorage?: IMConfigStorage;
+  imConfigStorage?: ConfigStorage<IMConfig>;
   /** Called after POST /api/im-config to hot-reload IM platform routes. */
   onIMConfig?: (config: IMConfig) => void;
+  /** LLM config storage for GET/POST /api/config/llm (data/llm-config.json). */
+  llmConfigStorage?: ConfigStorage<LLMConfig>;
   /** Called after POST /api/config/llm to hot-reload the LLM provider. */
   onLLMConfig?: (config: LLMConfig) => void;
 }
@@ -74,12 +76,13 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "imConfigStorage" | "onIMConfig" | "onLLMConfig">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     newsStorage: NewsStorage | undefined;
-    imConfigStorage: IMConfigStorage | undefined;
+    imConfigStorage: ConfigStorage<IMConfig> | undefined;
     onIMConfig: ((config: IMConfig) => void) | undefined;
+    llmConfigStorage: ConfigStorage<LLMConfig> | undefined;
     onLLMConfig: ((config: LLMConfig) => void) | undefined;
   };
   readonly #server: ReturnType<typeof createServer>;
@@ -93,6 +96,7 @@ export class WebServer {
       newsStorage: undefined,
       imConfigStorage: undefined,
       onIMConfig: undefined,
+      llmConfigStorage: undefined,
       onLLMConfig: undefined,
       ...config,
     };
@@ -245,7 +249,7 @@ export class WebServer {
   }
 
   #handleGetLLMConfig(res: ServerResponse): void {
-    const llm = this.#config.imConfigStorage?.read().llm ?? {};
+    const llm = this.#config.llmConfigStorage?.read() ?? {};
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(maskLLMConfig(llm)));
   }
@@ -260,15 +264,15 @@ export class WebServer {
       return;
     }
 
-    if (!this.#config.imConfigStorage) {
+    if (!this.#config.llmConfigStorage) {
       res.writeHead(503).end("Config storage not configured");
       return;
     }
 
-    const existing = this.#config.imConfigStorage.read();
-    const mergedLLM = mergeLLMConfig(existing.llm ?? {}, incoming);
-    this.#config.imConfigStorage.write({ ...existing, llm: mergedLLM });
-    this.#config.onLLMConfig?.(mergedLLM);
+    const existing = this.#config.llmConfigStorage.read();
+    const merged = mergeLLMConfig(existing, incoming);
+    this.#config.llmConfigStorage.write(merged);
+    this.#config.onLLMConfig?.(merged);
 
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ ok: true }));

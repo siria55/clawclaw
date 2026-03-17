@@ -25,11 +25,11 @@ import { WebServer } from "./web/server.js";
 import { CronScheduler } from "./cron/scheduler.js";
 import { NewsStorage } from "./news/storage.js";
 import { MemoryStorage } from "./memory/storage.js";
-import { IMConfigStorage } from "./config/storage.js";
+import { ConfigStorage } from "./config/storage.js";
 import { createSaveNewsTool } from "./tools/news.js";
 import { createMemoryTools } from "./tools/memory.js";
 import type { Message } from "./llm/types.js";
-import type { IMConfig } from "./config/types.js";
+import type { IMConfig, LLMConfig } from "./config/types.js";
 
 // ── 存储 ──────────────────────────────────────────────────────────────────────
 
@@ -37,16 +37,17 @@ mkdirSync("./data", { recursive: true });
 
 const newsStorage = new NewsStorage("./data/news.json");
 const memoryStorage = new MemoryStorage("./data/memory.json");
-const imConfigStorage = new IMConfigStorage("./data/im-config.json");
+const imConfigStorage = new ConfigStorage<IMConfig>("./data/im-config.json");
+const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/llm-config.json");
 
 // ── LLM ───────────────────────────────────────────────────────────────────────
 
 function buildLLM(): AnthropicProvider {
-  const saved = imConfigStorage.read().llm;
+  const saved: LLMConfig = llmConfigStorage.read();
   return new AnthropicProvider({
-    ...(saved?.apiKey && { apiKey: saved.apiKey }),
-    ...(saved?.baseURL && { baseURL: saved.baseURL }),
-    ...(saved?.model && { model: saved.model }),
+    ...(saved.apiKey !== undefined && { apiKey: saved.apiKey }),
+    ...(saved.baseURL !== undefined && { baseURL: saved.baseURL }),
+    ...(saved.model !== undefined && { model: saved.model }),
   });
 }
 
@@ -117,6 +118,7 @@ const webServer = new WebServer({
   port: 3001,
   newsStorage,
   imConfigStorage,
+  llmConfigStorage,
   onIMConfig: (config: IMConfig) => {
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
       ? new FeishuPlatform(config.feishu)

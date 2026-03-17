@@ -17,8 +17,7 @@ export interface LLMConfig {
   model?: string;
 }
 
-/** Persisted application configuration (all sections optional). */
+/** Persisted IM platform configuration (all platforms optional). */
 export interface IMConfig {
   feishu?: FeishuConfig;
-  llm?: LLMConfig;
 }
