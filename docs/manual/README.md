@@ -102,6 +102,11 @@ pnpm start
 
 两类配置均保存在服务端，重启后自动恢复，无需重新输入：
 
+**Agent 配置**（保存在 `data/agent-config.json`）：
+- 名称（标识用）、系统提示词（System Prompt）
+- 留空则使用默认提示词
+- 保存后下一轮对话即生效，无需重启
+
 **模型（LLM）配置**（保存在 `data/llm-config.json`）：
 - API Key / Base URL / HTTPS Proxy / 模型名称
 - 保存后立即生效，无需重启
@@ -135,6 +140,12 @@ Agent 是框架的核心单元，负责 LLM 调用与工具执行的编排。
 **`run()`** — 阻塞执行，返回完整消息历史，适合批处理。
 
 **`stream()`** — 逐步产出事件，适合实时反馈场景。
+
+### 热更新
+
+**`updateLLM(provider)`** — 运行时热换 LLM 提供商，无需重启。WebUI 模型配置保存后自动调用。
+
+**`updateSystem(fn)`** — 运行时替换 system prompt 函数，下一轮对话即生效。WebUI Agent 配置保存后自动调用。
 
 ---
 

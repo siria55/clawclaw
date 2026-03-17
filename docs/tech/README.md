@@ -62,10 +62,11 @@ while turns < maxTurns:
 
 `AgentConfig.system` 类型为 `string | (() => string | Promise<string>)`。
 
-每轮调用前通过 `#resolveSystem()` 求值：
+每轮调用前通过 `#resolveSystem()` 求值：优先使用 `updateSystem()` 热注入的函数，其次回退到构造时的 `config.system`。
 
 ```ts
 async #resolveSystem(): Promise<string> {
+  if (this.#systemFn) return this.#systemFn();
   return typeof this.#config.system === "function"
     ? this.#config.system()
     : this.#config.system;
@@ -73,6 +74,8 @@ async #resolveSystem(): Promise<string> {
 ```
 
 适用场景：注入当前时间、今日摘要、最新配置、用户偏好等随时间变化的信息。
+
+**热更新：** `agent.updateSystem(fn)` 在运行时替换 system prompt 函数，下一轮对话即使用新 prompt，无需重启。WebUI 设置页保存 Agent 配置后自动调用此方法。
 
 ### getContext 钩子
 
@@ -104,8 +107,9 @@ getContext?: (messages: Message[]) => Message[] | Promise<Message[]>
 
 - `new ConfigStorage<IMConfig>("./data/im-config.json")` — IM 凭证
 - `new ConfigStorage<LLMConfig>("./data/llm-config.json")` — LLM 配置
+- `new ConfigStorage<AgentMetaConfig>("./data/agent-config.json")` — Agent 名称和系统提示词
 
-两个配置文件职责分离，互不干扰。WebServer 通过 `imConfigStorage` 和 `llmConfigStorage` 两个独立注入点访问。
+三个配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。
 
 ---
 
@@ -140,6 +144,7 @@ defineTool({
 | `/api/news` | GET | 新闻库查询，query: `q / tag / page / pageSize` |
 | `/api/im-config` | GET/POST | 飞书等 IM 凭证（读写 `data/im-config.json`） |
 | `/api/config/llm` | GET/POST | LLM 配置（读写 `data/llm-config.json`） |
+| `/api/config/agent` | GET/POST | Agent 配置（读写 `data/agent-config.json`） |
 | `*` | GET | 静态文件或 SPA fallback |
 
 SPA fallback 规则：请求路径无扩展名 → 返回 `index.html`（支持前端路由）；有扩展名且文件不存在 → 404。
@@ -173,7 +178,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 对话 | `ChatView` | 消息气泡 + 工具事件 + 思考气泡 + 等待动画 |
 | 新闻库 | `NewsView` | 关键词搜索、标签过滤、分页浏览 |
 | 状态 | `StatusView` | IM 连接状态、Cron 任务列表 |
-| 设置 | `SettingsView` | API Key / Base URL / Proxy / Model |
+| 设置 | `SettingsView` | Agent 配置 / LLM 配置 / 飞书 IM 配置 |
 
 **关键 hooks：**
 - `useChatStream` — SSE 解析、事件状态管理、thinking 块累积
@@ -215,4 +220,4 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 - **React hook 测试**：`@vitest-environment jsdom` + `@testing-library/react renderHook`
 - **覆盖率阈值**：全局 80%
 
-当前测试总数：134 个，全部通过。
+当前测试总数：143 个，全部通过。

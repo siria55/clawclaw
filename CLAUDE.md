@@ -7,7 +7,7 @@ OpenClaw 的超级优化版 AI Agent 框架，TypeScript 实现。
 1. 能 24 小时运行，并连接飞书、企业微信等 IM
 2. 每天定时发出当日新闻新报
 3. 每天搜索的新闻都备份存储，有一个庞大的媒体库
-4. 其他工作信息，共 bot 发给 IM
+4. 其他工作信息，供 bot 发给 IM
 
 ## 文档
 
@@ -38,3 +38,4 @@ pnpm build         # 编译
 - 每个模块必须有对应测试
 - 函数单一职责，不超过 40 行
 - 所有 public API 必须有 JSDoc
+- 执行完一个 sprint 要更新 prd、tech、manual 等文档

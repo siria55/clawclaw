@@ -29,7 +29,7 @@ import { ConfigStorage } from "./config/storage.js";
 import { createSaveNewsTool } from "./tools/news.js";
 import { createMemoryTools } from "./tools/memory.js";
 import type { Message } from "./llm/types.js";
-import type { IMConfig, LLMConfig } from "./config/types.js";
+import type { IMConfig, LLMConfig, AgentMetaConfig } from "./config/types.js";
 
 // ── 存储 ──────────────────────────────────────────────────────────────────────
 
@@ -39,6 +39,9 @@ const newsStorage = new NewsStorage("./data/news.json");
 const memoryStorage = new MemoryStorage("./data/memory.json");
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/llm-config.json");
+const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent-config.json");
+
+const DEFAULT_SYSTEM = "你是一个高效的 AI 助手，可以搜索和保存新闻、管理长期记忆。";
 
 // ── LLM ───────────────────────────────────────────────────────────────────────
 
@@ -58,9 +61,9 @@ const llm = buildLLM();
 const agent = new Agent({
   name: "clawclaw",
 
-  // 动态 system prompt：每轮调用前注入当前日期
+  // 动态 system prompt：每轮调用前注入当前日期 + 用户自定义提示词（若有）
   system: () => [
-    "你是一个高效的 AI 助手，可以搜索和保存新闻、管理长期记忆。",
+    agentConfigStorage.read().systemPrompt ?? DEFAULT_SYSTEM,
     `当前日期：${new Date().toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })}`,
   ].join("\n"),
 
@@ -117,8 +120,10 @@ const webServer = new WebServer({
   agent,
   port: 3001,
   newsStorage,
+  memoryStorage,
   imConfigStorage,
   llmConfigStorage,
+  agentConfigStorage,
   onIMConfig: (config: IMConfig) => {
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
       ? new FeishuPlatform(config.feishu)
@@ -136,6 +141,12 @@ const webServer = new WebServer({
       ...(config.baseURL && { baseURL: config.baseURL }),
       ...(config.model && { model: config.model }),
     }));
+  },
+  onAgentConfig: (config) => {
+    agent.updateSystem(() => [
+      config.systemPrompt ?? DEFAULT_SYSTEM,
+      `当前日期：${new Date().toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })}`,
+    ].join("\n"));
   },
   getStatus: () => ({
     cronJobs: cron.jobIds.map((id) => ({

@@ -9,11 +9,13 @@ import { mkdirSync } from "node:fs";
 import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import { ConfigStorage } from "../config/storage.js";
+import { MemoryStorage } from "../memory/storage.js";
 import type { LLMConfig, IMConfig, AgentMetaConfig } from "../config/types.js";
 import { WebServer } from "./server.js";
 
 mkdirSync("./data", { recursive: true });
 
+const memoryStorage = new MemoryStorage("./data/memory.json");
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/llm-config.json");
 const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent-config.json");
@@ -44,6 +46,7 @@ const server = new WebServer({
   agent,
   agentConfig,
   port: 3000,
+  memoryStorage,
   imConfigStorage,
   llmConfigStorage,
   agentConfigStorage,

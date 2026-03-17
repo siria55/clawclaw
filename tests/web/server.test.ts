@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebServer } from "../../src/web/server.js";
 import { NewsStorage } from "../../src/news/storage.js";
+import { MemoryStorage } from "../../src/memory/storage.js";
 import { ConfigStorage } from "../../src/config/storage.js";
 import type { IMConfig, AgentMetaConfig } from "../../src/config/types.js";
 import type { Agent } from "../../src/core/agent.js";

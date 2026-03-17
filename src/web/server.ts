@@ -6,6 +6,7 @@ import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import type { AgentConfig } from "../core/types.js";
 import type { NewsStorage } from "../news/storage.js";
+import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig } from "../config/types.js";
 
@@ -47,6 +48,8 @@ export interface WebServerConfig {
   getStatus?: () => SystemStatus;
   /** News storage instance for GET /api/news. */
   newsStorage?: NewsStorage;
+  /** Memory storage instance for GET /api/memory. */
+  memoryStorage?: MemoryStorage;
   /** IM config storage for GET/POST /api/im-config. */
   imConfigStorage?: ConfigStorage<IMConfig>;
   /** Called after POST /api/im-config to hot-reload IM platform routes. */
@@ -80,10 +83,11 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     newsStorage: NewsStorage | undefined;
+    memoryStorage: MemoryStorage | undefined;
     imConfigStorage: ConfigStorage<IMConfig> | undefined;
     onIMConfig: ((config: IMConfig) => void) | undefined;
     llmConfigStorage: ConfigStorage<LLMConfig> | undefined;
@@ -100,6 +104,7 @@ export class WebServer {
       staticDir: join(__dirname, "dist"),
       getStatus: undefined,
       newsStorage: undefined,
+      memoryStorage: undefined,
       imConfigStorage: undefined,
       onIMConfig: undefined,
       llmConfigStorage: undefined,
@@ -148,6 +153,11 @@ export class WebServer {
 
     if (req.method === "GET" && path === "/api/news") {
       this.#handleNews(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/memory") {
+      this.#handleMemory(req, res);
       return;
     }
 
@@ -233,6 +243,24 @@ export class WebServer {
       : { articles: [], total: 0, page, pageSize };
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(result));
+  }
+
+  #handleMemory(req: IncomingMessage, res: ServerResponse): void {
+    const qs = new URL(req.url ?? "/", "http://localhost").searchParams;
+    const page = parseIntParam(qs.get("page"), 1);
+    const pageSize = parseIntParam(qs.get("pageSize"), 20);
+    const q = qs.get("q") ?? undefined;
+
+    const all = this.#config.memoryStorage ? this.#config.memoryStorage.all() : [];
+    const filtered = q
+      ? all.filter((e) => e.content.toLowerCase().includes(q.toLowerCase()) || e.tags.some((t) => t.toLowerCase().includes(q.toLowerCase())))
+      : all;
+    const sorted = [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const total = sorted.length;
+    const entries = sorted.slice((page - 1) * pageSize, page * pageSize);
+
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ entries, total, page, pageSize }));
   }
 
   #handleGetIMConfig(res: ServerResponse): void {
