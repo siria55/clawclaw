@@ -1,47 +1,25 @@
-import { useEffect, useRef } from "react";
 import type { ClawConfig } from "./types";
-import styles from "./SettingsPanel.module.css";
+import styles from "./SettingsView.module.css";
 
 interface Props {
-  open: boolean;
   config: ClawConfig;
   onChange: (config: ClawConfig) => void;
-  onClose: () => void;
 }
 
-export function SettingsPanel({ open, config, onChange, onClose }: Props): React.JSX.Element {
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
-
+/** Full-page settings view (replaces SettingsPanel floating sidebar). */
+export function SettingsView({ config, onChange }: Props): React.JSX.Element {
   const set = (key: keyof ClawConfig, value: string): void => {
     onChange({ ...config, [key]: value || undefined });
   };
 
-  if (!open) return <></>;
-
   return (
-    <>
-      <div className={styles.overlay} onClick={onClose} aria-hidden="true" />
-      <aside ref={panelRef} className={styles.panel} role="dialog" aria-label="设置">
-        <div className={styles.header}>
-          <h2 className={styles.title}>设置</h2>
-          <button className={styles.close} onClick={onClose} aria-label="关闭">✕</button>
-        </div>
-
+    <div className={styles.page}>
+      <div className={styles.inner}>
+        <h2 className={styles.title}>设置</h2>
         <p className={styles.hint}>
           配置将通过请求头发送给服务端，覆盖服务端默认的 LLM 配置。<br />
           保存在 localStorage，刷新后自动恢复。
         </p>
-
         <div className={styles.fields}>
           <Field
             label="API Key"
@@ -69,12 +47,11 @@ export function SettingsPanel({ open, config, onChange, onClose }: Props): React
             onChange={(v) => set("model", v)}
           />
         </div>
-
         <div className={styles.footer}>
           <button className={styles.clearBtn} onClick={() => onChange({})}>清除配置</button>
         </div>
-      </aside>
-    </>
+      </div>
+    </div>
   );
 }
 

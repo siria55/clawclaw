@@ -2,13 +2,15 @@ import { useEffect, useRef } from "react";
 import type { ChatEntry } from "./types";
 import { EventBadge } from "./EventBadge";
 import { ThinkingBubble } from "./ThinkingBubble";
+import { TypingBubble } from "./TypingBubble";
 import styles from "./ChatView.module.css";
 
 interface Props {
   entries: ChatEntry[];
+  streaming: boolean;
 }
 
-export function ChatView({ entries }: Props): React.JSX.Element {
+export function ChatView({ entries, streaming }: Props): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,6 +45,9 @@ export function ChatView({ entries }: Props): React.JSX.Element {
           </div>
         );
       })}
+      {streaming && !entries.some(
+        (e) => e.kind === "message" && e.message.role === "assistant" && e.message.streaming === true,
+      ) && <TypingBubble />}
       <div ref={bottomRef} />
     </div>
   );

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import styles from "./StatusPanel.module.css";
+import { useEffect, useState } from "react";
+import styles from "./StatusView.module.css";
 
 interface CronJobStatus {
   id: string;
@@ -19,19 +19,14 @@ interface SystemStatus {
   connections: ConnectionStatus[];
 }
 
-interface Props {
-  open: boolean;
-  onClose: () => void;
-}
-
 /** Fetch system status from /api/status */
 async function fetchStatus(): Promise<SystemStatus> {
   const res = await fetch("/api/status");
   return res.json() as Promise<SystemStatus>;
 }
 
-export function StatusPanel({ open, onClose }: Props): React.JSX.Element {
-  const panelRef = useRef<HTMLDivElement>(null);
+/** Full-page status view (replaces StatusPanel floating sidebar). */
+export function StatusView(): React.JSX.Element {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -42,34 +37,16 @@ export function StatusPanel({ open, onClose }: Props): React.JSX.Element {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => {
-    if (!open) return;
-    load();
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
-
-  if (!open) return <></>;
+  useEffect(() => { load(); }, []);
 
   return (
-    <>
-      <div className={styles.overlay} onClick={onClose} aria-hidden="true" />
-      <aside ref={panelRef} className={styles.panel} role="dialog" aria-label="系统状态">
+    <div className={styles.page}>
+      <div className={styles.inner}>
         <div className={styles.header}>
           <h2 className={styles.title}>系统状态</h2>
-          <div className={styles.headerActions}>
-            <button className={styles.refreshBtn} onClick={load} aria-label="刷新" disabled={loading}>
-              {loading ? "…" : "↺"}
-            </button>
-            <button className={styles.close} onClick={onClose} aria-label="关闭">✕</button>
-          </div>
+          <button className={styles.refreshBtn} onClick={load} aria-label="刷新" disabled={loading}>
+            {loading ? "…" : "↺"}
+          </button>
         </div>
 
         <section className={styles.section}>
@@ -104,7 +81,7 @@ export function StatusPanel({ open, onClose }: Props): React.JSX.Element {
           ))}
           {!status && !loading && <p className={styles.empty}>—</p>}
         </section>
-      </aside>
-    </>
+      </div>
+    </div>
   );
 }

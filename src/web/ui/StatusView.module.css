@@ -1,56 +1,31 @@
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.18);
-  z-index: 10;
-  animation: fadeIn 0.15s ease;
-}
-
-.panel {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 340px;
-  background: var(--bg);
-  border-left: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
-  z-index: 11;
+.page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 20px;
   display: flex;
   flex-direction: column;
-  animation: slideIn 0.2s ease;
-  overflow-y: auto;
+  align-items: center;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideIn {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+.inner {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
+  margin-bottom: 24px;
 }
 
 .title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--text-primary);
-}
-
-.headerActions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .refreshBtn {
@@ -59,8 +34,8 @@
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 15px;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -77,27 +52,16 @@
   cursor: default;
 }
 
-.close {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 14px;
-  padding: 4px;
-  border-radius: 4px;
-  transition: color 0.12s, background 0.12s;
-}
-
-.close:hover {
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-}
-
 .section {
-  padding: 16px 20px;
+  padding: 20px 0;
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.section:last-child {
+  border-bottom: none;
 }
 
 .sectionTitle {
@@ -119,7 +83,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -149,7 +113,7 @@
 
 /* Cron 任务 */
 .cronCard {
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
