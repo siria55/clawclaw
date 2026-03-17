@@ -424,4 +424,57 @@ describe("WebServer", () => {
     await server.stop();
     rmSync(agentDir, { recursive: true, force: true });
   });
+
+  it("GET /api/memory returns empty page when memoryStorage is not provided", async () => {
+    const agent = makeMockAgent();
+    const { server, url } = await startWebServer(agent);
+    const res = await fetch(`${url}/api/memory`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { entries: unknown[]; total: number };
+    expect(body.entries).toEqual([]);
+    expect(body.total).toBe(0);
+    await server.stop();
+  });
+
+  it("GET /api/memory returns all entries sorted newest first", async () => {
+    const agent = makeMockAgent();
+    const memDir = join(tmpdir(), `clawclaw-mem-${Date.now()}`);
+    mkdirSync(memDir, { recursive: true });
+    const memoryStorage = new MemoryStorage(join(memDir, "memory.json"));
+    memoryStorage.save({ content: "first memory", tags: ["a"] });
+    memoryStorage.save({ content: "second memory", tags: ["b"] });
+
+    const server = new WebServer({ agent, port: 0, staticDir, memoryStorage });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/memory`);
+    const body = await res.json() as { entries: { content: string }[]; total: number };
+    expect(body.total).toBe(2);
+    const contents = body.entries.map((e) => e.content);
+    expect(contents).toContain("first memory");
+    expect(contents).toContain("second memory");
+
+    await server.stop();
+    rmSync(memDir, { recursive: true, force: true });
+  });
+
+  it("GET /api/memory?q= filters by keyword", async () => {
+    const agent = makeMockAgent();
+    const memDir = join(tmpdir(), `clawclaw-mem-q-${Date.now()}`);
+    mkdirSync(memDir, { recursive: true });
+    const memoryStorage = new MemoryStorage(join(memDir, "memory.json"));
+    memoryStorage.save({ content: "TypeScript is great", tags: [] });
+    memoryStorage.save({ content: "Lunch was delicious", tags: [] });
+
+    const server = new WebServer({ agent, port: 0, staticDir, memoryStorage });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/memory?q=typescript`);
+    const body = await res.json() as { entries: { content: string }[]; total: number };
+    expect(body.total).toBe(1);
+    expect(body.entries[0].content).toBe("TypeScript is great");
+
+    await server.stop();
+    rmSync(memDir, { recursive: true, force: true });
+  });
 });

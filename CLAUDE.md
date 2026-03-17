@@ -38,4 +38,4 @@ pnpm build         # 编译
 - 每个模块必须有对应测试
 - 函数单一职责，不超过 40 行
 - 所有 public API 必须有 JSDoc
-- 执行完一个 sprint 要更新 prd、tech、manual 等文档
+- 执行完一个 sprint 要更新 prd、tech、manual 等文档。sprint 文档本身要 check 勾选

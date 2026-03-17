@@ -102,11 +102,14 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 | `POST /api/chat` | SSE 流式对话 |
 | `GET /api/status` | 系统状态（cron 任务、IM 连接） |
 | `GET /api/news` | 新闻库查询（关键词、标签、分页） |
+| `GET /api/memory` | 记忆库查询（关键词、分页） |
 | `GET/POST /api/im-config` | 飞书等 IM 凭证（读写 `data/im-config.json`） |
 | `GET/POST /api/config/llm` | LLM 配置（读写 `data/llm-config.json`） |
 | `GET/POST /api/config/agent` | Agent 配置（读写 `data/agent-config.json`） |
 
 所有 POST 配置接口均支持热更新，保存后立即生效，无需重启。
+
+Web UI 五个标签页各对应独立 URL（hash 路由）：`#chat` / `#news` / `#memory` / `#status` / `#settings`，支持直接访问和浏览器前进/后退。
 
 ---
 

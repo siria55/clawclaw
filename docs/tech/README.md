@@ -142,6 +142,7 @@ defineTool({
 | `/api/chat` | POST | SSE 流式对话，body `{message}` |
 | `/api/status` | GET | 系统状态 JSON |
 | `/api/news` | GET | 新闻库查询，query: `q / tag / page / pageSize` |
+| `/api/memory` | GET | 记忆库查询，query: `q / page / pageSize` |
 | `/api/im-config` | GET/POST | 飞书等 IM 凭证（读写 `data/im-config.json`） |
 | `/api/config/llm` | GET/POST | LLM 配置（读写 `data/llm-config.json`） |
 | `/api/config/agent` | GET/POST | Agent 配置（读写 `data/agent-config.json`） |
@@ -171,14 +172,17 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 - API server（`pnpm dev:api`）：`http://localhost:3000`
 - WebServer（生产 app.ts）：`http://localhost:3001`
 
-**四标签页导航：**
+**五标签页导航（hash 路由）：**
 
-| Tab | 组件 | 说明 |
-|-----|------|------|
-| 对话 | `ChatView` | 消息气泡 + 工具事件 + 思考气泡 + 等待动画 |
-| 新闻库 | `NewsView` | 关键词搜索、标签过滤、分页浏览 |
-| 状态 | `StatusView` | IM 连接状态、Cron 任务列表 |
-| 设置 | `SettingsView` | Agent 配置 / LLM 配置 / 飞书 IM 配置 |
+| Tab | URL hash | 组件 | 说明 |
+|-----|----------|------|------|
+| 对话 | `#chat` | `ChatView` | 消息气泡 + 工具事件 + 思考气泡 + 等待动画 |
+| 新闻库 | `#news` | `NewsView` | 关键词搜索、标签过滤、分页浏览 |
+| 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起 |
+| 状态 | `#status` | `StatusView` | IM 连接状态、Cron 任务列表 |
+| 设置 | `#settings` | `SettingsView` | Agent 配置 / LLM 配置 / 飞书 IM 配置 |
+
+URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读 `window.location.hash`，切换 tab 更新 hash，监听 `hashchange` 支持浏览器前进/后退。无 hash 时默认显示对话页。
 
 **关键 hooks：**
 - `useChatStream` — SSE 解析、事件状态管理、thinking 块累积
@@ -220,4 +224,4 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 - **React hook 测试**：`@vitest-environment jsdom` + `@testing-library/react renderHook`
 - **覆盖率阈值**：全局 80%
 
-当前测试总数：143 个，全部通过。
+当前测试总数：146 个，全部通过。
