@@ -74,13 +74,16 @@ const agent = new Agent({
 
 // ── ClawServer（IM 接入，24/7 常驻）─────────────────────────────────────────
 
-const feishu = new FeishuPlatform(); // 读取 FEISHU_* 环境变量
+// 仅在飞书环境变量齐全时才创建平台实例，否则跳过注册
+const feishu = process.env["FEISHU_APP_ID"] && process.env["FEISHU_APP_SECRET"] && process.env["FEISHU_VERIFICATION_TOKEN"]
+  ? new FeishuPlatform()
+  : undefined;
 
 const clawServer = new ClawServer({
   port: Number(process.env["PORT"] ?? 3000),
   routes: {
-    "/feishu": { platform: feishu, agent },
-    // "/wecom": { platform: wecom, agent },
+    ...(feishu ? { "/feishu": { platform: feishu, agent } } : {}),
+    // ...(wecom ? { "/wecom": { platform: wecom, agent } } : {}),
   },
 });
 
@@ -98,7 +101,7 @@ const webServer = new WebServer({
       timezone: "Asia/Shanghai",
     })),
     connections: [
-      { platform: "feishu", label: "飞书 Bot", connected: !!process.env["FEISHU_APP_ID"] },
+      { platform: "feishu", label: "飞书 Bot", connected: !!feishu },
     ],
   }),
 });
@@ -107,14 +110,16 @@ const webServer = new WebServer({
 
 const cron = new CronScheduler({ timezone: "Asia/Shanghai" });
 
-// 每天早上 9:00 发送日报
-cron.add({
-  id: "daily-digest",
-  schedule: "0 9 * * *",
-  message: "请搜索今天的科技新闻头条，保存到新闻库，并生成一份简短的日报摘要。",
-  agent,
-  delivery: { platform: feishu, chatId: process.env["FEISHU_CHAT_ID"] ?? "" },
-});
+// 每天早上 9:00 发送日报（仅在飞书配置后启用）
+if (feishu) {
+  cron.add({
+    id: "daily-digest",
+    schedule: "0 9 * * *",
+    message: "请搜索今天的科技新闻头条，保存到新闻库，并生成一份简短的日报摘要。",
+    agent,
+    delivery: { platform: feishu, chatId: process.env["FEISHU_CHAT_ID"] ?? "" },
+  });
+}
 
 // ── 启动 ──────────────────────────────────────────────────────────────────────
 
@@ -124,4 +129,5 @@ cron.start();
 
 console.log(`ClawServer  → http://localhost:${clawServer.port}  (IM Webhook)`);
 console.log(`WebServer   → http://localhost:${webServer.port}   (调试界面)`);
+console.log(`飞书          ${feishu ? "✓ 已连接" : "✗ 未配置（设置 FEISHU_APP_ID / APP_SECRET / VERIFICATION_TOKEN）"}`);
 console.log(`CronScheduler 已启动，${cron.jobIds.length} 个任务`);
