@@ -119,6 +119,7 @@ if (feishu) clawServer.setRoute("/feishu", { platform: feishu, agent });
 const webServer = new WebServer({
   agent,
   port: 3001,
+  routes: feishu ? { "/feishu": { platform: feishu, agent } } : {},
   newsStorage,
   memoryStorage,
   imConfigStorage,
@@ -131,8 +132,10 @@ const webServer = new WebServer({
     feishu = newFeishu;
     if (newFeishu) {
       clawServer.setRoute("/feishu", { platform: newFeishu, agent });
+      webServer.setRoute("/feishu", { platform: newFeishu, agent });
     } else {
       clawServer.removeRoute("/feishu");
+      webServer.removeRoute("/feishu");
     }
   },
   onLLMConfig: (config) => {

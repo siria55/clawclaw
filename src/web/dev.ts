@@ -8,6 +8,7 @@
 import { mkdirSync } from "node:fs";
 import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
+import { FeishuPlatform } from "../platform/feishu.js";
 import { ConfigStorage } from "../config/storage.js";
 import { MemoryStorage } from "../memory/storage.js";
 import { NewsStorage } from "../news/storage.js";
@@ -59,15 +60,37 @@ const agentConfig = {
 
 const agent = new Agent(agentConfig);
 
+function buildFeishu(): FeishuPlatform | undefined {
+  const saved = imConfigStorage.read().feishu;
+  if (saved?.appId && saved.appSecret && saved.verificationToken) {
+    return new FeishuPlatform(saved);
+  }
+  return undefined;
+}
+
+let feishu = buildFeishu();
+
 const server = new WebServer({
   agent,
   agentConfig,
   port: 3000,
+  routes: feishu ? { "/feishu": { platform: feishu, agent } } : {},
   newsStorage,
   memoryStorage,
   imConfigStorage,
   llmConfigStorage,
   agentConfigStorage,
+  onIMConfig: (config) => {
+    const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
+      ? new FeishuPlatform(config.feishu)
+      : undefined;
+    feishu = newFeishu;
+    if (newFeishu) {
+      server.setRoute("/feishu", { platform: newFeishu, agent });
+    } else {
+      server.removeRoute("/feishu");
+    }
+  },
   onLLMConfig: (config) => {
     agent.updateLLM(new AnthropicProvider({
       ...(config.apiKey && { apiKey: config.apiKey }),
@@ -80,3 +103,6 @@ const server = new WebServer({
   },
 });
 await server.start();
+console.log(`WebUI + IM Webhook → http://localhost:3000`);
+console.log(`飞书  ${feishu ? "✓ 已连接（/feishu）" : "✗ 未配置"}`);
+

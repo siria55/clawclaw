@@ -4,7 +4,10 @@ import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
+import { FeishuChallenge } from "../platform/feishu.js";
+import { WecomEcho } from "../platform/wecom.js";
 import type { AgentConfig } from "../core/types.js";
+import type { IMPlatform } from "../platform/types.js";
 import type { NewsStorage } from "../news/storage.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
@@ -41,6 +44,12 @@ export interface WebServerConfig {
    * from the X-Claw-Config request header.
    */
   agentConfig?: AgentConfig;
+  /**
+   * IM webhook routes — same format as ClawServer.
+   * e.g. { "/feishu": { platform: feishuPlatform, agent } }
+   * Requests to these paths are handled as IM webhooks (verify → parse → agent.run).
+   */
+  routes?: Record<string, { platform: IMPlatform; agent: Agent }>;
   port?: number;
   /** Override static file directory (default: `<__dirname>/dist`). Used in tests. */
   staticDir?: string;
@@ -83,7 +92,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     newsStorage: NewsStorage | undefined;
@@ -95,6 +104,7 @@ export class WebServer {
     agentConfigStorage: ConfigStorage<AgentMetaConfig> | undefined;
     onAgentConfig: ((config: AgentMetaConfig) => void) | undefined;
   };
+  readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   readonly #server: ReturnType<typeof createServer>;
 
   constructor(config: WebServerConfig) {
@@ -113,9 +123,21 @@ export class WebServer {
       onAgentConfig: undefined,
       ...config,
     };
+    this.#routes = { ...config.routes };
     this.#server = createServer((req, res) => {
       void this.#handleRequest(req, res);
     });
+  }
+
+  /** Dynamically add or replace an IM webhook route at runtime. */
+  setRoute(path: string, route: { platform: IMPlatform; agent: Agent }): void {
+    this.#routes[path] = route;
+  }
+
+  /** Remove an IM webhook route at runtime. */
+  removeRoute(path: string): void {
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete this.#routes[path];
   }
 
   async start(): Promise<void> {
@@ -188,6 +210,13 @@ export class WebServer {
 
     if (req.method === "POST" && path === "/api/config/agent") {
       await this.#handlePostAgentConfig(req, res);
+      return;
+    }
+
+    // IM webhook routes (e.g. /feishu)
+    const imRoute = this.#routes[path];
+    if (imRoute) {
+      await this.#handleIMRoute(req, res, path, imRoute);
       return;
     }
 
@@ -357,6 +386,67 @@ export class WebServer {
     res.end(JSON.stringify({ ok: true }));
   }
 
+  async #handleIMRoute(
+    req: IncomingMessage,
+    res: ServerResponse,
+    path: string,
+    route: { platform: IMPlatform; agent: Agent },
+  ): Promise<void> {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    const body = req.method === "POST" ? await readBody(req) : "";
+    const headers = headersToRecord(req.headers);
+    const query = Object.fromEntries(url.searchParams.entries());
+    const method = req.method === "POST" ? "POST" : "GET";
+
+    try {
+      await route.platform.verify({ method, headers, query, body });
+    } catch (err) {
+      if (err instanceof FeishuChallenge) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ challenge: err.challenge }));
+        return;
+      }
+      if (err instanceof WecomEcho) {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end(err.echostr);
+        return;
+      }
+      res.writeHead(401).end("Unauthorized");
+      return;
+    }
+
+    let message;
+    try {
+      message = await route.platform.parse(body);
+    } catch (err) {
+      if (err instanceof FeishuChallenge) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ challenge: err.challenge }));
+        return;
+      }
+      throw err;
+    }
+    if (!message) {
+      res.writeHead(200).end("ok");
+      return;
+    }
+
+    res.writeHead(200).end("ok");
+
+    route.agent
+      .run(message.text)
+      .then(async (result) => {
+        const lastMsg = result.messages.findLast(
+          (m: import("../llm/types.js").Message) => m.role === "assistant",
+        );
+        const reply = extractText(lastMsg?.content);
+        if (reply) await route.platform.send(message.chatId, reply);
+      })
+      .catch((err: unknown) => {
+        console.error(`[${path}] Agent error:`, err);
+      });
+  }
+
   async #handleChat(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = await readBody(req);
     const { message } = JSON.parse(body) as { message: string };
@@ -451,6 +541,15 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
+}
+
+function headersToRecord(headers: IncomingMessage["headers"]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    if (typeof v === "string") result[k] = v;
+    else if (Array.isArray(v)) result[k] = v.join(", ");
+  }
+  return result;
 }
 
 function parseIntParam(value: string | null, fallback: number): number {
