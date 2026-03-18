@@ -151,7 +151,7 @@ const webServer = new WebServer({
   agent,
   port: 3001,
   routes: feishu ? { "/feishu": { platform: feishu, agent } } : {},
-  newsStorage,
+  skillDataRoot: "./data/skills",
   memoryStorage,
   imConfigStorage,
   llmConfigStorage,

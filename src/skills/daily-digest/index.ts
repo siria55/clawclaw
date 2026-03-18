@@ -1,12 +1,13 @@
 import { z } from "zod";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import type { Page, Browser } from "playwright";
 import { chromium } from "playwright";
 import { writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { Agent } from "../../core/agent.js";
 import { defineTool } from "../../tools/types.js";
+import { loadSkillDef } from "../loader.js";
 import type { Skill, SkillContext } from "../types.js";
-import type { NewsArticle } from "../../news/types.js";
 import type { FeishuPlatform } from "../../platform/feishu.js";
 
 interface RawArticle {
@@ -16,15 +17,14 @@ interface RawArticle {
   source: string;
 }
 
-const DEFAULT_QUERIES = ["AI科技", "创业投资", "互联网动态"];
-const MAX_ARTICLES = 12;
-
 const RawArticleSchema = z.object({
   title: z.string(),
   url: z.string(),
   summary: z.string(),
   source: z.string(),
 });
+
+const SKILL_DIR = dirname(fileURLToPath(import.meta.url));
 
 /** Browser tools for the news sub-agent to operate a Playwright page. */
 function createBrowserTools(page: Page): ReturnType<typeof defineTool>[] {
@@ -61,30 +61,30 @@ function createBrowserTools(page: Page): ReturnType<typeof defineTool>[] {
   ];
 }
 
-/**
- * Run a news sub-agent that operates the browser to search and extract articles.
- * Returns parsed articles or empty array on failure.
- */
-async function searchNewsWithAgent(browser: Browser, ctx: SkillContext, queries: string[]): Promise<RawArticle[]> {
+/** Build the agent prompt from SKILL.md instructions, substituting variables. */
+function buildPrompt(instructions: string, queries: string[], maxArticles: number): string {
+  const searchUrls = queries
+    .map((q) => `  - https://news.baidu.com/ns?word=${encodeURIComponent(q)}&tn=news&cl=2&rn=20&ct=1`)
+    .join("\n");
+  return instructions
+    .replace("$SEARCH_URLS", searchUrls)
+    .replace("$MAX_ARTICLES", String(maxArticles));
+}
+
+/** Run a news sub-agent that operates the browser to search and extract articles. */
+async function searchNewsWithAgent(browser: Browser, ctx: SkillContext, prompt: string): Promise<RawArticle[]> {
   const page = await browser.newPage();
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   try {
     const subAgent = new Agent({
       name: "news-browser",
-      system: "你是新闻搜索助手，通过浏览器工具抓取新闻，最终返回 JSON 格式的文章列表。只返回 JSON，不要其他文字。",
+      system: "你是新闻搜索助手，通过浏览器工具搜索并提取新闻，最终只返回 JSON 数组，不要其他文字。",
       llm: ctx.agent.llm,
       compressor: undefined,
       tools: createBrowserTools(page),
     });
 
-    const searchUrls = queries
-      .map((q) => `https://news.baidu.com/ns?word=${encodeURIComponent(q)}&tn=news&cl=2&rn=20&ct=1`)
-      .join("\n");
-
-    const prompt = `请依次搜索以下新闻关键词（每行一个搜索 URL）：\n${searchUrls}\n\n步骤：\n1. 用 browser_navigate 访问每个 URL\n2. 用 browser_get_links 获取页面链接，从中识别新闻文章\n3. 汇总后返回 JSON 数组（最多 ${MAX_ARTICLES} 篇）：\n[{"title":"文章标题","url":"文章完整URL","summary":"摘要（若无则空字符串）","source":"来源媒体"}]\n\n只返回 JSON 数组。`;
-
-    log(`🔍 开始搜索：${queries.join("、")}`);
-
+    log(`🔍 启动新闻搜索…`);
     let finalText = "";
     for await (const event of subAgent.stream(prompt, { maxTurns: 12 })) {
       if (event.type === "tool_call") {
@@ -119,9 +119,7 @@ async function searchNewsWithAgent(browser: Browser, ctx: SkillContext, queries:
   }
 }
 
-/**
- * Render articles as a styled HTML news digest page.
- */
+/** Render articles as a styled HTML news digest page. */
 function renderHtml(articles: RawArticle[], date: string): string {
   const rows = articles
     .map(
@@ -136,7 +134,6 @@ function renderHtml(articles: RawArticle[], date: string): string {
     </div>`,
     )
     .join("\n");
-
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -169,9 +166,7 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/**
- * Render articles as a Markdown digest.
- */
+/** Render articles as a Markdown digest. */
 function renderMarkdown(articles: RawArticle[], date: string): string {
   const rows = articles
     .map((a, i) => `${i + 1}. **[${a.title}](${a.url})**${a.summary ? `\n   ${a.summary}` : ""}\n   _${a.source}_`)
@@ -179,9 +174,7 @@ function renderMarkdown(articles: RawArticle[], date: string): string {
   return `# 每日新闻日报\n\n**${date}**\n\n${rows}\n`;
 }
 
-/**
- * Take a screenshot of HTML content. Returns a PNG buffer.
- */
+/** Take a screenshot of HTML content. Returns a PNG buffer. */
 async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
   const page = await browser.newPage();
   try {
@@ -197,31 +190,33 @@ async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
 }
 
 /**
- * Daily digest skill — Agent operates browser to search tech news, renders a styled digest, screenshots it, and sends to Feishu.
+ * Daily digest skill — loads instructions from SKILL.md, runs a news sub-agent with
+ * browser tools, renders a styled digest, screenshots it, and optionally sends to Feishu.
+ *
+ * Output files per run: YYYY-MM-DD.{html,md,png,json}
  */
 export class DailyDigestSkill implements Skill {
-  readonly id = "daily-digest";
-  readonly description = "Agent 操作浏览器搜索科技新闻，生成 HTML 日报截图并发送到飞书";
+  readonly id: string;
+  readonly description: string;
   readonly #queries: string[];
+  readonly #maxArticles: number;
+  readonly #instructions: string;
 
-  constructor(options: { queries?: string[] } = {}) {
-    this.#queries = options.queries ?? DEFAULT_QUERIES;
+  constructor() {
+    const def = loadSkillDef(SKILL_DIR);
+    this.id = def.id;
+    this.description = def.description;
+    this.#queries = def.queries;
+    this.#maxArticles = def.maxArticles;
+    this.#instructions = def.instructions;
   }
 
   async run(ctx: SkillContext): Promise<void> {
     const browser = await chromium.launch({ headless: true });
     try {
-      const articles = await searchNewsWithAgent(browser, ctx, this.#queries);
-      ctx.log?.(`✅ 获取 ${articles.length} 篇文章`);
-
-      if (ctx.newsStorage) {
-        for (const a of articles) {
-          ctx.newsStorage.save({
-            title: a.title, url: a.url, summary: a.summary, source: a.source,
-            tags: ["tech", "daily-digest"],
-          } satisfies Omit<NewsArticle, "id" | "savedAt">);
-        }
-      }
+      const prompt = buildPrompt(this.#instructions, this.#queries, this.#maxArticles);
+      const articles = await searchNewsWithAgent(browser, ctx, prompt);
+      ctx.log?.(`📊 获取 ${articles.length} 篇文章`);
 
       const dateKey = new Date().toLocaleDateString("sv-SE");
       const dateLabel = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
@@ -231,11 +226,14 @@ export class DailyDigestSkill implements Skill {
       const dataDirPath = ctx.dataDir ?? "";
       if (dataDirPath) {
         writeFileSync(join(dataDirPath, `${dateKey}.html`), html, "utf8");
-        writeFileSync(join(dataDirPath, `${dateKey}.png`), imageBuffer);
         writeFileSync(join(dataDirPath, `${dateKey}.md`), renderMarkdown(articles, dateLabel), "utf8");
+        writeFileSync(join(dataDirPath, `${dateKey}.png`), imageBuffer);
+        writeFileSync(join(dataDirPath, `${dateKey}.json`), JSON.stringify(articles, null, 2), "utf8");
+        ctx.log?.(`💾 文件已保存到 ${dataDirPath}`);
       }
 
       if (ctx.delivery) {
+        ctx.log?.(`📨 发送图片到飞书…`);
         const platform = ctx.delivery.platform as unknown as FeishuPlatform;
         await platform.sendImageBuffer(ctx.delivery.chatId, imageBuffer);
       }

@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "../core/agent.js";
@@ -11,7 +11,6 @@ import type { IMPlatform } from "../platform/types.js";
 import type { IMEventStorage } from "../im/storage.js";
 import type { ConversationStorage } from "../im/conversations.js";
 import type { CronJobConfig } from "../cron/types.js";
-import type { NewsStorage } from "../news/storage.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig } from "../config/types.js";
@@ -62,7 +61,7 @@ export interface WebServerConfig {
   /** Return current system status for GET /api/status. */
   getStatus?: () => SystemStatus;
   /** News storage instance for GET /api/news. */
-  newsStorage?: NewsStorage;
+  skillDataRoot?: string;
   /** Memory storage instance for GET /api/memory. */
   memoryStorage?: MemoryStorage;
   /** IM config storage for GET/POST /api/im-config. */
@@ -112,10 +111,10 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "skillRegistry" | "onRunSkill">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "skillDataRoot" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "skillRegistry" | "onRunSkill">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
-    newsStorage: NewsStorage | undefined;
+    skillDataRoot: string | undefined;
     memoryStorage: MemoryStorage | undefined;
     imConfigStorage: ConfigStorage<IMConfig> | undefined;
     onIMConfig: ((config: IMConfig) => void) | undefined;
@@ -140,7 +139,7 @@ export class WebServer {
       agentConfig: undefined,
       staticDir: join(__dirname, "dist"),
       getStatus: undefined,
-      newsStorage: undefined,
+      skillDataRoot: undefined,
       memoryStorage: undefined,
       imConfigStorage: undefined,
       onIMConfig: undefined,
@@ -332,10 +331,7 @@ export class WebServer {
     const page = parseIntParam(qs.get("page"), 1);
     const pageSize = parseIntParam(qs.get("pageSize"), 20);
     const q = qs.get("q") ?? undefined;
-    const tag = qs.get("tag") ?? undefined;
-    const result = this.#config.newsStorage
-      ? this.#config.newsStorage.query({ ...(q !== undefined && { q }), ...(tag !== undefined && { tag }), page, pageSize })
-      : { articles: [], total: 0, page, pageSize };
+    const result = loadSkillArticles(this.#config.skillDataRoot, q, page, pageSize);
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(result));
   }
@@ -732,6 +728,43 @@ function parseIntParam(value: string | null, fallback: number): number {
   const n = parseInt(value, 10);
   return Number.isNaN(n) ? fallback : n;
 }
+
+interface SkillArticle {
+  id: string; title: string; url: string; summary: string;
+  source: string; savedAt: string; tags: string[];
+}
+
+/** Read skill output JSON files and return paginated articles matching optional query. */
+function loadSkillArticles(
+  dataRoot: string | undefined, q: string | undefined, page: number, pageSize: number,
+): { articles: SkillArticle[]; total: number; page: number; pageSize: number } {
+  const empty = { articles: [], total: 0, page, pageSize };
+  if (!dataRoot) return empty;
+  let skillDirs: string[];
+  try { skillDirs = readdirSync(dataRoot); } catch { return empty; }
+  const all: SkillArticle[] = [];
+  for (const skillId of skillDirs) {
+    let files: string[];
+    try { files = readdirSync(join(dataRoot, skillId)); } catch { continue; }
+    for (const f of files) {
+      if (!f.endsWith(".json")) continue;
+      const dateKey = f.slice(0, -5);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
+      const savedAt = `${dateKey}T00:00:00.000Z`;
+      try {
+        const raw = JSON.parse(readFileSync(join(dataRoot, skillId, f), "utf8")) as Array<{ title?: string; url?: string; summary?: string; source?: string }>;
+        raw.forEach((a, i) => {
+          if (!a.title || !a.url) return;
+          all.push({ id: `${skillId}-${dateKey}-${i}`, title: a.title, url: a.url, summary: a.summary ?? "", source: a.source ?? skillId, savedAt, tags: [skillId] });
+        });
+      } catch { /* skip corrupt files */ }
+    }
+  }
+  all.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  const filtered = q ? all.filter((a) => a.title.toLowerCase().includes(q.toLowerCase()) || a.summary.toLowerCase().includes(q.toLowerCase())) : all;
+  return { articles: filtered.slice((page - 1) * pageSize, page * pageSize), total: filtered.length, page, pageSize };
+}
+
 
 function extractText(content: unknown): string {
   if (typeof content === "string") return content;

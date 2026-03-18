@@ -88,7 +88,7 @@ function buildFeishu(): FeishuPlatform | undefined {
 let feishu = buildFeishu();
 
 const skillRegistry = new SkillRegistry();
-skillRegistry.register(new DailyDigestSkill({ queries: ["AI科技", "创业投资", "互联网动态"] }));
+skillRegistry.register(new DailyDigestSkill());
 
 const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry, skillDataRoot: "./data/skills" });
 
@@ -103,7 +103,7 @@ const server = new WebServer({
   agentConfig,
   port: 3000,
   routes: feishu ? { "/feishu": { platform: feishu, agent } } : {},
-  newsStorage,
+  skillDataRoot: "./data/skills",
   memoryStorage,
   imConfigStorage,
   imEventStorage,
@@ -155,7 +155,6 @@ const server = new WebServer({
       agent,
       ...(delivery !== undefined && { delivery }),
       imEventStorage,
-      newsStorage,
       dataDir,
       log,
     });

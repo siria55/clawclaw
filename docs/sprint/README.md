@@ -105,6 +105,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 29 — WebUI 手动触发 Skill
 `POST /api/skills/:id/run`；SkillContext.delivery 改为可选；Skills 列表加「运行」按钮 + 状态反馈。
 
+### Sprint 33 — SKILL.md 标准 + 新闻库合并
+`src/skills/loader.ts` 解析 SKILL.md frontmatter；`daily-digest/SKILL.md` 抽离元数据+Agent指令；skill 保存 `articles.json`，移除 newsStorage 依赖；`GET /api/news` 改为扫描 `data/skills/*/YYYY-MM-DD.json`；`WebServerConfig.skillDataRoot` 替代 newsStorage。
+
 ### Sprint 32 — Skill 执行日志 WebUI 实时展示
 `SkillContext.log?` 回调；`POST /api/skills/:id/run` 改为 SSE 流式响应；`DailyDigestSkill` 用 `agent.stream()` 捕获 tool_call 事件透传 log；SkillsView 实时渲染深色 log 面板，自动滚动。
 
