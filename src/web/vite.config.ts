@@ -15,6 +15,16 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:3000",
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on("error", (err, _req, res) => {
+            if ((err as NodeJS.ErrnoException).code === "ECONNREFUSED") {
+              if ("writeHead" in res) {
+                res.writeHead(503, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ error: "Backend not running" }));
+              }
+            }
+          });
+        },
       },
     },
   },
