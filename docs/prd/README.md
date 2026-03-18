@@ -185,8 +185,6 @@ src/
 │   ├── types.ts        Tool 接口、ToolResult、defineTool()
 │   ├── memory.ts       createMemoryTools()
 │   └── read-file.ts    createReadFileTool()（路径白名单）
-├── news/
-│   └── types.ts        NewsArticle / NewsPage / NewsQuery 类型（供 server 和前端使用）
 ├── memory/
 │   └── storage.ts      MemoryStorage，JSON 文件持久化
 ├── cron/

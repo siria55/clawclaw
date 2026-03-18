@@ -108,6 +108,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 33 — SKILL.md 标准 + 新闻库合并
 `src/skills/loader.ts` 解析 SKILL.md frontmatter；`daily-digest/SKILL.md` 抽离元数据+Agent指令；skill 保存 `articles.json`，移除 newsStorage 依赖；`GET /api/news` 改为扫描 `data/skills/*/YYYY-MM-DD.json`；`WebServerConfig.skillDataRoot` 替代 newsStorage。
 
+### Sprint 37 — 清理 src/news/ 死代码目录
+Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
+
 ### Sprint 36 — 移除 NewsStorage 和 save_news 工具
 `NewsStorage` / `createSaveNewsTool` / `save_news` 是遗留死代码（Sprint 33 后 `/api/news` 已改读 skill 输出）。删除 `src/news/storage.ts`、`src/tools/news.ts`、相关测试，更新 `news/index.ts` 仅保留类型，同步 prd/tech/manual 文档。137 tests 通过。
 

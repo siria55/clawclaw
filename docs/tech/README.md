@@ -17,7 +17,6 @@ src/index.ts（公共入口）
 │   ├── tools/memory.ts    ← createMemoryTools()
 │   └── tools/read-file.ts ← createReadFileTool()
 │
-├── news/types.ts          ← NewsArticle / NewsPage / NewsQuery 类型
 ├── memory/storage.ts      ← MemoryStorage（JSON 持久化）
 │
 ├── platform/feishu.ts     ← 飞书适配器
