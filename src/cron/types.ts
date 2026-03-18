@@ -6,8 +6,10 @@ export interface CronJob {
   id: string;
   /** Cron expression, e.g. "0 9 * * 1-5" (weekdays at 9am) */
   schedule: string;
-  /** Message to send to the agent when the job fires */
+  /** Message to send to the agent (or directly to chat when direct=true) */
   message: string;
+  /** When true, send message directly without running through agent */
+  direct: boolean;
   /** Agent to run */
   agent: Agent;
   /** Where to deliver the agent's reply */
@@ -25,9 +27,9 @@ export interface CronJobConfig {
   id: string;
   schedule: string;
   message: string;
-  /** Target chat ID for delivery */
+  /** When true, send message directly without running through agent */
+  direct?: boolean;
   chatId: string;
-  /** Platform name, e.g. "feishu" */
   platform: string;
   enabled: boolean;
 }

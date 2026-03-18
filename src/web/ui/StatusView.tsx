@@ -38,9 +38,10 @@ interface CronJobConfig {
   chatId: string;
   platform: string;
   enabled: boolean;
+  direct: boolean;
 }
 
-const EMPTY_FORM: CronJobConfig = { id: "", schedule: "", message: "", chatId: "", platform: "feishu", enabled: true };
+const EMPTY_FORM: CronJobConfig = { id: "", schedule: "", message: "", chatId: "", platform: "feishu", enabled: true, direct: false };
 
 async function fetchStatus(): Promise<SystemStatus> {
   const res = await fetch("/api/status");
@@ -207,6 +208,10 @@ export function StatusView(): React.JSX.Element {
                 <textarea className={styles.formTextarea} value={form.message} rows={3} onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))} />
               </div>
               <div className={styles.formRow}>
+                <label className={styles.formLabel}>直发</label>
+                <input type="checkbox" checked={form.direct} onChange={(e) => setForm((f) => ({ ...f, direct: e.target.checked }))} />
+              </div>
+              <div className={styles.formRow}>
                 <label className={styles.formLabel}>启用</label>
                 <input type="checkbox" checked={form.enabled} onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))} />
               </div>
@@ -226,8 +231,8 @@ export function StatusView(): React.JSX.Element {
             <div key={e.id} className={styles.imCard}>
               <div className={styles.imMeta}>
                 <span className={styles.imPlatform}>{e.platform}</span>
-                <span className={styles.imId} title={e.userId}>用户 {e.userId.slice(0, 12)}</span>
-                <span className={styles.imId} title={e.chatId}>会话 {e.chatId.slice(0, 12)}</span>
+                {e.userId && <span className={styles.imId} title={`点击复制: ${e.userId}`} onClick={() => void navigator.clipboard.writeText(e.userId)}>用户 {e.userId.slice(0, 16)}</span>}
+                {e.chatId && <span className={styles.imId} title={`点击复制: ${e.chatId}`} onClick={() => void navigator.clipboard.writeText(e.chatId)}>会话 {e.chatId.slice(0, 16)}</span>}
                 <span className={styles.imTime}>{formatTime(e.timestamp)}</span>
               </div>
               <p className={styles.imText}>{e.text}</p>

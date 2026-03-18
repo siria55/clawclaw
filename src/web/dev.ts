@@ -129,7 +129,7 @@ const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage });
 function registerCronJob(cfg: CronJobConfig): void {
   const platform = cfg.platform === "feishu" ? feishu : undefined;
   if (!platform || !cfg.chatId) return;
-  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, agent, delivery: { platform, chatId: cfg.chatId } });
+  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, direct: cfg.direct ?? false, agent, delivery: { platform, chatId: cfg.chatId } });
 }
 
 for (const cfg of cronStorage.read()) {

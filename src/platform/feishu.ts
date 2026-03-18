@@ -129,7 +129,8 @@ export class FeishuPlatform implements IMPlatform {
       },
     );
     if (!response.ok) {
-      throw new Error(`Feishu send failed: ${response.status}`);
+      const body = await response.text().catch(() => "");
+      throw new Error(`Feishu send failed: ${response.status} ${body}`);
     }
   }
 

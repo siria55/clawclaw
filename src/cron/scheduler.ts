@@ -101,23 +101,28 @@ export class CronScheduler {
   }
 
   async #fire(job: CronJob): Promise<void> {
+    const eventId = this.#imEventStorage?.append({
+      platform: job.delivery.platform.name,
+      userId: "",
+      chatId: job.delivery.chatId,
+      text: `[cron:${job.id}] ${job.message}`,
+      replyText: undefined,
+    });
     try {
-      const eventId = this.#imEventStorage?.append({
-        platform: job.delivery.platform.name,
-        userId: "",
-        chatId: job.delivery.chatId,
-        text: `[cron:${job.id}] ${job.message}`,
-        replyText: undefined,
-      });
-      const result = await job.agent.run(job.message);
-      const lastMsg = result.messages.findLast((m) => m.role === "assistant");
-      const reply = extractText(lastMsg?.content);
-      if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, reply);
-      if (reply) {
-        await job.delivery.platform.send(job.delivery.chatId, reply);
+      let reply: string;
+      if (job.direct) {
+        reply = job.message;
+      } else {
+        const result = await job.agent.run(job.message);
+        const lastMsg = result.messages.findLast((m) => m.role === "assistant");
+        reply = extractText(lastMsg?.content);
       }
+      if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, reply);
+      if (reply) await job.delivery.platform.send(job.delivery.chatId, reply);
     } catch (err) {
-      console.error(`[cron:${job.id}] error:`, err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[cron:${job.id}] error:`, errMsg);
+      if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, `[ERROR] ${errMsg}`);
     }
   }
 }

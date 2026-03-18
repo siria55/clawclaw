@@ -373,10 +373,16 @@
   background: var(--bg-tertiary);
   border-radius: 3px;
   padding: 1px 5px;
-  max-width: 140px;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.imId:hover {
+  background: var(--border-focus);
+  color: var(--text-primary);
 }
 
 .imTime {
