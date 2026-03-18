@@ -26,6 +26,7 @@ const newsStorage = new NewsStorage("./data/news.json");
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/llm-config.json");
 const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent-config.json");
+const cronStorage = new ConfigStorage<import("../cron/types.js").CronJobConfig[]>("./data/cron-config.json");
 
 const DEFAULT_SYSTEM = "你是一个有帮助的助手，回答简洁清晰。";
 
@@ -84,6 +85,7 @@ const server = new WebServer({
   imEventStorage,
   llmConfigStorage,
   agentConfigStorage,
+  cronStorage,
   onIMConfig: (config) => {
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
       ? new FeishuPlatform(config.feishu)
@@ -105,6 +107,12 @@ const server = new WebServer({
   onAgentConfig: (config) => {
     agent.updateSystem(() => config.systemPrompt ?? DEFAULT_SYSTEM);
   },
+  getStatus: () => ({
+    cronJobs: cronStorage.read().map((j) => ({ ...j, timezone: "Asia/Shanghai" })),
+    connections: [
+      { platform: "feishu", label: "飞书 Bot", connected: !!feishu },
+    ],
+  }),
 });
 await server.start();
 console.log(`WebUI + IM Webhook → http://localhost:3000`);
