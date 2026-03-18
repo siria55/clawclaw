@@ -108,6 +108,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 33 — SKILL.md 标准 + 新闻库合并
 `src/skills/loader.ts` 解析 SKILL.md frontmatter；`daily-digest/SKILL.md` 抽离元数据+Agent指令；skill 保存 `articles.json`，移除 newsStorage 依赖；`GET /api/news` 改为扫描 `data/skills/*/YYYY-MM-DD.json`；`WebServerConfig.skillDataRoot` 替代 newsStorage。
 
+### Sprint 35 — Skill 生成与投递分离 + WebUI 图片预览
+`sendSkillOutput` 新 Cron 类型：只发送指定 skill 最新 PNG，不执行 skill；skill cron 只生成不发送；`GET /api/skills/:id/latest-image` 返回最新 PNG；SkillsView 运行完成后展示图片预览。
+
 ### Sprint 34 — Skill 架构解耦：skill 只生成内容，IM 发送由项目配置负责
 `SkillResult { outputPath? }` 取代 `Promise<void>`；`SkillContext` 移除 `delivery` 和 `newsStorage`；`CronScheduler.#fire()` 获得 `outputPath` 后调 `platform.sendImage()`；WebUI 手动运行不再传 delivery；prd/tech/manual 文档同步更新。
 

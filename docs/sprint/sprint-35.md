@@ -1,6 +1,6 @@
 # Sprint 35 — Skill 生成与投递分离 + WebUI 图片预览
 
-**状态**: 🚧 进行中
+**状态**: ✅ 完成
 
 **目标**：
 1. 生成和发送拆成两个独立 Cron Job，可分别设定时间
@@ -22,11 +22,11 @@ WebUI 手动运行：
 
 ## 任务
 
-- [ ] `src/skills/loader.ts` — 新增 `findLatestSkillPng(dataRoot, skillId): string | undefined`
-- [ ] `src/cron/types.ts` — `CronJob` / `CronJobConfig` 新增 `sendSkillOutput?: string`
-- [ ] `src/cron/scheduler.ts` — 移除 skill run 后的 auto-sendImage；新增 `sendSkillOutput` 分支
-- [ ] `src/web/server.ts` — 新增 `GET /api/skills/:id/latest-image`；`onRunSkill` 返回 `Promise<SkillResult>`
-- [ ] `src/web/dev.ts` / `src/app.ts` — `onRunSkill` 返回 result；`registerCronJob` 支持 `sendSkillOutput`
-- [ ] `src/web/ui/SkillsView.tsx` — done 后展示图片预览
-- [ ] `src/web/ui/SkillsView.module.css` — 新增 `.previewImg` 样式
-- [ ] typecheck
+- [x] `src/skills/loader.ts` — 新增 `findLatestSkillPng(dataRoot, skillId): string | undefined`
+- [x] `src/cron/types.ts` — `CronJob` / `CronJobConfig` 新增 `sendSkillOutput?: string`
+- [x] `src/cron/scheduler.ts` — 移除 skill run 后的 auto-sendImage；新增 `sendSkillOutput` 分支
+- [x] `src/web/server.ts` — 新增 `GET /api/skills/:id/latest-image`；`onRunSkill` 返回 `Promise<SkillResult>`
+- [x] `src/web/dev.ts` / `src/app.ts` — `onRunSkill` 返回 result；`registerCronJob` 支持 `sendSkillOutput`
+- [x] `src/web/ui/SkillsView.tsx` — done 后展示图片预览
+- [x] `src/web/ui/SkillsView.module.css` — 新增 `.previewImg` 样式
+- [x] typecheck

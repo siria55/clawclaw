@@ -130,7 +130,7 @@ export class WebServer {
     onCronAdd: ((config: CronJobConfig) => void) | undefined;
     onCronDelete: ((id: string) => void) | undefined;
     skillRegistry: SkillRegistry | undefined;
-    onRunSkill: ((skillId: string, log: (msg: string) => void) => Promise<void>) | undefined;
+    onRunSkill: ((skillId: string, log: (msg: string) => void) => Promise<SkillResult>) | undefined;
   };
   readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   readonly #server: ReturnType<typeof createServer>;
