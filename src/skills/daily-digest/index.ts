@@ -4,8 +4,6 @@ import { dirname, join } from "node:path";
 import type { Page, Browser } from "playwright";
 import { chromium } from "playwright";
 import { writeFileSync } from "node:fs";
-import { Agent } from "../../core/agent.js";
-import { defineTool } from "../../tools/types.js";
 import { loadSkillDef } from "../loader.js";
 import type { Skill, SkillContext, SkillResult } from "../types.js";
 
@@ -23,98 +21,98 @@ const RawArticleSchema = z.object({
   source: z.string(),
 });
 
+interface LinkItem {
+  text: string;
+  href: string;
+}
+
 const SKILL_DIR = dirname(fileURLToPath(import.meta.url));
 
-/** Browser tools for the news sub-agent to operate a Playwright page. */
-function createBrowserTools(page: Page): ReturnType<typeof defineTool>[] {
-  return [
-    defineTool({
-      name: "browser_navigate",
-      description: "导航到指定 URL，返回页面标题和可见文字（最多 4000 字符）",
-      schema: z.object({ url: z.string() }),
-      execute: async ({ url }) => {
-        try {
-          await page.goto(url, { waitUntil: "networkidle", timeout: 45_000 });
-        } catch { /* timeout — read whatever rendered */ }
-        const title = await page.title().catch(() => "");
-        const text = ((await page.locator("body").textContent().catch(() => "")) ?? "")
-          .replace(/\s+/g, " ").trim();
-        return { output: `[${title}]\n${text.slice(0, 4000)}` };
-      },
-    }),
-    defineTool({
-      name: "browser_get_links",
-      description: "获取当前页面所有链接（文字 + href），用于提取文章 URL",
-      schema: z.object({}),
-      execute: async () => {
-        const els = await page.locator("a[href]").all();
-        const lines: string[] = [];
-        for (const el of els.slice(0, 80)) {
-          const text = ((await el.textContent().catch(() => "")) ?? "").trim().slice(0, 60);
-          const href = (await el.getAttribute("href").catch(() => "")) ?? "";
-          if (text.length > 3 && href) lines.push(`${text} | ${href}`);
-        }
-        return { output: lines.join("\n") };
-      },
-    }),
-  ];
+/** Extract all anchor links from the current page using Playwright locators (zero LLM calls). */
+async function extractPageLinks(page: Page): Promise<LinkItem[]> {
+  const anchors = await page.locator("a[href]").all();
+  const items: LinkItem[] = [];
+  for (const a of anchors) {
+    const text = ((await a.textContent().catch(() => "")) ?? "").trim().slice(0, 80);
+    const href = (await a.getAttribute("href").catch(() => "")) ?? "";
+    const absHref = href.startsWith("http") ? href : "";
+    if (text.length > 3 && absHref) items.push({ text, href: absHref });
+  }
+  return items;
 }
 
-/** Build the agent prompt from SKILL.md instructions, substituting variables. */
-function buildPrompt(instructions: string, queries: string[], maxArticles: number): string {
-  const searchUrls = queries
-    .map((q) => `  - https://news.baidu.com/ns?word=${encodeURIComponent(q)}&tn=news&cl=2&rn=20&ct=1`)
-    .join("\n");
-  return instructions
-    .replace("$SEARCH_URLS", searchUrls)
-    .replace("$MAX_ARTICLES", String(maxArticles));
-}
-
-/** Run a news sub-agent that operates the browser to search and extract articles. */
-async function searchNewsWithAgent(browser: Browser, ctx: SkillContext, prompt: string): Promise<RawArticle[]> {
-  const page = await browser.newPage();
+/**
+ * Navigate each search URL with Playwright, collect all links, then make a single
+ * LLM call to filter and structure results as RawArticle[].
+ */
+async function searchNewsWithBrowser(
+  browser: Browser,
+  ctx: SkillContext,
+  queries: string[],
+  maxArticles: number,
+): Promise<RawArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
+  const allLinks: LinkItem[] = [];
+  const page = await browser.newPage();
   try {
-    const subAgent = new Agent({
-      name: "news-browser",
-      system: "你是新闻搜索助手，通过浏览器工具搜索并提取新闻，最终只返回 JSON 数组，不要其他文字。",
-      llm: ctx.agent.llm,
-      compressor: undefined,
-      tools: createBrowserTools(page),
-    });
-
-    log(`🔍 启动新闻搜索…`);
-    let finalText = "";
-    for await (const event of subAgent.stream(prompt, { maxTurns: 12 })) {
-      if (event.type === "tool_call") {
-        const input = event.input as Record<string, unknown>;
-        if (event.toolName === "browser_navigate") {
-          const url = typeof input["url"] === "string" ? input["url"] : "";
-          log(`🌐 访问 ${url}`);
-        } else if (event.toolName === "browser_get_links") {
-          log(`🔗 获取页面链接`);
-        }
-      } else if (event.type === "done") {
-        const lastMsg = [...event.result.messages].reverse().find((m) => m.role === "assistant");
-        finalText = typeof lastMsg?.content === "string" ? lastMsg.content : "";
-      }
+    for (const query of queries) {
+      const url = `https://news.baidu.com/ns?word=${encodeURIComponent(query)}&tn=news&cl=2&rn=20&ct=1`;
+      log(`🌐 搜索: ${query}`);
+      try {
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      } catch { /* timeout — read whatever rendered */ }
+      const links = await extractPageLinks(page);
+      log(`🔗 获取 ${links.length} 个链接`);
+      allLinks.push(...links);
     }
+  } finally {
+    await page.close();
+  }
 
-    const match = finalText.match(/\[[\s\S]*\]/);
-    if (!match) { log("⚠️ 未获取到有效 JSON"); return []; }
+  const seen = new Set<string>();
+  const uniqueLinks = allLinks.filter((l) => {
+    if (seen.has(l.href)) return false;
+    seen.add(l.href);
+    return true;
+  });
+
+  if (uniqueLinks.length === 0) {
+    log("⚠️ 未获取到任何链接");
+    return [];
+  }
+
+  log(`📊 共收集 ${uniqueLinks.length} 个链接，调用 LLM 筛选…`);
+  const linkText = uniqueLinks
+    .slice(0, 200)
+    .map((l) => `${l.text} | ${l.href}`)
+    .join("\n");
+
+  const prompt = `以下是从新闻搜索页面提取的链接列表（格式：标题 | URL）：
+
+${linkText}
+
+请从中识别并筛选出真实的新闻文章（标题有实际内容、URL 指向新闻页面，排除导航链接、广告等）。
+最多返回 ${maxArticles} 篇，按相关性和时效性排序。
+
+只返回 JSON 数组，不要其他文字：
+[{"title":"文章标题","url":"文章完整URL","summary":"摘要（无则空字符串）","source":"来源媒体"}]`;
+
+  const result = await ctx.agent.run(prompt);
+  const lastMsg = [...result.messages].reverse().find((m) => m.role === "assistant");
+  const text = typeof lastMsg?.content === "string" ? lastMsg.content : "";
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) { log("⚠️ LLM 未返回有效 JSON"); return []; }
+  try {
     const parsed = JSON.parse(match[0]) as unknown[];
     const articles = parsed.flatMap((item) => {
       const r = RawArticleSchema.safeParse(item);
       return r.success ? [r.data] : [];
     });
-    log(`✅ 共获取 ${articles.length} 篇文章`);
+    log(`✅ 筛选出 ${articles.length} 篇文章`);
     return articles;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log(`❌ 搜索失败：${msg}`);
+  } catch {
+    log("⚠️ JSON 解析失败");
     return [];
-  } finally {
-    await page.close();
   }
 }
 
@@ -189,8 +187,9 @@ async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
 }
 
 /**
- * Daily digest skill — loads instructions from SKILL.md, runs a news sub-agent with
- * browser tools, renders a styled digest, screenshots it, and optionally sends to Feishu.
+ * Daily digest skill — uses Playwright to directly scrape search result links,
+ * then makes a single LLM call to filter and structure results.
+ * Renders a styled HTML digest, screenshots it, and saves all output files.
  *
  * Output files per run: YYYY-MM-DD.{html,md,png,json}
  */
@@ -199,7 +198,6 @@ export class DailyDigestSkill implements Skill {
   readonly description: string;
   readonly #queries: string[];
   readonly #maxArticles: number;
-  readonly #instructions: string;
 
   constructor() {
     const def = loadSkillDef(SKILL_DIR);
@@ -207,14 +205,12 @@ export class DailyDigestSkill implements Skill {
     this.description = def.description;
     this.#queries = def.queries;
     this.#maxArticles = def.maxArticles;
-    this.#instructions = def.instructions;
   }
 
   async run(ctx: SkillContext): Promise<SkillResult> {
     const browser = await chromium.launch({ headless: true });
     try {
-      const prompt = buildPrompt(this.#instructions, this.#queries, this.#maxArticles);
-      const articles = await searchNewsWithAgent(browser, ctx, prompt);
+      const articles = await searchNewsWithBrowser(browser, ctx, this.#queries, this.#maxArticles);
       ctx.log?.(`📊 获取 ${articles.length} 篇文章`);
 
       const dateKey = new Date().toLocaleDateString("sv-SE");

@@ -151,13 +151,12 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 1. 读取 `SKILL.md` 获得搜索词和最大文章数
 2. 启动 Playwright chromium（headless）
-3. 构建子 Agent（`news-browser`），配备 `browser_navigate` / `browser_get_links` 工具
-4. 子 Agent 调用 `agent.stream()` 执行新闻搜索，实时 log 每次 tool_call
-5. 从最终 LLM 回复中提取 JSON 文章数组（`RawArticle[]`）
-6. 渲染 HTML，Playwright 截图为 PNG
-7. 写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
-8. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
-9. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
+3. 依次导航各关键词的百度新闻搜索页，用 Playwright locator 提取所有链接（零 LLM 调用）
+4. 跨关键词去重后，**一次** `ctx.agent.run()` 调用 LLM 筛选为结构化 JSON（`RawArticle[]`）
+5. 渲染 HTML，Playwright 截图为 PNG
+6. 写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
+7. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
+8. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
 
 ### 新闻库数据来源
 

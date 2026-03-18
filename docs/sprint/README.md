@@ -108,6 +108,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 33 — SKILL.md 标准 + 新闻库合并
 `src/skills/loader.ts` 解析 SKILL.md frontmatter；`daily-digest/SKILL.md` 抽离元数据+Agent指令；skill 保存 `articles.json`，移除 newsStorage 依赖；`GET /api/news` 改为扫描 `data/skills/*/YYYY-MM-DD.json`；`WebServerConfig.skillDataRoot` 替代 newsStorage。
 
+### Sprint 38 — DailyDigestSkill 改用 Playwright 直接搜索
+原 sub-agent 方案（12 turns × N 关键词）触发 API rate limit。改为 Playwright 直接导航搜索页、locator 提取所有链接（零 LLM 调用），完成后**一次** `ctx.agent.run()` 筛选为结构化 JSON。移除 `createBrowserTools` / `defineTool` / `Agent` 导入，新增 `extractPageLinks()` + `searchNewsWithBrowser()`。typecheck 通过。
+
 ### Sprint 37 — 清理 src/news/ 死代码目录
 Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
 
