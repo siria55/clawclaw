@@ -26,6 +26,7 @@ import { CronScheduler } from "./cron/scheduler.js";
 import { NewsStorage } from "./news/storage.js";
 import { MemoryStorage } from "./memory/storage.js";
 import { IMEventStorage } from "./im/storage.js";
+import { ConversationStorage } from "./im/conversations.js";
 import { ConfigStorage } from "./config/storage.js";
 import { createSaveNewsTool } from "./tools/news.js";
 import { createMemoryTools } from "./tools/memory.js";
@@ -35,15 +36,18 @@ import type { IMConfig, LLMConfig, AgentMetaConfig } from "./config/types.js";
 
 // ── 存储 ──────────────────────────────────────────────────────────────────────
 
-mkdirSync("./data", { recursive: true });
+mkdirSync("./data/agent", { recursive: true });
+mkdirSync("./data/im", { recursive: true });
+mkdirSync("./data/cron", { recursive: true });
 
-const newsStorage = new NewsStorage("./data/news.json");
-const memoryStorage = new MemoryStorage("./data/memory.json");
-const imEventStorage = new IMEventStorage();
-const imConfigStorage = new ConfigStorage<IMConfig>("./data/im-config.json");
-const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/llm-config.json");
-const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent-config.json");
-const cronStorage = new ConfigStorage<CronJobConfig[]>("./data/cron-config.json");
+const newsStorage = new NewsStorage("./data/agent/news.json");
+const memoryStorage = new MemoryStorage("./data/agent/memory.json");
+const imEventStorage = new IMEventStorage(200, "./data/im/im-events.json");
+const conversationStorage = new ConversationStorage("./data/im/conversations.json");
+const imConfigStorage = new ConfigStorage<IMConfig>("./data/im/im-config.json");
+const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/agent/llm-config.json");
+const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json");
+const cronStorage = new ConfigStorage<CronJobConfig[]>("./data/cron/cron-config.json", []);
 
 const DEFAULT_SYSTEM = "你是一个高效的 AI 助手，可以搜索和保存新闻、管理长期记忆。";
 
@@ -115,6 +119,7 @@ const clawServer = new ClawServer({
   port: Number(process.env["PORT"] ?? 3000),
   routes: {},
   imEventStorage,
+  conversationStorage,
 });
 
 if (feishu) clawServer.setRoute("/feishu", { platform: feishu, agent });
@@ -130,6 +135,7 @@ const webServer = new WebServer({
   imConfigStorage,
   llmConfigStorage,
   imEventStorage,
+  conversationStorage,
   agentConfigStorage,
   onIMConfig: (config: IMConfig) => {
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken

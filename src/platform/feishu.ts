@@ -112,8 +112,9 @@ export class FeishuPlatform implements IMPlatform {
 
   async send(chatId: string, text: string): Promise<void> {
     const token = await this.#getAccessToken();
+    const receiveIdType = chatId.startsWith("ou_") ? "open_id" : "chat_id";
     const response = await fetch(
-      "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
+      `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
       {
         method: "POST",
         headers: {

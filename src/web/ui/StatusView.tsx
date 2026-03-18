@@ -44,11 +44,13 @@ const EMPTY_FORM: CronJobConfig = { id: "", schedule: "", message: "", chatId: "
 
 async function fetchStatus(): Promise<SystemStatus> {
   const res = await fetch("/api/status");
+  if (!res.ok) return { cronJobs: [], connections: [] };
   return res.json() as Promise<SystemStatus>;
 }
 
 async function fetchCronJobs(): Promise<CronJobConfig[]> {
   const res = await fetch("/api/cron");
+  if (!res.ok) return [];
   const data = await res.json() as { jobs: CronJobConfig[] };
   return data.jobs;
 }
@@ -64,6 +66,7 @@ async function deleteCronJob(id: string): Promise<void> {
 async function fetchIMLog(since?: string): Promise<{ events: IMEvent[]; total: number }> {
   const url = since ? `/api/im-log?since=${since}` : "/api/im-log";
   const res = await fetch(url);
+  if (!res.ok) return { events: [], total: 0 };
   return res.json() as Promise<{ events: IMEvent[]; total: number }>;
 }
 
@@ -224,7 +227,7 @@ export function StatusView(): React.JSX.Element {
               <div className={styles.imMeta}>
                 <span className={styles.imPlatform}>{e.platform}</span>
                 <span className={styles.imId} title={e.userId}>用户 {e.userId.slice(0, 12)}</span>
-                <span className={styles.imId} title={e.chatId}>群 {e.chatId.slice(0, 12)}</span>
+                <span className={styles.imId} title={e.chatId}>会话 {e.chatId.slice(0, 12)}</span>
                 <span className={styles.imTime}>{formatTime(e.timestamp)}</span>
               </div>
               <p className={styles.imText}>{e.text}</p>

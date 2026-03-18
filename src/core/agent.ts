@@ -40,7 +40,10 @@ export class Agent {
    */
   async run(userMessage: string, options: AgentOptions = {}): Promise<AgentRunResult> {
     const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
-    let messages: Message[] = [{ role: "user", content: userMessage }];
+    let messages: Message[] = [
+      ...(options.history ?? []),
+      { role: "user", content: userMessage },
+    ];
     let turns = 0;
 
     while (turns < maxTurns) {

@@ -27,6 +27,8 @@ export interface AgentConfig {
 export interface AgentOptions {
   /** Max conversation turns before stopping (default: 20) */
   maxTurns?: number;
+  /** Prior conversation messages to prepend (enables multi-turn memory). */
+  history?: Message[];
 }
 
 export interface AgentRunResult {

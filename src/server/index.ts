@@ -4,16 +4,15 @@ import { FeishuChallenge } from "../platform/feishu.js";
 import { WecomEcho } from "../platform/wecom.js";
 import type { IMPlatform } from "../platform/types.js";
 import type { IMEventStorage } from "../im/storage.js";
+import type { ConversationStorage } from "../im/conversations.js";
 
 export interface ClawServerConfig {
   port?: number;
-  /**
-   * Routes: map of URL path → { platform, agent }
-   * e.g. { "/feishu": { platform: feishuPlatform, agent: myAgent } }
-   */
   routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   /** Optional storage for recording incoming IM events. */
   imEventStorage?: IMEventStorage;
+  /** Optional storage for per-chatId conversation history (multi-turn memory). */
+  conversationStorage?: ConversationStorage;
 }
 
 /**
@@ -29,14 +28,14 @@ export interface ClawServerConfig {
  * ```
  */
 export class ClawServer {
-  readonly #config: Required<Omit<ClawServerConfig, "imEventStorage">> & { imEventStorage: IMEventStorage | undefined };
+  readonly #config: Required<Omit<ClawServerConfig, "imEventStorage" | "conversationStorage">> & { imEventStorage: IMEventStorage | undefined; conversationStorage: ConversationStorage | undefined };
   readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   readonly #server: ReturnType<typeof createServer>;
   #activeRequests = 0;
   #shutdownHandler: (() => void) | undefined;
 
   constructor(config: ClawServerConfig) {
-    this.#config = { port: 3000, imEventStorage: undefined, ...config };
+    this.#config = { port: 3000, imEventStorage: undefined, conversationStorage: undefined, ...config };
     this.#routes = { ...config.routes };
     this.#server = createServer((req, res) => {
       void this.#handleRequest(req, res);
@@ -156,15 +155,17 @@ export class ClawServer {
     });
 
     const contextPrefix = `[消息来源: ${message.platform} | chatId: ${message.chatId} | userId: ${message.userId}]\n`;
+    const history = this.#config.conversationStorage?.get(message.chatId) ?? [];
 
     this.#activeRequests++;
     route.agent
-      .run(contextPrefix + message.text)
+      .run(contextPrefix + message.text, { history })
       .then(async (result) => {
         const lastMsg = result.messages.findLast(
           (m: import("../llm/types.js").Message) => m.role === "assistant",
         );
         const reply = extractText(lastMsg?.content);
+        this.#config.conversationStorage?.set(message.chatId, result.messages);
         if (eventId !== undefined) this.#config.imEventStorage?.setReply(eventId, reply);
         if (reply) await route.platform.send(message.chatId, reply);
       })

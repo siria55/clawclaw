@@ -13,20 +13,23 @@ import { ConfigStorage } from "../config/storage.js";
 import { MemoryStorage } from "../memory/storage.js";
 import { NewsStorage } from "../news/storage.js";
 import { IMEventStorage } from "../im/storage.js";
+import { ConversationStorage } from "../im/conversations.js";
 import { createMemoryTools } from "../tools/memory.js";
 import { createSaveNewsTool } from "../tools/news.js";
 import type { Message } from "../llm/types.js";
 import type { LLMConfig, IMConfig, AgentMetaConfig } from "../config/types.js";
 import { WebServer } from "./server.js";
 
-mkdirSync("./data", { recursive: true });
+mkdirSync("./data/agent", { recursive: true });
+mkdirSync("./data/im", { recursive: true });
+mkdirSync("./data/cron", { recursive: true });
 
-const memoryStorage = new MemoryStorage("./data/memory.json");
-const newsStorage = new NewsStorage("./data/news.json");
-const imConfigStorage = new ConfigStorage<IMConfig>("./data/im-config.json");
-const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/llm-config.json");
-const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent-config.json");
-const cronStorage = new ConfigStorage<import("../cron/types.js").CronJobConfig[]>("./data/cron-config.json");
+const memoryStorage = new MemoryStorage("./data/agent/memory.json");
+const newsStorage = new NewsStorage("./data/agent/news.json");
+const imConfigStorage = new ConfigStorage<IMConfig>("./data/im/im-config.json");
+const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/agent/llm-config.json");
+const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json");
+const cronStorage = new ConfigStorage<import("../cron/types.js").CronJobConfig[]>("./data/cron/cron-config.json", []);
 
 const DEFAULT_SYSTEM = "你是一个有帮助的助手，回答简洁清晰。";
 
@@ -62,7 +65,8 @@ const agentConfig = {
 
 const agent = new Agent(agentConfig);
 
-const imEventStorage = new IMEventStorage();
+const imEventStorage = new IMEventStorage(200, "./data/im/im-events.json");
+const conversationStorage = new ConversationStorage("./data/im/conversations.json");
 
 function buildFeishu(): FeishuPlatform | undefined {
   const saved = imConfigStorage.read().feishu;
@@ -83,6 +87,7 @@ const server = new WebServer({
   memoryStorage,
   imConfigStorage,
   imEventStorage,
+  conversationStorage,
   llmConfigStorage,
   agentConfigStorage,
   cronStorage,

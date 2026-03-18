@@ -9,6 +9,7 @@ import { WecomEcho } from "../platform/wecom.js";
 import type { AgentConfig } from "../core/types.js";
 import type { IMPlatform } from "../platform/types.js";
 import type { IMEventStorage } from "../im/storage.js";
+import type { ConversationStorage } from "../im/conversations.js";
 import type { CronJobConfig } from "../cron/types.js";
 import type { NewsStorage } from "../news/storage.js";
 import type { MemoryStorage } from "../memory/storage.js";
@@ -77,6 +78,8 @@ export interface WebServerConfig {
   onAgentConfig?: (config: AgentMetaConfig) => void;
   /** Optional storage for recording incoming IM events (used by GET /api/im-log). */
   imEventStorage?: IMEventStorage;
+  /** Optional storage for per-chatId conversation history (multi-turn memory). */
+  conversationStorage?: ConversationStorage;
   /** Cron job config storage for GET/POST/DELETE /api/cron. */
   cronStorage?: ConfigStorage<CronJobConfig[]>;
   /** Called after POST /api/cron to register a new job in the scheduler. */
@@ -104,7 +107,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage" | "cronStorage" | "onCronAdd" | "onCronDelete">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     newsStorage: NewsStorage | undefined;
@@ -116,6 +119,7 @@ export class WebServer {
     agentConfigStorage: ConfigStorage<AgentMetaConfig> | undefined;
     onAgentConfig: ((config: AgentMetaConfig) => void) | undefined;
     imEventStorage: IMEventStorage | undefined;
+    conversationStorage: ConversationStorage | undefined;
     cronStorage: ConfigStorage<CronJobConfig[]> | undefined;
     onCronAdd: ((config: CronJobConfig) => void) | undefined;
     onCronDelete: ((id: string) => void) | undefined;
@@ -138,6 +142,7 @@ export class WebServer {
       agentConfigStorage: undefined,
       onAgentConfig: undefined,
       imEventStorage: undefined,
+      conversationStorage: undefined,
       cronStorage: undefined,
       onCronAdd: undefined,
       onCronDelete: undefined,
@@ -538,14 +543,16 @@ export class WebServer {
     });
 
     const contextPrefix = `[消息来源: ${message.platform} | chatId: ${message.chatId} | userId: ${message.userId}]\n`;
+    const history = this.#config.conversationStorage?.get(message.chatId) ?? [];
 
     route.agent
-      .run(contextPrefix + message.text)
+      .run(contextPrefix + message.text, { history })
       .then(async (result) => {
         const lastMsg = result.messages.findLast(
           (m: import("../llm/types.js").Message) => m.role === "assistant",
         );
         const reply = extractText(lastMsg?.content);
+        this.#config.conversationStorage?.set(message.chatId, result.messages);
         if (eventId !== undefined) this.#config.imEventStorage?.setReply(eventId, reply);
         if (reply) await route.platform.send(message.chatId, reply);
       })

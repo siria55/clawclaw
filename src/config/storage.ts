@@ -10,18 +10,20 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
  */
 export class ConfigStorage<T extends object> {
   readonly #filePath: string;
+  readonly #default: T;
 
-  constructor(filePath: string) {
+  constructor(filePath: string, defaultValue: T = {} as T) {
     this.#filePath = filePath;
+    this.#default = defaultValue;
   }
 
-  /** Read current config from disk. Returns empty object if file doesn't exist. */
+  /** Read current config from disk. Returns defaultValue if file doesn't exist or is invalid. */
   read(): T {
-    if (!existsSync(this.#filePath)) return {} as T;
+    if (!existsSync(this.#filePath)) return this.#default;
     try {
       return JSON.parse(readFileSync(this.#filePath, "utf8")) as T;
     } catch {
-      return {} as T;
+      return this.#default;
     }
   }
 

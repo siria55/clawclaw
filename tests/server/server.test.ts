@@ -94,6 +94,7 @@ describe("ClawServer", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(vi.mocked(agent.run)).toHaveBeenCalledWith(
       expect.stringContaining("ping"),
+      expect.objectContaining({ history: expect.any(Array) }),
     );
     await server.stop();
   });
