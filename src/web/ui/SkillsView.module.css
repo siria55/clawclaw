@@ -1,0 +1,107 @@
+.page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.inner {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 24px;
+}
+
+.empty {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  padding: 12px 0;
+}
+
+.skillRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.skillRow:last-child {
+  border-bottom: none;
+}
+
+.skillInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.skillId {
+  font-family: monospace;
+  font-size: 13px;
+  background: var(--bg-secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--accent);
+  align-self: flex-start;
+}
+
+.skillDesc {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.skillActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.runBtn {
+  background: var(--blue);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.runBtn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.runBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.runOk {
+  font-size: 12px;
+  color: #22c55e;
+  white-space: nowrap;
+}
+
+.runErr {
+  font-size: 12px;
+  color: #ef4444;
+  white-space: nowrap;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

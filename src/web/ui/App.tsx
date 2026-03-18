@@ -4,16 +4,18 @@ import { InputBar } from "./InputBar";
 import { MemoryView } from "./MemoryView";
 import { NewsView } from "./NewsView";
 import { SettingsView } from "./SettingsView";
+import { SkillsView } from "./SkillsView";
 import { StatusView } from "./StatusView";
 import { useChatStream } from "./useChatStream";
 import styles from "./App.module.css";
 
-type View = "chat" | "news" | "memory" | "status" | "settings";
+type View = "chat" | "news" | "memory" | "skills" | "status" | "settings";
 
 const HASH_TO_VIEW: Record<string, View> = {
   "#chat": "chat",
   "#news": "news",
   "#memory": "memory",
+  "#skills": "skills",
   "#status": "status",
   "#settings": "settings",
 };
@@ -22,6 +24,7 @@ const TAB_LABELS: Record<View, string> = {
   chat: "对话",
   news: "新闻库",
   memory: "记忆库",
+  skills: "Skills",
   status: "状态",
   settings: "设置",
 };
@@ -55,7 +58,7 @@ export function App(): React.JSX.Element {
         </div>
 
         <nav className={styles.nav}>
-          {(["chat", "news", "memory", "status", "settings"] as View[]).map((v) => (
+          {(["chat", "news", "memory", "skills", "status", "settings"] as View[]).map((v) => (
             <button
               key={v}
               className={`${styles.tab} ${view === v ? styles.tabActive : ""}`}
@@ -77,6 +80,8 @@ export function App(): React.JSX.Element {
           <NewsView />
         ) : view === "memory" ? (
           <MemoryView />
+        ) : view === "skills" ? (
+          <SkillsView />
         ) : view === "status" ? (
           <StatusView />
         ) : (

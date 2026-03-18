@@ -45,18 +45,6 @@ interface CronJobConfig {
 
 const EMPTY_FORM: CronJobConfig = { id: "", schedule: "", message: "", chatId: "", platform: "feishu", enabled: true, direct: false, msgType: "text", skillId: "" };
 
-interface SkillInfo {
-  id: string;
-  description: string;
-}
-
-async function fetchSkills(): Promise<SkillInfo[]> {
-  const res = await fetch("/api/skills");
-  if (!res.ok) return [];
-  const data = await res.json() as { skills: SkillInfo[] };
-  return data.skills;
-}
-
 async function fetchStatus(): Promise<SystemStatus> {
   const res = await fetch("/api/status");
   if (!res.ok) return { cronJobs: [], connections: [] };
@@ -78,15 +66,7 @@ async function deleteCronJob(id: string): Promise<void> {
   await fetch(`/api/cron/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-async function runSkill(id: string): Promise<void> {
-  const res = await fetch(`/api/skills/${encodeURIComponent(id)}/run`, { method: "POST" });
-  if (!res.ok) {
-    const data = await res.json() as { error?: string };
-    throw new Error(data.error ?? `HTTP ${res.status}`);
-  }
-}
-
-
+async function fetchIMLog(since?: string): Promise<{ events: IMEvent[]; total: number }> {
   const url = since ? `/api/im-log?since=${since}` : "/api/im-log";
   const res = await fetch(url);
   if (!res.ok) return { events: [], total: 0 };
@@ -97,47 +77,8 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function SkillRow({ skill }: { skill: SkillInfo }): React.JSX.Element {
-  const [state, setState] = useState<"idle" | "running" | "ok" | "err">("idle");
-  const [errMsg, setErrMsg] = useState("");
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleRun = (): void => {
-    setState("running");
-    void runSkill(skill.id)
-      .then(() => {
-        setState("ok");
-        if (timer.current) clearTimeout(timer.current);
-        timer.current = setTimeout(() => setState("idle"), 3000);
-      })
-      .catch((e: unknown) => {
-        setErrMsg(e instanceof Error ? e.message : String(e));
-        setState("err");
-        if (timer.current) clearTimeout(timer.current);
-        timer.current = setTimeout(() => setState("idle"), 5000);
-      });
-  };
-
-  return (
-    <div className={styles.skillRow}>
-      <code className={styles.skillId}>{skill.id}</code>
-      <span className={styles.skillDesc}>{skill.description}</span>
-      <button
-        className={styles.skillRunBtn}
-        onClick={handleRun}
-        disabled={state === "running"}
-      >
-        {state === "running" ? "运行中…" : "运行"}
-      </button>
-      {state === "ok" && <span className={styles.skillRunOk}>✓ 完成</span>}
-      {state === "err" && <span className={styles.skillRunErr}>{errMsg}</span>}
-    </div>
-  );
-}
-
 export function StatusView(): React.JSX.Element {
   const [status, setStatus] = useState<SystemStatus | null>(null);
-  const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [cronJobs, setCronJobs] = useState<CronJobConfig[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -197,7 +138,7 @@ export function StatusView(): React.JSX.Element {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => { load(); void fetchSkills().then(setSkills); }, []);
+  useEffect(() => { load(); }, []);
 
   return (
     <div className={styles.page}>
@@ -221,15 +162,6 @@ export function StatusView(): React.JSX.Element {
             </div>
           ))}
           {!status && !loading && <p className={styles.empty}>—</p>}
-        </section>
-
-        {/* Skills */}
-        <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>Skills</h3>
-          {skills.length === 0 && <p className={styles.empty}>无已注册 skill</p>}
-          {skills.map((s) => (
-            <SkillRow key={s.id} skill={s} />
-          ))}
         </section>
 
         {/* Cron 任务 */}
