@@ -62,6 +62,17 @@ export class CronScheduler {
     return [...this.#jobs.keys()];
   }
 
+  /** Return serializable info for all registered jobs. */
+  list(): Array<{ id: string; schedule: string; message: string; chatId: string; platform: string }> {
+    return [...this.#jobs.values()].map(({ job }) => ({
+      id: job.id,
+      schedule: job.schedule,
+      message: job.message,
+      chatId: job.delivery.chatId,
+      platform: job.delivery.platform.name,
+    }));
+  }
+
   #tick(): void {
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: this.#tz }));
     const [minute, hour, dom, month, dow] = [

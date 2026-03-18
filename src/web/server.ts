@@ -9,6 +9,7 @@ import { WecomEcho } from "../platform/wecom.js";
 import type { AgentConfig } from "../core/types.js";
 import type { IMPlatform } from "../platform/types.js";
 import type { IMEventStorage } from "../im/storage.js";
+import type { CronJobConfig } from "../cron/types.js";
 import type { NewsStorage } from "../news/storage.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
@@ -74,6 +75,12 @@ export interface WebServerConfig {
   onAgentConfig?: (config: AgentMetaConfig) => void;
   /** Optional storage for recording incoming IM events (used by GET /api/im-log). */
   imEventStorage?: IMEventStorage;
+  /** Cron job config storage for GET/POST/DELETE /api/cron. */
+  cronStorage?: ConfigStorage<CronJobConfig[]>;
+  /** Called after POST /api/cron to register a new job in the scheduler. */
+  onCronAdd?: (config: CronJobConfig) => void;
+  /** Called after DELETE /api/cron/:id to remove a job from the scheduler. */
+  onCronDelete?: (id: string) => void;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -95,7 +102,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage" | "cronStorage" | "onCronAdd" | "onCronDelete">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     newsStorage: NewsStorage | undefined;
@@ -107,6 +114,9 @@ export class WebServer {
     agentConfigStorage: ConfigStorage<AgentMetaConfig> | undefined;
     onAgentConfig: ((config: AgentMetaConfig) => void) | undefined;
     imEventStorage: IMEventStorage | undefined;
+    cronStorage: ConfigStorage<CronJobConfig[]> | undefined;
+    onCronAdd: ((config: CronJobConfig) => void) | undefined;
+    onCronDelete: ((id: string) => void) | undefined;
   };
   readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   readonly #server: ReturnType<typeof createServer>;

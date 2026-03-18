@@ -17,6 +17,21 @@ export interface CronJob {
   };
 }
 
+/**
+ * Serializable cron job config — persisted to data/cron-config.json.
+ * Runtime objects (agent / platform) are resolved at registration time.
+ */
+export interface CronJobConfig {
+  id: string;
+  schedule: string;
+  message: string;
+  /** Target chat ID for delivery */
+  chatId: string;
+  /** Platform name, e.g. "feishu" */
+  platform: string;
+  enabled: boolean;
+}
+
 export interface CronSchedulerOptions {
   /** Timezone for cron expressions. Defaults to "Asia/Shanghai". */
   timezone?: string;
