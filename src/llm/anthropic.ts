@@ -8,6 +8,8 @@ export interface AnthropicConfig extends Partial<LLMConfig> {
   apiKey?: string;
   /** Override the Anthropic API base URL, e.g. for proxies or mirrors. */
   baseURL?: string;
+  /** HTTPS proxy URL. Falls back to HTTPS_PROXY / HTTP_PROXY env vars. */
+  httpsProxy?: string;
 }
 
 /**
@@ -21,7 +23,7 @@ export class AnthropicProvider implements LLMProvider {
 
   constructor(config: AnthropicConfig = {}) {
     const baseURL = config.baseURL ?? process.env["ANTHROPIC_BASE_URL"];
-    const proxy = process.env["HTTPS_PROXY"] ?? process.env["HTTP_PROXY"];
+    const proxy = config.httpsProxy ?? process.env["HTTPS_PROXY"] ?? process.env["HTTP_PROXY"];
 
     this.#client = new Anthropic({
       apiKey: config.apiKey,

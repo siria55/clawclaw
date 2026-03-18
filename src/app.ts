@@ -62,6 +62,7 @@ function buildLLM(): AnthropicProvider {
   return new AnthropicProvider({
     ...(saved.apiKey !== undefined && { apiKey: saved.apiKey }),
     ...(saved.baseURL !== undefined && { baseURL: saved.baseURL }),
+    ...(saved.httpsProxy !== undefined && { httpsProxy: saved.httpsProxy }),
     ...(saved.model !== undefined && { model: saved.model }),
   });
 }
@@ -172,9 +173,10 @@ const webServer = new WebServer({
   },
   onLLMConfig: (config) => {
     agent.updateLLM(new AnthropicProvider({
-      ...(config.apiKey && { apiKey: config.apiKey }),
-      ...(config.baseURL && { baseURL: config.baseURL }),
-      ...(config.model && { model: config.model }),
+      ...(config.apiKey !== undefined && { apiKey: config.apiKey }),
+      ...(config.baseURL !== undefined && { baseURL: config.baseURL }),
+      ...(config.httpsProxy !== undefined && { httpsProxy: config.httpsProxy }),
+      ...(config.model !== undefined && { model: config.model }),
     }));
   },
   onAgentConfig: (config) => {

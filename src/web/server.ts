@@ -498,10 +498,14 @@ export class WebServer {
     }
 
     const existing = this.#config.agentConfigStorage.read();
+    // Empty string = user cleared the field → omit from storage (use default at runtime)
+    const name = incoming.name !== undefined ? (incoming.name || undefined) : existing.name;
+    const systemPrompt = incoming.systemPrompt !== undefined ? (incoming.systemPrompt || undefined) : existing.systemPrompt;
+    const allowedPaths = incoming.allowedPaths !== undefined ? incoming.allowedPaths : existing.allowedPaths;
     const merged: AgentMetaConfig = {
-      ...(incoming.name !== undefined ? { name: incoming.name } : existing.name !== undefined ? { name: existing.name } : {}),
-      ...(incoming.systemPrompt !== undefined ? { systemPrompt: incoming.systemPrompt } : existing.systemPrompt !== undefined ? { systemPrompt: existing.systemPrompt } : {}),
-      ...(incoming.allowedPaths !== undefined ? { allowedPaths: incoming.allowedPaths } : existing.allowedPaths !== undefined ? { allowedPaths: existing.allowedPaths } : {}),
+      ...(name !== undefined && { name }),
+      ...(systemPrompt !== undefined && { systemPrompt }),
+      ...(allowedPaths !== undefined && { allowedPaths }),
     };
     this.#config.agentConfigStorage.write(merged);
     this.#config.onAgentConfig?.(merged);
@@ -748,10 +752,13 @@ function maskLLMConfig(config: LLMConfig): LLMConfig {
 }
 
 function mergeLLMConfig(existing: LLMConfig, incoming: LLMConfig): LLMConfig {
-  const apiKey = incoming.apiKey && !isMasked(incoming.apiKey) ? incoming.apiKey : existing.apiKey;
-  const baseURL = incoming.baseURL !== undefined ? incoming.baseURL : existing.baseURL;
-  const httpsProxy = incoming.httpsProxy !== undefined ? incoming.httpsProxy : existing.httpsProxy;
-  const model = incoming.model !== undefined ? incoming.model : existing.model;
+  // Empty string = user cleared the field; masked value = keep existing
+  const apiKey = incoming.apiKey !== undefined && !isMasked(incoming.apiKey)
+    ? (incoming.apiKey || undefined)
+    : existing.apiKey;
+  const baseURL = incoming.baseURL !== undefined ? (incoming.baseURL || undefined) : existing.baseURL;
+  const httpsProxy = incoming.httpsProxy !== undefined ? (incoming.httpsProxy || undefined) : existing.httpsProxy;
+  const model = incoming.model !== undefined ? (incoming.model || undefined) : existing.model;
   return {
     ...(apiKey !== undefined && { apiKey }),
     ...(baseURL !== undefined && { baseURL }),

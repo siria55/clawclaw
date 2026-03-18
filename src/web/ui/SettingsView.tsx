@@ -66,8 +66,8 @@ function AgentSection(): React.JSX.Element {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...(fields.name ? { name: fields.name } : {}),
-        ...(fields.systemPrompt ? { systemPrompt: fields.systemPrompt } : {}),
+        name: fields.name,
+        systemPrompt: fields.systemPrompt,
         allowedPaths: fields.allowedPaths.split("\n").map((p) => p.trim()).filter(Boolean),
       }),
     })
@@ -161,10 +161,10 @@ function LLMSection(): React.JSX.Element {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...(fields.apiKey ? { apiKey: fields.apiKey } : {}),
-        ...(fields.baseURL ? { baseURL: fields.baseURL } : {}),
-        ...(fields.httpsProxy ? { httpsProxy: fields.httpsProxy } : {}),
-        ...(fields.model ? { model: fields.model } : {}),
+        apiKey: fields.apiKey,
+        baseURL: fields.baseURL,
+        httpsProxy: fields.httpsProxy,
+        model: fields.model,
       }),
     })
       .then((r) => {
