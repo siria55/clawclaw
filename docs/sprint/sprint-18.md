@@ -1,6 +1,6 @@
 # Sprint 18 — Cron 可视化 + WebUI 配置
 
-**状态**: 🚧 进行中
+**状态**: ✅ 完成
 
 **目标**：
 1. WebUI Status 页：Cron 任务显示真实数据（schedule / message / chatId / 下次运行时间）
@@ -29,33 +29,33 @@
 ## 任务
 
 ### 1. CronJobConfig 类型 + storage
-- [ ] `src/cron/types.ts`：新增 `CronJobConfig { id, schedule, message, chatId, platform, enabled }`
-- [ ] `src/cron/index.ts`：导出 `CronJobConfig`
+- [x] `src/cron/types.ts`：新增 `CronJobConfig { id, schedule, message, chatId, platform, enabled }`
+- [x] `src/cron/index.ts`：导出 `CronJobConfig`
 
 ### 2. CronScheduler.list()
-- [ ] 新增 `list(): Array<{ id, schedule, message, chatId, platform }>` 方法，供 status/api 用
+- [x] 新增 `list(): Array<{ id, schedule, message, chatId, platform }>` 方法，供 status/api 用
 
 ### 3. WebServer /api/cron 端点
-- [ ] `WebServerConfig` 新增 `cronStorage? / onCronAdd? / onCronDelete?`
-- [ ] `GET /api/cron` → 返回所有 job 配置
-- [ ] `POST /api/cron` → 新增/更新 job（写文件 + 热更新调度器）
-- [ ] `DELETE /api/cron/:id` → 删除 job
+- [x] `WebServerConfig` 新增 `cronStorage? / onCronAdd? / onCronDelete?`
+- [x] `GET /api/cron` → 返回所有 job 配置
+- [x] `POST /api/cron` → 新增/更新 job（写文件 + 热更新调度器）
+- [x] `DELETE /api/cron/:id` → 删除 job
 
 ### 4. app.ts 加载 + 热更新
-- [ ] 启动时从 `data/cron-config.json` 加载，注册到调度器
-- [ ] `getStatus()` 改为 `cron.list()` 获取真实数据
-- [ ] 硬编码的 daily-digest 迁移到 cron-config.json 初始值
+- [x] 启动时从 `data/cron-config.json` 加载，注册到调度器
+- [x] `getStatus()` 改为 `cron.list()` 获取真实数据
+- [x] 硬编码的 daily-digest 迁移到 cron-config.json 初始值
 
 ### 5. WebUI — Cron 配置页
-- [ ] `StatusView.tsx`：Cron section 展示 schedule / message / chatId
-- [ ] 每个任务有删除按钮
-- [ ] 底部「新增任务」表单：id / schedule / message / chatId（platform 自动选当前已连接）
+- [x] `StatusView.tsx`：Cron section 展示 schedule / message / chatId
+- [x] 每个任务有删除按钮
+- [x] 底部「新增任务」表单：id / schedule / message / chatId（platform 自动选当前已连接）
 
 ---
 
 ## 验收标准
 
-- [ ] Status 页 Cron 显示真实 schedule / message
-- [ ] 可从 WebUI 新增 / 删除 Cron 任务，刷新后仍存在
-- [ ] 删除或新增后调度器立即生效（无需重启）
-- [ ] 类型检查通过，所有测试通过
+- [x] Status 页 Cron 显示真实 schedule / message
+- [x] 可从 WebUI 新增 / 删除 Cron 任务，刷新后仍存在
+- [x] 删除或新增后调度器立即生效（无需重启）
+- [x] 类型检查通过，所有测试通过

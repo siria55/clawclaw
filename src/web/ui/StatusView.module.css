@@ -161,6 +161,184 @@
   color: var(--text-muted);
 }
 
+/* Cron section header */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.addBtn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue);
+  background: none;
+  border: 1px solid var(--blue);
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  transition: background 0.12s, color 0.12s;
+}
+
+.addBtn:hover {
+  background: var(--blue);
+  color: #fff;
+}
+
+/* Cron enabled badge */
+.cronEnabled {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+
+.cronEnabledOn {
+  background: color-mix(in srgb, var(--tool-result-accent) 15%, transparent);
+  color: var(--tool-result-accent);
+}
+
+.cronEnabledOff {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+/* Cron card footer */
+.cronFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.cronMeta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.cronActions {
+  display: flex;
+  gap: 6px;
+}
+
+.cronActionBtn {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  transition: border-color 0.12s, color 0.12s;
+}
+
+.cronActionBtn:hover {
+  border-color: var(--border-focus);
+  color: var(--text-primary);
+}
+
+.cronDeleteBtn:hover {
+  border-color: #e05252;
+  color: #e05252;
+}
+
+/* Cron add/edit form */
+.cronForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+
+.formRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.formLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  width: 72px;
+  flex-shrink: 0;
+  padding-top: 5px;
+}
+
+.formInput {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  outline: none;
+  transition: border-color 0.12s;
+}
+
+.formInput:focus {
+  border-color: var(--border-focus);
+}
+
+.formTextarea {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  outline: none;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 0.12s;
+}
+
+.formTextarea:focus {
+  border-color: var(--border-focus);
+}
+
+.formActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.saveBtn {
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 5px 16px;
+  transition: opacity 0.12s;
+}
+
+.saveBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cancelBtn {
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 16px;
+  transition: border-color 0.12s;
+}
+
+.cancelBtn:hover {
+  border-color: var(--border-focus);
+}
+
 /* IM 消息日志 */
 .imCard {
   padding: 10px 12px;

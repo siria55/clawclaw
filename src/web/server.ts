@@ -23,6 +23,8 @@ export interface CronJobStatus {
   schedule: string;
   message: string;
   timezone: string;
+  chatId: string;
+  platform: string;
 }
 
 /** IM platform connection info exposed via /api/status */
@@ -136,6 +138,9 @@ export class WebServer {
       agentConfigStorage: undefined,
       onAgentConfig: undefined,
       imEventStorage: undefined,
+      cronStorage: undefined,
+      onCronAdd: undefined,
+      onCronDelete: undefined,
       ...config,
     };
     this.#routes = { ...config.routes };
@@ -200,6 +205,22 @@ export class WebServer {
 
     if (req.method === "GET" && path === "/api/im-log") {
       this.#handleIMLog(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/cron") {
+      this.#handleGetCron(res);
+      return;
+    }
+
+    if (req.method === "POST" && path === "/api/cron") {
+      await this.#handlePostCron(req, res);
+      return;
+    }
+
+    if (req.method === "DELETE" && path.startsWith("/api/cron/")) {
+      const id = path.slice("/api/cron/".length);
+      this.#handleDeleteCron(id, res);
       return;
     }
 
@@ -320,6 +341,51 @@ export class WebServer {
     const total = storage ? storage.total : 0;
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ events, total }));
+  }
+
+  #handleGetCron(res: ServerResponse): void {
+    const jobs = this.#config.cronStorage?.read() ?? [];
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ jobs }));
+  }
+
+  async #handlePostCron(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readBody(req);
+    let incoming: CronJobConfig;
+    try {
+      incoming = JSON.parse(body) as CronJobConfig;
+    } catch {
+      res.writeHead(400).end("Invalid JSON");
+      return;
+    }
+    if (!this.#config.cronStorage) {
+      res.writeHead(503).end("Cron storage not configured");
+      return;
+    }
+    const jobs = this.#config.cronStorage.read();
+    const idx = jobs.findIndex((j) => j.id === incoming.id);
+    if (idx >= 0) {
+      jobs[idx] = incoming;
+    } else {
+      jobs.push(incoming);
+    }
+    this.#config.cronStorage.write(jobs);
+    if (incoming.enabled) this.#config.onCronAdd?.(incoming);
+    else this.#config.onCronDelete?.(incoming.id);
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ ok: true }));
+  }
+
+  #handleDeleteCron(id: string, res: ServerResponse): void {
+    if (!this.#config.cronStorage) {
+      res.writeHead(503).end("Cron storage not configured");
+      return;
+    }
+    const jobs = this.#config.cronStorage.read().filter((j) => j.id !== id);
+    this.#config.cronStorage.write(jobs);
+    this.#config.onCronDelete?.(id);
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ ok: true }));
   }
 
   #handleGetIMConfig(res: ServerResponse): void {

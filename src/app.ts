@@ -30,6 +30,7 @@ import { ConfigStorage } from "./config/storage.js";
 import { createSaveNewsTool } from "./tools/news.js";
 import { createMemoryTools } from "./tools/memory.js";
 import type { Message } from "./llm/types.js";
+import type { CronJobConfig } from "./cron/types.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig } from "./config/types.js";
 
 // ── 存储 ──────────────────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ const imEventStorage = new IMEventStorage();
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/llm-config.json");
 const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent-config.json");
+const cronStorage = new ConfigStorage<CronJobConfig[]>("./data/cron-config.json");
 
 const DEFAULT_SYSTEM = "你是一个高效的 AI 助手，可以搜索和保存新闻、管理长期记忆。";
 
@@ -156,32 +158,45 @@ const webServer = new WebServer({
     ].join("\n"));
   },
   getStatus: () => ({
-    cronJobs: cron.jobIds.map((id) => ({
-      id,
-      schedule: "—",
-      message: "—",
-      timezone: "Asia/Shanghai",
-    })),
+    cronJobs: cron.list().map((j) => ({ ...j, timezone: "Asia/Shanghai" })),
     connections: [
       { platform: "feishu", label: "飞书 Bot", connected: !!feishu },
     ],
   }),
+  cronStorage,
+  onCronAdd: (cfg) => registerCronJob(cfg),
+  onCronDelete: (id) => cron.remove(id),
 });
 
 // ── CronScheduler（定时任务）─────────────────────────────────────────────────
 
 const cron = new CronScheduler({ timezone: "Asia/Shanghai" });
 
-// 每天早上 9:00 发送日报（仅在飞书初始配置后启用）
-if (feishu) {
+/** Register one CronJobConfig into the scheduler (if enabled and platform is available). */
+function registerCronJob(cfg: CronJobConfig): void {
+  const platform = cfg.platform === "feishu" ? feishu : undefined;
+  if (!platform || !cfg.chatId) return;
+  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, agent, delivery: { platform, chatId: cfg.chatId } });
+}
+
+// Seed default daily-digest job if cron-config.json is empty
+if (cronStorage.read().length === 0) {
   const chatId = imConfigStorage.read().feishu?.chatId ?? process.env["FEISHU_CHAT_ID"] ?? "";
-  cron.add({
-    id: "daily-digest",
-    schedule: "0 9 * * *",
-    message: "请搜索今天的科技新闻头条，保存到新闻库，并生成一份简短的日报摘要。",
-    agent,
-    delivery: { platform: feishu, chatId },
-  });
+  if (chatId) {
+    cronStorage.write([{
+      id: "daily-digest",
+      schedule: "0 9 * * *",
+      message: "请搜索今天的科技新闻头条，保存到新闻库，并生成一份简短的日报摘要。",
+      chatId,
+      platform: "feishu",
+      enabled: true,
+    }]);
+  }
+}
+
+// Load persisted cron jobs
+for (const cfg of cronStorage.read()) {
+  if (cfg.enabled) registerCronJob(cfg);
 }
 
 // ── 启动 ──────────────────────────────────────────────────────────────────────
