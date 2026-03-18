@@ -83,6 +83,7 @@ export function StatusView(): React.JSX.Element {
   const [form, setForm] = useState<CronJobConfig>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [imEvents, setIMEvents] = useState<IMEvent[]>([]);
+  const [imFilter, setIMFilter] = useState<"all" | "group" | "direct">("all");
   const lastIdRef = useRef<string | undefined>(undefined);
 
   const load = (): void => {
@@ -225,22 +226,38 @@ export function StatusView(): React.JSX.Element {
 
         {/* IM 消息日志 */}
         <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>IM 消息日志</h3>
-          {imEvents.length === 0 && <p className={styles.empty}>暂无 IM 消息</p>}
-          {[...imEvents].reverse().map((e) => (
-            <div key={e.id} className={styles.imCard}>
-              <div className={styles.imMeta}>
-                <span className={styles.imPlatform}>{e.platform}</span>
-                {e.userId && <span className={styles.imId} title={`点击复制: ${e.userId}`} onClick={() => void navigator.clipboard.writeText(e.userId)}>用户 {e.userId.slice(0, 16)}</span>}
-                {e.chatId && <span className={styles.imId} title={`点击复制: ${e.chatId}`} onClick={() => void navigator.clipboard.writeText(e.chatId)}>会话 {e.chatId.slice(0, 16)}</span>}
-                <span className={styles.imTime}>{formatTime(e.timestamp)}</span>
-              </div>
-              <p className={styles.imText}>{e.text}</p>
-              {e.replyText !== undefined && (
-                <p className={styles.imReply}>{e.replyText.slice(0, 120)}{e.replyText.length > 120 ? "…" : ""}</p>
-              )}
+          <div className={styles.sectionHeader}>
+            <h3 className={styles.sectionTitle}>IM 消息日志</h3>
+            <div className={styles.imTabs}>
+              {(["all", "group", "direct"] as const).map((f) => (
+                <button key={f} className={`${styles.imTab} ${imFilter === f ? styles.imTabActive : ""}`} onClick={() => setIMFilter(f)}>
+                  {f === "all" ? "全部" : f === "group" ? "群聊" : "直发"}
+                </button>
+              ))}
             </div>
-          ))}
+          </div>
+          {(() => {
+            const filtered = [...imEvents].reverse().filter((e) => {
+              if (imFilter === "group") return e.chatId.startsWith("oc_");
+              if (imFilter === "direct") return e.chatId.startsWith("ou_");
+              return true;
+            });
+            if (filtered.length === 0) return <p className={styles.empty}>暂无 IM 消息</p>;
+            return filtered.map((e) => (
+              <div key={e.id} className={styles.imCard}>
+                <div className={styles.imMeta}>
+                  <span className={styles.imPlatform}>{e.platform}</span>
+                  {e.userId && <span className={styles.imId} title={`点击复制: ${e.userId}`} onClick={() => void navigator.clipboard.writeText(e.userId)}>用户 {e.userId.slice(0, 16)}</span>}
+                  {e.chatId && <span className={styles.imId} title={`点击复制: ${e.chatId}`} onClick={() => void navigator.clipboard.writeText(e.chatId)}>会话 {e.chatId.slice(0, 16)}</span>}
+                  <span className={styles.imTime}>{formatTime(e.timestamp)}</span>
+                </div>
+                <p className={styles.imText}>{e.text}</p>
+                {e.replyText !== undefined && (
+                  <p className={styles.imReply}>{e.replyText.slice(0, 120)}{e.replyText.length > 120 ? "…" : ""}</p>
+                )}
+              </div>
+            ));
+          })()}
         </section>
       </div>
     </div>

@@ -74,7 +74,7 @@ export class IMEventStorage {
   #persist(): void {
     if (!this.#filePath) return;
     try {
-      writeFileSync(this.#filePath, JSON.stringify({ events: this.#events, counter: this.#counter }), "utf8");
+      writeFileSync(this.#filePath, JSON.stringify({ events: this.#events, counter: this.#counter }, null, 2), "utf8");
     } catch {
       // non-fatal
     }

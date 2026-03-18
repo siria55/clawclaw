@@ -37,7 +37,7 @@ export class ConversationStorage {
 
   #persist(): void {
     try {
-      writeFileSync(this.#filePath, JSON.stringify(this.#data), "utf8");
+      writeFileSync(this.#filePath, JSON.stringify(this.#data, null, 2), "utf8");
     } catch {
       // non-fatal
     }
