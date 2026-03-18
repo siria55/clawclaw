@@ -1,6 +1,6 @@
 ---
 id: daily-digest
-description: 浏览器搜索科技新闻，生成 HTML 日报截图并发送到飞书
+description: 浏览器搜索科技新闻，生成 HTML 日报并截图保存
 queries: AI科技,创业投资,互联网动态
 max-articles: 12
 ---
