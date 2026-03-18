@@ -23,12 +23,10 @@ import { FeishuPlatform } from "./platform/feishu.js";
 import { ClawServer } from "./server/index.js";
 import { WebServer } from "./web/server.js";
 import { CronScheduler } from "./cron/scheduler.js";
-import { NewsStorage } from "./news/storage.js";
 import { MemoryStorage } from "./memory/storage.js";
 import { IMEventStorage } from "./im/storage.js";
 import { ConversationStorage } from "./im/conversations.js";
 import { ConfigStorage } from "./config/storage.js";
-import { createSaveNewsTool } from "./tools/news.js";
 import { createMemoryTools } from "./tools/memory.js";
 import { createReadFileTool } from "./tools/read-file.js";
 import { SkillRegistry } from "./skills/registry.js";
@@ -44,7 +42,6 @@ mkdirSync("./data/im", { recursive: true });
 mkdirSync("./data/cron", { recursive: true });
 mkdirSync("./data/skills", { recursive: true });
 
-const newsStorage = new NewsStorage("./data/agent/news.json");
 const memoryStorage = new MemoryStorage("./data/agent/memory.json");
 const imEventStorage = new IMEventStorage(200, "./data/im/im-events.json");
 const conversationStorage = new ConversationStorage("./data/im/conversations.json");
@@ -83,7 +80,6 @@ const agent = new Agent({
   llm,
 
   tools: [
-    createSaveNewsTool(newsStorage),
     ...createMemoryTools(memoryStorage),
     createReadFileTool(() => agentConfigStorage.read().allowedPaths ?? ["./data/skills"]),
   ],

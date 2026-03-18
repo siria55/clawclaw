@@ -12,11 +12,9 @@ import { AnthropicProvider } from "../llm/anthropic.js";
 import { FeishuPlatform } from "../platform/feishu.js";
 import { ConfigStorage } from "../config/storage.js";
 import { MemoryStorage } from "../memory/storage.js";
-import { NewsStorage } from "../news/storage.js";
 import { IMEventStorage } from "../im/storage.js";
 import { ConversationStorage } from "../im/conversations.js";
 import { createMemoryTools } from "../tools/memory.js";
-import { createSaveNewsTool } from "../tools/news.js";
 import { createReadFileTool } from "../tools/read-file.js";
 import { SkillRegistry } from "../skills/registry.js";
 import { DailyDigestSkill } from "../skills/daily-digest/index.js";
@@ -32,7 +30,6 @@ mkdirSync("./data/cron", { recursive: true });
 mkdirSync("./data/skills", { recursive: true });
 
 const memoryStorage = new MemoryStorage("./data/agent/memory.json");
-const newsStorage = new NewsStorage("./data/agent/news.json");
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/agent/llm-config.json");
 const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json");
@@ -57,7 +54,6 @@ const agentConfig = {
   system: () => agentConfigStorage.read().systemPrompt ?? DEFAULT_SYSTEM,
   llm,
   tools: [
-    createSaveNewsTool(newsStorage),
     ...createMemoryTools(memoryStorage),
     createReadFileTool(() => agentConfigStorage.read().allowedPaths ?? ["./data/skills"]),
   ],

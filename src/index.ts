@@ -4,7 +4,7 @@ export { ClawServer } from "./server/index.js";
 export { WebServer } from "./web/server.js";
 export type { WebServerConfig } from "./web/server.js";
 export { FeishuPlatform, FeishuChallenge, WecomPlatform } from "./platform/index.js";
-export { defineTool, createSaveNewsTool, createMemoryTools } from "./tools/index.js";
+export { defineTool, createMemoryTools } from "./tools/index.js";
 export { CronScheduler } from "./cron/index.js";
 export type { CronJob, CronSchedulerOptions } from "./cron/index.js";
 export { LLMContextCompressor, estimateTokens } from "./core/compressor.js";

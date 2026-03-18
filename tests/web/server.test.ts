@@ -3,7 +3,6 @@ import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebServer } from "../../src/web/server.js";
-import { NewsStorage } from "../../src/news/storage.js";
 import { MemoryStorage } from "../../src/memory/storage.js";
 import { ConfigStorage } from "../../src/config/storage.js";
 import type { IMConfig, AgentMetaConfig } from "../../src/config/types.js";
@@ -239,7 +238,7 @@ describe("WebServer", () => {
     await server.stop();
   });
 
-  it("GET /api/news returns empty page when newsStorage is not provided", async () => {
+  it("GET /api/news returns empty page when no skillDataRoot", async () => {
     const agent = makeMockAgent();
     const { server, url } = await startWebServer(agent);
     const res = await fetch(`${url}/api/news`);
@@ -248,47 +247,6 @@ describe("WebServer", () => {
     expect(body.articles).toEqual([]);
     expect(body.total).toBe(0);
     await server.stop();
-  });
-
-  it("GET /api/news returns articles from newsStorage", async () => {
-    const agent = makeMockAgent();
-    const newsDir = join(tmpdir(), `clawclaw-srv-news-${Date.now()}`);
-    mkdirSync(newsDir, { recursive: true });
-    const newsStorage = new NewsStorage(join(newsDir, "news.json"));
-    newsStorage.save({ title: "Hello News", url: "https://x.com", summary: "summary", source: "Src", tags: [] });
-
-    const server = new WebServer({ agent, port: 0, staticDir, newsStorage });
-    await server.start();
-    const url = `http://localhost:${server.port}`;
-
-    const res = await fetch(`${url}/api/news`);
-    const body = await res.json() as { articles: { title: string }[]; total: number };
-    expect(body.total).toBe(1);
-    expect(body.articles[0].title).toBe("Hello News");
-
-    await server.stop();
-    rmSync(newsDir, { recursive: true, force: true });
-  });
-
-  it("GET /api/news?q= filters by keyword", async () => {
-    const agent = makeMockAgent();
-    const newsDir = join(tmpdir(), `clawclaw-srv-news-q-${Date.now()}`);
-    mkdirSync(newsDir, { recursive: true });
-    const newsStorage = new NewsStorage(join(newsDir, "news.json"));
-    newsStorage.save({ title: "AI Weekly", url: "https://x.com", summary: "s", source: "S", tags: [] });
-    newsStorage.save({ title: "Sports Report", url: "https://x.com", summary: "s", source: "S", tags: [] });
-
-    const server = new WebServer({ agent, port: 0, staticDir, newsStorage });
-    await server.start();
-    const url = `http://localhost:${server.port}`;
-
-    const res = await fetch(`${url}/api/news?q=ai`);
-    const body = await res.json() as { articles: { title: string }[]; total: number };
-    expect(body.total).toBe(1);
-    expect(body.articles[0].title).toBe("AI Weekly");
-
-    await server.stop();
-    rmSync(newsDir, { recursive: true, force: true });
   });
 
   it("GET /api/im-config returns empty object when no imConfigStorage", async () => {
