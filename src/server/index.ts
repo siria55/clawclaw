@@ -3,6 +3,7 @@ import type { Agent } from "../core/agent.js";
 import { FeishuChallenge } from "../platform/feishu.js";
 import { WecomEcho } from "../platform/wecom.js";
 import type { IMPlatform } from "../platform/types.js";
+import type { IMEventStorage } from "../im/storage.js";
 
 export interface ClawServerConfig {
   port?: number;
@@ -11,6 +12,8 @@ export interface ClawServerConfig {
    * e.g. { "/feishu": { platform: feishuPlatform, agent: myAgent } }
    */
   routes: Record<string, { platform: IMPlatform; agent: Agent }>;
+  /** Optional storage for recording incoming IM events. */
+  imEventStorage?: IMEventStorage;
 }
 
 /**
@@ -26,14 +29,14 @@ export interface ClawServerConfig {
  * ```
  */
 export class ClawServer {
-  readonly #config: Required<ClawServerConfig>;
+  readonly #config: Required<Omit<ClawServerConfig, "imEventStorage">> & { imEventStorage: IMEventStorage | undefined };
   readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   readonly #server: ReturnType<typeof createServer>;
   #activeRequests = 0;
   #shutdownHandler: (() => void) | undefined;
 
   constructor(config: ClawServerConfig) {
-    this.#config = { port: 3000, ...config };
+    this.#config = { port: 3000, imEventStorage: undefined, ...config };
     this.#routes = { ...config.routes };
     this.#server = createServer((req, res) => {
       void this.#handleRequest(req, res);
@@ -144,14 +147,25 @@ export class ClawServer {
     // Acknowledge immediately; run agent asynchronously
     res.writeHead(200).end("ok");
 
+    const eventId = this.#config.imEventStorage?.append({
+      platform: message.platform,
+      userId: message.userId,
+      chatId: message.chatId,
+      text: message.text,
+      replyText: undefined,
+    });
+
+    const contextPrefix = `[消息来源: ${message.platform} | chatId: ${message.chatId} | userId: ${message.userId}]\n`;
+
     this.#activeRequests++;
     route.agent
-      .run(message.text)
+      .run(contextPrefix + message.text)
       .then(async (result) => {
         const lastMsg = result.messages.findLast(
           (m: import("../llm/types.js").Message) => m.role === "assistant",
         );
         const reply = extractText(lastMsg?.content);
+        if (eventId !== undefined) this.#config.imEventStorage?.setReply(eventId, reply);
         if (reply) await route.platform.send(message.chatId, reply);
       })
       .catch((err: unknown) => {

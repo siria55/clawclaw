@@ -92,7 +92,9 @@ describe("ClawServer", () => {
     const res = await fetch(`${url}/hook`, { method: "POST", body: "{}" });
     expect(res.status).toBe(200);
     await new Promise((r) => setTimeout(r, 50));
-    expect(vi.mocked(agent.run)).toHaveBeenCalledWith("ping");
+    expect(vi.mocked(agent.run)).toHaveBeenCalledWith(
+      expect.stringContaining("ping"),
+    );
     await server.stop();
   });
 

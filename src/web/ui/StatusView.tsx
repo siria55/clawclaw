@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./StatusView.module.css";
 
 interface CronJobStatus {
@@ -19,16 +19,36 @@ interface SystemStatus {
   connections: ConnectionStatus[];
 }
 
-/** Fetch system status from /api/status */
+interface IMEvent {
+  id: string;
+  platform: string;
+  userId: string;
+  chatId: string;
+  text: string;
+  replyText: string | undefined;
+  timestamp: string;
+}
+
 async function fetchStatus(): Promise<SystemStatus> {
   const res = await fetch("/api/status");
   return res.json() as Promise<SystemStatus>;
 }
 
-/** Full-page status view (replaces StatusPanel floating sidebar). */
+async function fetchIMLog(since?: string): Promise<{ events: IMEvent[]; total: number }> {
+  const url = since ? `/api/im-log?since=${since}` : "/api/im-log";
+  const res = await fetch(url);
+  return res.json() as Promise<{ events: IMEvent[]; total: number }>;
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 export function StatusView(): React.JSX.Element {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [imEvents, setIMEvents] = useState<IMEvent[]>([]);
+  const lastIdRef = useRef<string | undefined>(undefined);
 
   const load = (): void => {
     setLoading(true);
@@ -36,6 +56,29 @@ export function StatusView(): React.JSX.Element {
       .then((s) => setStatus(s))
       .finally(() => setLoading(false));
   };
+
+  // Initial IM log load
+  useEffect(() => {
+    void fetchIMLog().then(({ events }) => {
+      if (events.length > 0) {
+        setIMEvents(events.slice(-50));
+        lastIdRef.current = events[events.length - 1]?.id;
+      }
+    });
+  }, []);
+
+  // Poll for new IM events every 3s
+  useEffect(() => {
+    const timer = setInterval(() => {
+      void fetchIMLog(lastIdRef.current).then(({ events }) => {
+        if (events.length > 0) {
+          setIMEvents((prev) => [...prev, ...events].slice(-50));
+          lastIdRef.current = events[events.length - 1]?.id;
+        }
+      });
+    }, 3000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => { load(); }, []);
 
@@ -80,6 +123,25 @@ export function StatusView(): React.JSX.Element {
             </div>
           ))}
           {!status && !loading && <p className={styles.empty}>—</p>}
+        </section>
+
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>IM 消息日志</h3>
+          {imEvents.length === 0 && <p className={styles.empty}>暂无 IM 消息</p>}
+          {[...imEvents].reverse().map((e) => (
+            <div key={e.id} className={styles.imCard}>
+              <div className={styles.imMeta}>
+                <span className={styles.imPlatform}>{e.platform}</span>
+                <span className={styles.imId} title={e.userId}>用户 {e.userId.slice(0, 12)}</span>
+                <span className={styles.imId} title={e.chatId}>群 {e.chatId.slice(0, 12)}</span>
+                <span className={styles.imTime}>{formatTime(e.timestamp)}</span>
+              </div>
+              <p className={styles.imText}>{e.text}</p>
+              {e.replyText !== undefined && (
+                <p className={styles.imReply}>{e.replyText.slice(0, 120)}{e.replyText.length > 120 ? "…" : ""}</p>
+              )}
+            </div>
+          ))}
         </section>
       </div>
     </div>

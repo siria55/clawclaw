@@ -8,6 +8,7 @@ import { FeishuChallenge } from "../platform/feishu.js";
 import { WecomEcho } from "../platform/wecom.js";
 import type { AgentConfig } from "../core/types.js";
 import type { IMPlatform } from "../platform/types.js";
+import type { IMEventStorage } from "../im/storage.js";
 import type { NewsStorage } from "../news/storage.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
@@ -71,6 +72,8 @@ export interface WebServerConfig {
   agentConfigStorage?: ConfigStorage<AgentMetaConfig>;
   /** Called after POST /api/config/agent to hot-reload agent name/system prompt. */
   onAgentConfig?: (config: AgentMetaConfig) => void;
+  /** Optional storage for recording incoming IM events (used by GET /api/im-log). */
+  imEventStorage?: IMEventStorage;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -92,7 +95,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     newsStorage: NewsStorage | undefined;
@@ -103,6 +106,7 @@ export class WebServer {
     onLLMConfig: ((config: LLMConfig) => void) | undefined;
     agentConfigStorage: ConfigStorage<AgentMetaConfig> | undefined;
     onAgentConfig: ((config: AgentMetaConfig) => void) | undefined;
+    imEventStorage: IMEventStorage | undefined;
   };
   readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   readonly #server: ReturnType<typeof createServer>;
@@ -121,6 +125,7 @@ export class WebServer {
       onLLMConfig: undefined,
       agentConfigStorage: undefined,
       onAgentConfig: undefined,
+      imEventStorage: undefined,
       ...config,
     };
     this.#routes = { ...config.routes };
@@ -180,6 +185,11 @@ export class WebServer {
 
     if (req.method === "GET" && path === "/api/memory") {
       this.#handleMemory(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/im-log") {
+      this.#handleIMLog(req, res);
       return;
     }
 
@@ -290,6 +300,16 @@ export class WebServer {
 
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ entries, total, page, pageSize }));
+  }
+
+  #handleIMLog(req: IncomingMessage, res: ServerResponse): void {
+    const qs = new URL(req.url ?? "/", "http://localhost").searchParams;
+    const since = qs.get("since") ?? undefined;
+    const storage = this.#config.imEventStorage;
+    const events = storage ? storage.since(since) : [];
+    const total = storage ? storage.total : 0;
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ events, total }));
   }
 
   #handleGetIMConfig(res: ServerResponse): void {
@@ -433,13 +453,24 @@ export class WebServer {
 
     res.writeHead(200).end("ok");
 
+    const eventId = this.#config.imEventStorage?.append({
+      platform: message.platform,
+      userId: message.userId,
+      chatId: message.chatId,
+      text: message.text,
+      replyText: undefined,
+    });
+
+    const contextPrefix = `[消息来源: ${message.platform} | chatId: ${message.chatId} | userId: ${message.userId}]\n`;
+
     route.agent
-      .run(message.text)
+      .run(contextPrefix + message.text)
       .then(async (result) => {
         const lastMsg = result.messages.findLast(
           (m: import("../llm/types.js").Message) => m.role === "assistant",
         );
         const reply = extractText(lastMsg?.content);
+        if (eventId !== undefined) this.#config.imEventStorage?.setReply(eventId, reply);
         if (reply) await route.platform.send(message.chatId, reply);
       })
       .catch((err: unknown) => {

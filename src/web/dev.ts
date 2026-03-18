@@ -12,6 +12,7 @@ import { FeishuPlatform } from "../platform/feishu.js";
 import { ConfigStorage } from "../config/storage.js";
 import { MemoryStorage } from "../memory/storage.js";
 import { NewsStorage } from "../news/storage.js";
+import { IMEventStorage } from "../im/storage.js";
 import { createMemoryTools } from "../tools/memory.js";
 import { createSaveNewsTool } from "../tools/news.js";
 import type { Message } from "../llm/types.js";
@@ -60,6 +61,8 @@ const agentConfig = {
 
 const agent = new Agent(agentConfig);
 
+const imEventStorage = new IMEventStorage();
+
 function buildFeishu(): FeishuPlatform | undefined {
   const saved = imConfigStorage.read().feishu;
   if (saved?.appId && saved.appSecret && saved.verificationToken) {
@@ -78,6 +81,7 @@ const server = new WebServer({
   newsStorage,
   memoryStorage,
   imConfigStorage,
+  imEventStorage,
   llmConfigStorage,
   agentConfigStorage,
   onIMConfig: (config) => {

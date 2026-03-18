@@ -25,6 +25,7 @@ import { WebServer } from "./web/server.js";
 import { CronScheduler } from "./cron/scheduler.js";
 import { NewsStorage } from "./news/storage.js";
 import { MemoryStorage } from "./memory/storage.js";
+import { IMEventStorage } from "./im/storage.js";
 import { ConfigStorage } from "./config/storage.js";
 import { createSaveNewsTool } from "./tools/news.js";
 import { createMemoryTools } from "./tools/memory.js";
@@ -37,6 +38,7 @@ mkdirSync("./data", { recursive: true });
 
 const newsStorage = new NewsStorage("./data/news.json");
 const memoryStorage = new MemoryStorage("./data/memory.json");
+const imEventStorage = new IMEventStorage();
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/llm-config.json");
 const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent-config.json");
@@ -110,6 +112,7 @@ let feishu = buildFeishu();
 const clawServer = new ClawServer({
   port: Number(process.env["PORT"] ?? 3000),
   routes: {},
+  imEventStorage,
 });
 
 if (feishu) clawServer.setRoute("/feishu", { platform: feishu, agent });
@@ -124,6 +127,7 @@ const webServer = new WebServer({
   memoryStorage,
   imConfigStorage,
   llmConfigStorage,
+  imEventStorage,
   agentConfigStorage,
   onIMConfig: (config: IMConfig) => {
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
