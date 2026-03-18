@@ -30,6 +30,11 @@ export class Agent {
     this.#llm = provider;
   }
 
+  /** Expose current LLM for sub-agent construction. */
+  get llm(): LLMProvider {
+    return this.#llm;
+  }
+
   /** Hot-replace the system prompt function without restarting the agent. */
   updateSystem(fn: () => string): void {
     this.#systemFn = fn;

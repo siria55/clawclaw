@@ -1,7 +1,10 @@
+import { z } from "zod";
 import type { Page, Browser } from "playwright";
 import { chromium } from "playwright";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { Agent } from "../../core/agent.js";
+import { defineTool } from "../../tools/types.js";
 import type { Skill, SkillContext } from "../types.js";
 import type { NewsArticle } from "../../news/types.js";
 import type { FeishuPlatform } from "../../platform/feishu.js";
@@ -16,47 +19,85 @@ interface RawArticle {
 const DEFAULT_QUERIES = ["AI科技", "创业投资", "互联网动态"];
 const MAX_ARTICLES = 12;
 
-/**
- * Search Baidu News for a given query using Playwright.
- */
-async function searchBaiduNews(page: Page, query: string): Promise<RawArticle[]> {
-  const url = `https://news.baidu.com/ns?word=${encodeURIComponent(query)}&tn=news&cl=2&rn=20&ct=1`;
-  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-  const items = await page.locator(".result").all();
-  const articles: RawArticle[] = [];
-  for (const item of items) {
-    if (articles.length >= 8) break;
-    const titleEl = item.locator("h3 a").first();
-    const title = ((await titleEl.textContent()) ?? "").trim();
-    if (!title) continue;
-    const href = (await titleEl.getAttribute("href")) ?? "";
-    if (!href) continue;
-    const summary = ((await item.locator(".news-summary, .c-summary").first().textContent().catch(() => "")) ?? "").trim();
-    const source = ((await item.locator(".news-from, .c-author").first().textContent().catch(() => "")) ?? "").trim();
-    articles.push({ title, url: href, summary, source: source || "百度新闻" });
-  }
-  return articles;
+const RawArticleSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+  summary: z.string(),
+  source: z.string(),
+});
+
+/** Browser tools for the news sub-agent to operate a Playwright page. */
+function createBrowserTools(page: Page) {
+  return [
+    defineTool({
+      name: "browser_navigate",
+      description: "导航到指定 URL，返回页面标题和可见文字（最多 4000 字符）",
+      schema: z.object({ url: z.string() }),
+      execute: async ({ url }) => {
+        try {
+          await page.goto(url, { waitUntil: "networkidle", timeout: 45_000 });
+        } catch { /* timeout — read whatever rendered */ }
+        const title = await page.title().catch(() => "");
+        const text = ((await page.locator("body").textContent().catch(() => "")) ?? "")
+          .replace(/\s+/g, " ").trim();
+        return { output: `[${title}]\n${text.slice(0, 4000)}` };
+      },
+    }),
+    defineTool({
+      name: "browser_get_links",
+      description: "获取当前页面所有链接（文字 + href），用于提取文章 URL",
+      schema: z.object({}),
+      execute: async () => {
+        const els = await page.locator("a[href]").all();
+        const lines: string[] = [];
+        for (const el of els.slice(0, 80)) {
+          const text = ((await el.textContent().catch(() => "")) ?? "").trim().slice(0, 60);
+          const href = (await el.getAttribute("href").catch(() => "")) ?? "";
+          if (text.length > 3 && href) lines.push(`${text} | ${href}`);
+        }
+        return { output: lines.join("\n") };
+      },
+    }),
+  ];
 }
 
 /**
- * Crawl top articles from 36Kr homepage using Playwright locators.
+ * Run a news sub-agent that operates the browser to search and extract articles.
+ * Returns parsed articles or empty array on failure.
  */
-async function crawl36kr(page: Page): Promise<RawArticle[]> {
-  await page.goto("https://36kr.com/", { waitUntil: "domcontentloaded", timeout: 30_000 });
-  const anchors = await page.locator(".article-item-title a, .item-title a").all();
-  const articles: RawArticle[] = [];
-  const seen = new Set<string>();
-  for (const anchor of anchors) {
-    if (articles.length >= 10) break;
-    const title = ((await anchor.textContent()) ?? "").trim();
-    if (!title) continue;
-    const href = (await anchor.getAttribute("href")) ?? "";
-    const url = href.startsWith("http") ? href : `https://36kr.com${href}`;
-    if (seen.has(url)) continue;
-    seen.add(url);
-    articles.push({ title, url, summary: "", source: "36Kr" });
+async function searchNewsWithAgent(browser: Browser, ctx: SkillContext, queries: string[]): Promise<RawArticle[]> {
+  const page = await browser.newPage();
+  try {
+    const subAgent = new Agent({
+      name: "news-browser",
+      system: "你是新闻搜索助手，通过浏览器工具抓取新闻，最终返回 JSON 格式的文章列表。只返回 JSON，不要其他文字。",
+      llm: ctx.agent.llm,
+      compressor: undefined,
+      tools: createBrowserTools(page),
+    });
+
+    const searchUrls = queries
+      .map((q) => `https://news.baidu.com/ns?word=${encodeURIComponent(q)}&tn=news&cl=2&rn=20&ct=1`)
+      .join("\n");
+
+    const prompt = `请依次搜索以下新闻关键词（每行一个搜索 URL）：\n${searchUrls}\n\n步骤：\n1. 用 browser_navigate 访问每个 URL\n2. 用 browser_get_links 获取页面链接，从中识别新闻文章\n3. 汇总后返回 JSON 数组（最多 ${MAX_ARTICLES} 篇）：\n[{"title":"文章标题","url":"文章完整URL","summary":"摘要（若无则空字符串）","source":"来源媒体"}]\n\n只返回 JSON 数组。`;
+
+    const result = await subAgent.run(prompt, { maxTurns: 12 });
+    const lastMsg = [...result.messages].reverse().find((m) => m.role === "assistant");
+    const text = typeof lastMsg?.content === "string" ? lastMsg.content : "";
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return [];
+    const parsed = JSON.parse(match[0]) as unknown[];
+    return parsed.flatMap((item) => {
+      const r = RawArticleSchema.safeParse(item);
+      return r.success ? [r.data] : [];
+    });
+  } catch (err) {
+    console.error("[DailyDigest] agent search failed:", err);
+    return [];
+  } finally {
+    await page.close();
   }
-  return articles;
 }
 
 /**
@@ -137,37 +178,11 @@ async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
 }
 
 /**
- * Collect articles from Baidu News searches + 36Kr fallback, deduplicated, top MAX_ARTICLES.
- */
-async function collectArticles(browser: Browser, queries: string[]): Promise<RawArticle[]> {
-  const seen = new Set<string>();
-  const all: RawArticle[] = [];
-  const page = await browser.newPage();
-  try {
-    for (const query of queries) {
-      const results = await searchBaiduNews(page, query);
-      for (const a of results) {
-        if (!seen.has(a.url)) { seen.add(a.url); all.push(a); }
-      }
-    }
-    if (all.length < MAX_ARTICLES) {
-      const fallback = await crawl36kr(page);
-      for (const a of fallback) {
-        if (!seen.has(a.url)) { seen.add(a.url); all.push(a); }
-      }
-    }
-  } finally {
-    await page.close();
-  }
-  return all.slice(0, MAX_ARTICLES);
-}
-
-/**
- * Daily digest skill — searches tech news via browser, renders a styled digest, screenshots it, and sends the image to Feishu.
+ * Daily digest skill — Agent operates browser to search tech news, renders a styled digest, screenshots it, and sends to Feishu.
  */
 export class DailyDigestSkill implements Skill {
   readonly id = "daily-digest";
-  readonly description = "浏览器搜索科技新闻，生成 HTML 日报截图并发送到飞书";
+  readonly description = "Agent 操作浏览器搜索科技新闻，生成 HTML 日报截图并发送到飞书";
   readonly #queries: string[];
 
   constructor(options: { queries?: string[] } = {}) {
@@ -177,24 +192,20 @@ export class DailyDigestSkill implements Skill {
   async run(ctx: SkillContext): Promise<void> {
     const browser = await chromium.launch({ headless: true });
     try {
-      const articles = await collectArticles(browser, this.#queries);
+      const articles = await searchNewsWithAgent(browser, ctx, this.#queries);
+      console.log(`[DailyDigest] got ${articles.length} articles`);
 
       if (ctx.newsStorage) {
         for (const a of articles) {
           ctx.newsStorage.save({
-            title: a.title,
-            url: a.url,
-            summary: a.summary,
-            source: a.source,
+            title: a.title, url: a.url, summary: a.summary, source: a.source,
             tags: ["tech", "daily-digest"],
           } satisfies Omit<NewsArticle, "id" | "savedAt">);
         }
       }
 
       const dateKey = new Date().toLocaleDateString("sv-SE");
-      const dateLabel = new Date().toLocaleDateString("zh-CN", {
-        year: "numeric", month: "long", day: "numeric",
-      });
+      const dateLabel = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
       const html = renderHtml(articles, dateLabel);
       const imageBuffer = await screenshotHtml(browser, html);
 
