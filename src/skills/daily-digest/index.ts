@@ -7,8 +7,7 @@ import { writeFileSync } from "node:fs";
 import { Agent } from "../../core/agent.js";
 import { defineTool } from "../../tools/types.js";
 import { loadSkillDef } from "../loader.js";
-import type { Skill, SkillContext } from "../types.js";
-import type { FeishuPlatform } from "../../platform/feishu.js";
+import type { Skill, SkillContext, SkillResult } from "../types.js";
 
 interface RawArticle {
   title: string;
@@ -211,7 +210,7 @@ export class DailyDigestSkill implements Skill {
     this.#instructions = def.instructions;
   }
 
-  async run(ctx: SkillContext): Promise<void> {
+  async run(ctx: SkillContext): Promise<SkillResult> {
     const browser = await chromium.launch({ headless: true });
     try {
       const prompt = buildPrompt(this.#instructions, this.#queries, this.#maxArticles);
@@ -230,13 +229,9 @@ export class DailyDigestSkill implements Skill {
         writeFileSync(join(dataDirPath, `${dateKey}.png`), imageBuffer);
         writeFileSync(join(dataDirPath, `${dateKey}.json`), JSON.stringify(articles, null, 2), "utf8");
         ctx.log?.(`💾 文件已保存到 ${dataDirPath}`);
+        return { outputPath: join(dataDirPath, `${dateKey}.png`) };
       }
-
-      if (ctx.delivery) {
-        ctx.log?.(`📨 发送图片到飞书…`);
-        const platform = ctx.delivery.platform as unknown as FeishuPlatform;
-        await platform.sendImageBuffer(ctx.delivery.chatId, imageBuffer);
-      }
+      return {};
     } finally {
       await browser.close();
     }

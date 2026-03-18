@@ -25,7 +25,8 @@ IM 平台 (飞书 / 企业微信 / ...)
     ↓ 调用 IM API 发送
 IM 平台
 
-CronScheduler             ← 定时触发 Agent 主动任务
+CronScheduler             ← 定时触发任务（Agent 消息 / Skill 执行）
+Skill                     ← 独立内容生成单元（浏览器搜索、截图等）
 WebServer                 ← 本地调试 + 新闻库查阅界面
 ```
 
@@ -80,14 +81,57 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 | `memory_save` | 保存长期记忆（文本 + 标签） |
 | `memory_search` | 关键词检索记忆库，返回摘要列表 |
 | `memory_get` | 按 id 取回完整记忆内容 |
+| `read_file` | 读取 allowedPaths 白名单内的文件（供 Agent 查阅 Skill 输出） |
 
 ### CronScheduler
 
-让 Agent 主动触发任务，不再只等待 IM 消息。支持标准 5 字段 cron 表达式。每次触发后，Agent 执行指定消息并通过 IMPlatform 发送回复。
+让 Agent 或 Skill 主动触发任务，不再只等待 IM 消息。支持标准 5 字段 cron 表达式。
 
-### NewsStorage（新闻库）
+触发模式：
+- **Agent 模式**：调用 Agent.run()，将 LLM 回复发送到 IM
+- **直发模式**（`direct: true`）：直接发送预设文本或图片
+- **Skill 模式**（`skillId`）：执行指定 Skill，生成内容后自动将产出文件发送到 IM
 
-文件持久化的新闻存储。Agent 通过 `save_news` 工具将搜索到的新闻写入库，Web UI 新闻库标签页可按关键词、标签、分页浏览全部历史文章。
+### Skills 系统
+
+Skills 是独立的内容生成单元，职责收窄为"生成内容 + 保存文件"，不感知 IM 平台细节。
+
+**架构：**
+```
+CronScheduler → skill.run(ctx) → SkillResult { outputPath }
+              → 如有 outputPath → platform.sendImage(outputPath)
+
+WebUI 手动运行：
+onRunSkill → skill.run(ctx) → SkillResult（outputPath 忽略，仅查看日志）
+```
+
+**SKILL.md 标准：**
+每个 Skill 以子目录形式存放，包含 `SKILL.md`（元数据 + Agent 指令）和 `index.ts`（执行逻辑）。`SKILL.md` 使用简单 YAML frontmatter：
+```
+---
+id: daily-digest
+description: 浏览器搜索科技新闻，生成 HTML 日报截图
+queries: AI科技,创业投资,互联网动态
+max-articles: 12
+---
+Agent 指令...
+```
+
+**内置 Skill — DailyDigestSkill：**
+1. 启动 Playwright 浏览器，创建新闻搜索子 Agent
+2. 子 Agent 使用 `browser_navigate` / `browser_get_links` 工具，按 LLM 推理提取文章
+3. 渲染 HTML 日报，Playwright 截图为 PNG
+4. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
+5. 返回 `outputPath`，由 CronScheduler 调用飞书 `sendImage()` 发送
+
+**数据目录：**
+```
+data/skills/{skillId}/
+├── YYYY-MM-DD.html
+├── YYYY-MM-DD.md
+├── YYYY-MM-DD.png
+└── YYYY-MM-DD.json   ← 原始文章数组，供新闻库展示
+```
 
 ### MemoryStorage（记忆库）
 
@@ -101,15 +145,18 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 |------|------|
 | `POST /api/chat` | SSE 流式对话 |
 | `GET /api/status` | 系统状态（cron 任务、IM 连接） |
-| `GET /api/news` | 新闻库查询（关键词、标签、分页） |
+| `GET /api/news` | 新闻库查询（扫描 data/skills/*/YYYY-MM-DD.json） |
 | `GET /api/memory` | 记忆库查询（关键词、分页） |
-| `GET/POST /api/im-config` | 飞书等 IM 凭证（读写 `data/im-config.json`） |
-| `GET/POST /api/config/llm` | LLM 配置（读写 `data/llm-config.json`） |
-| `GET/POST /api/config/agent` | Agent 配置（读写 `data/agent-config.json`） |
+| `GET /api/skills` | 已注册 Skill 列表 |
+| `POST /api/skills/:id/run` | 手动触发 Skill（SSE 流式日志） |
+| `GET/POST /api/im-config` | 飞书等 IM 凭证 |
+| `GET/POST /api/config/llm` | LLM 配置 |
+| `GET/POST /api/config/agent` | Agent 配置 |
+| `GET/POST /api/cron` | Cron 任务管理 |
 
 所有 POST 配置接口均支持热更新，保存后立即生效，无需重启。
 
-Web UI 五个标签页各对应独立 URL（hash 路由）：`#chat` / `#news` / `#memory` / `#status` / `#settings`，支持直接访问和浏览器前进/后退。
+Web UI 六个标签页各对应独立 URL（hash 路由）：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#settings`，支持直接访问和浏览器前进/后退。
 
 ---
 
@@ -127,7 +174,7 @@ src/
 │   └── index.ts        createLLM() 工厂
 ├── platform/
 │   ├── types.ts        IMPlatform 接口、IMMessage 类型
-│   ├── feishu.ts       飞书适配器
+│   ├── feishu.ts       飞书适配器（含 sendImage / sendImageBuffer）
 │   └── wecom.ts        企业微信适配器
 ├── server/
 │   └── index.ts        ClawServer，24/7 常驻服务
@@ -135,25 +182,28 @@ src/
 │   ├── types.ts        Tool 接口、ToolResult、defineTool()
 │   ├── news.ts         createSaveNewsTool()
 │   ├── memory.ts       createMemoryTools()
-│   └── index.ts        公共导出
+│   └── read-file.ts    createReadFileTool()（路径白名单）
 ├── news/
-│   ├── types.ts        NewsArticle / NewsQuery / NewsPage
-│   ├── storage.ts      NewsStorage，JSON 文件持久化
-│   └── index.ts        公共导出
+│   └── storage.ts      NewsStorage，JSON 文件持久化（Agent save_news 工具用）
 ├── memory/
-│   ├── types.ts        MemoryEntry / MemoryQuery / MemorySearchResult
-│   ├── storage.ts      MemoryStorage，JSON 文件持久化
-│   └── index.ts        公共导出
+│   └── storage.ts      MemoryStorage，JSON 文件持久化
 ├── cron/
-│   ├── types.ts        CronJob 类型
+│   ├── types.ts        CronJob / CronJobConfig / CronSchedulerOptions
 │   ├── scheduler.ts    CronScheduler
 │   └── index.ts        公共导出
+├── skills/
+│   ├── types.ts        Skill / SkillContext / SkillResult 接口
+│   ├── registry.ts     SkillRegistry
+│   ├── loader.ts       loadSkillDef() — 解析 SKILL.md frontmatter
+│   └── daily-digest/
+│       ├── SKILL.md    Skill 定义（元数据 + Agent 指令）
+│       └── index.ts    DailyDigestSkill 实现
 └── web/
     ├── server.ts       WebServer，调试 API + 静态文件服务
-    └── ui/             React + Vite 前端（四标签页：对话/新闻库/状态/设置）
+    └── ui/             React + Vite 前端（六标签页）
 ```
 
-依赖方向：`server/web → platform / core`，`core → llm / tools`，`tools → news / memory`，各层不反向依赖。
+依赖方向：`server/web → platform / core`，`core → llm / tools`，`tools → news / memory`，`skills → core`，各层不反向依赖。
 
 ---
 
@@ -162,5 +212,6 @@ src/
 - **接口优于实现** — `LLMProvider`、`Tool`、`IMPlatform` 均为接口，不锁定具体实现
 - **错误不崩溃** — 工具异常、IM 发送失败均捕获处理，不影响其他会话
 - **可测试** — 核心逻辑不依赖网络，Mock LLM 和 IMPlatform 即可单元测试
-- **最小依赖** — 运行时只需 `@anthropic-ai/sdk` 和 `zod`
-- **按需加载上下文** — 记忆和知识不预置在 system prompt，通过工具检索或 getContext 钩子按需注入，保持 context window 干净
+- **最小依赖** — 运行时只需 `@anthropic-ai/sdk`、`zod` 和 `playwright`
+- **按需加载上下文** — 记忆和知识不预置在 system prompt，通过工具检索或 getContext 钩子按需注入
+- **Skill 职责单一** — Skill 只负责生成内容和保存文件，IM 投递由 CronScheduler 统一处理

@@ -126,13 +126,18 @@ export class CronScheduler {
           dataDir = join(this.#skillDataRoot, job.skillId);
           mkdirSync(dataDir, { recursive: true });
         }
-        await skill.run({
+        const result = await skill.run({
           agent: job.agent,
-          delivery: job.delivery,
           ...(this.#imEventStorage !== undefined && { imEventStorage: this.#imEventStorage }),
           ...(dataDir !== undefined && { dataDir }),
         });
-        if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, `[skill:${job.skillId}]`);
+        if (result.outputPath) {
+          const p = job.delivery.platform as unknown as FeishuPlatform;
+          await p.sendImage(job.delivery.chatId, result.outputPath);
+          if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, "[图片]");
+        } else {
+          if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, `[skill:${job.skillId}]`);
+        }
         return;
       } else if (job.direct) {
         if (job.msgType === "image") {

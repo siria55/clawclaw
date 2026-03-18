@@ -147,13 +147,8 @@ const server = new WebServer({
     if (!skill) throw new Error(`Skill not found: ${skillId}`);
     const dataDir = join("./data/skills", skillId);
     mkdirSync(dataDir, { recursive: true });
-    const feishuConfig = imConfigStorage.read().feishu;
-    const delivery = feishu && feishuConfig?.chatId
-      ? { platform: feishu, chatId: feishuConfig.chatId }
-      : undefined;
     await skill.run({
       agent,
-      ...(delivery !== undefined && { delivery }),
       imEventStorage,
       dataDir,
       log,
