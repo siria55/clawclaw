@@ -1,28 +1,27 @@
 .layout {
   height: 100%;
   display: flex;
-  flex-direction: column;
-  max-width: 760px;
-  margin: 0 auto;
+  flex-direction: row;
   background: var(--bg);
-  box-shadow: var(--shadow-md);
 }
 
-.header {
-  padding: 0 16px;
-  height: 52px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--bg);
+/* ── Sidebar ── */
+.sidebar {
+  width: 140px;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--bg-secondary);
+  padding: 16px 0;
+  gap: 16px;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 0 14px;
   flex-shrink: 0;
 }
 
@@ -30,30 +29,38 @@
   font-size: 16px;
 }
 
+.brandText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .name {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.02em;
+  line-height: 1;
 }
 
 .badge {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   background: var(--blue-light);
   color: var(--blue);
-  border-radius: 4px;
-  padding: 2px 6px;
+  border-radius: 3px;
+  padding: 1px 4px;
+  align-self: flex-start;
 }
 
-/* ── Tab nav ── */
-.tabs {
+/* ── Nav ── */
+.nav {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 2px;
-  flex: 1;
+  padding: 0 8px;
 }
 
 .tab {
@@ -62,8 +69,10 @@
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
-  padding: 5px 12px;
+  padding: 7px 10px;
   border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
   transition: color 0.15s, background 0.15s;
 }
 
@@ -77,3 +86,11 @@
   background: var(--blue-light);
 }
 
+/* ── Content ── */
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}

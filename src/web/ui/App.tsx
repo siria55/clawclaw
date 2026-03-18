@@ -18,6 +18,14 @@ const HASH_TO_VIEW: Record<string, View> = {
   "#settings": "settings",
 };
 
+const TAB_LABELS: Record<View, string> = {
+  chat: "对话",
+  news: "新闻库",
+  memory: "记忆库",
+  status: "状态",
+  settings: "设置",
+};
+
 function getViewFromHash(): View {
   return HASH_TO_VIEW[window.location.hash] ?? "chat";
 }
@@ -32,48 +40,49 @@ export function App(): React.JSX.Element {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  const navigate = (v: View): void => {
-    window.location.hash = v;
-  };
-
+  const navigate = (v: View): void => { window.location.hash = v; };
   const handleSend = (text: string): void => { void send(text); };
 
   return (
     <div className={styles.layout}>
-      <header className={styles.header}>
+      <aside className={styles.sidebar}>
         <div className={styles.brand}>
           <span className={styles.logo}>⚡</span>
-          <span className={styles.name}>clawclaw</span>
-          <span className={styles.badge}>debug</span>
+          <div className={styles.brandText}>
+            <span className={styles.name}>clawclaw</span>
+            <span className={styles.badge}>debug</span>
+          </div>
         </div>
 
-        <nav className={styles.tabs}>
+        <nav className={styles.nav}>
           {(["chat", "news", "memory", "status", "settings"] as View[]).map((v) => (
             <button
               key={v}
               className={`${styles.tab} ${view === v ? styles.tabActive : ""}`}
               onClick={() => navigate(v)}
             >
-              {{ chat: "对话", news: "新闻库", memory: "记忆库", status: "状态", settings: "设置" }[v]}
+              {TAB_LABELS[v]}
             </button>
           ))}
         </nav>
-      </header>
+      </aside>
 
-      {view === "chat" ? (
-        <>
-          <ChatView entries={entries} streaming={streaming} />
-          <InputBar disabled={streaming} onSend={handleSend} />
-        </>
-      ) : view === "news" ? (
-        <NewsView />
-      ) : view === "memory" ? (
-        <MemoryView />
-      ) : view === "status" ? (
-        <StatusView />
-      ) : (
-        <SettingsView />
-      )}
+      <main className={styles.content}>
+        {view === "chat" ? (
+          <>
+            <ChatView entries={entries} streaming={streaming} />
+            <InputBar disabled={streaming} onSend={handleSend} />
+          </>
+        ) : view === "news" ? (
+          <NewsView />
+        ) : view === "memory" ? (
+          <MemoryView />
+        ) : view === "status" ? (
+          <StatusView />
+        ) : (
+          <SettingsView />
+        )}
+      </main>
     </div>
   );
 }
