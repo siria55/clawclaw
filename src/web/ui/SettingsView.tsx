@@ -266,8 +266,7 @@ function FeishuSection(): React.JSX.Element {
       });
   };
 
-  const canSave = !saving && !!(fields.appId && fields.appSecret && fields.verificationToken)
-    && !(fields.appId.endsWith("****") && fields.appSecret.endsWith("****") && fields.verificationToken.endsWith("****"));
+  const canSave = !saving && !!(fields.appId && fields.appSecret && fields.verificationToken);
 
   return (
     <div className={styles.section}>

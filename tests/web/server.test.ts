@@ -314,8 +314,8 @@ describe("WebServer", () => {
     await server.start();
     const res = await fetch(`http://localhost:${server.port}/api/im-config`);
     const body = await res.json() as { feishu: { appId: string; appSecret: string } };
-    expect(body.feishu.appId).toMatch(/\*{4}$/);      // ends with ****
-    expect(body.feishu.appSecret).toMatch(/\*{4}$/);
+    expect(body.feishu.appId).toBe("cli_abcdefg");
+    expect(body.feishu.appSecret).toBe("secretXYZ");
 
     await server.stop();
     rmSync(imDir, { recursive: true, force: true });
@@ -344,7 +344,7 @@ describe("WebServer", () => {
     rmSync(imDir, { recursive: true, force: true });
   });
 
-  it("POST /api/im-config preserves masked sentinel values", async () => {
+  it("POST /api/im-config saves feishu config and returns ok", async () => {
     const agent = makeMockAgent();
     const imDir = join(tmpdir(), `clawclaw-im-mask-${Date.now()}`);
     mkdirSync(imDir, { recursive: true });
@@ -357,16 +357,17 @@ describe("WebServer", () => {
     const server = new WebServer({ agent, port: 0, staticDir, imConfigStorage, onIMConfig });
     await server.start();
 
-    // Simulate sending back a masked secret (user didn't change it)
+    // Update appId, keep appSecret unchanged
     await fetch(`http://localhost:${server.port}/api/im-config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ feishu: { appId: "cli_orig", appSecret: "orig****", verificationToken: "orig****" } }),
+      body: JSON.stringify({ feishu: { appId: "cli_new", appSecret: "original_secret", verificationToken: "orig_token" } }),
     });
 
     const saved = imConfigStorage.read().feishu;
-    expect(saved?.appSecret).toBe("original_secret");   // preserved
-    expect(saved?.verificationToken).toBe("orig_token"); // preserved
+    expect(saved?.appId).toBe("cli_new");
+    expect(saved?.appSecret).toBe("original_secret");
+    expect(saved?.verificationToken).toBe("orig_token");
 
     await server.stop();
     rmSync(imDir, { recursive: true, force: true });

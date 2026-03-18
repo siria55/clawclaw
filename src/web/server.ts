@@ -418,7 +418,7 @@ export class WebServer {
   #handleGetIMConfig(res: ServerResponse): void {
     const config = this.#config.imConfigStorage?.read() ?? {};
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-    res.end(JSON.stringify(maskIMConfig(config)));
+    res.end(JSON.stringify(config));
   }
 
   async #handlePostIMConfig(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -449,7 +449,7 @@ export class WebServer {
   #handleGetLLMConfig(res: ServerResponse): void {
     const llm = this.#config.llmConfigStorage?.read() ?? {};
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-    res.end(JSON.stringify(maskLLMConfig(llm)));
+    res.end(JSON.stringify(llm));
   }
 
   async #handlePostLLMConfig(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -752,10 +752,8 @@ function maskLLMConfig(config: LLMConfig): LLMConfig {
 }
 
 function mergeLLMConfig(existing: LLMConfig, incoming: LLMConfig): LLMConfig {
-  // Empty string = user cleared the field; masked value = keep existing
-  const apiKey = incoming.apiKey !== undefined && !isMasked(incoming.apiKey)
-    ? (incoming.apiKey || undefined)
-    : existing.apiKey;
+  // Empty string = user cleared the field
+  const apiKey = incoming.apiKey !== undefined ? (incoming.apiKey || undefined) : existing.apiKey;
   const baseURL = incoming.baseURL !== undefined ? (incoming.baseURL || undefined) : existing.baseURL;
   const httpsProxy = incoming.httpsProxy !== undefined ? (incoming.httpsProxy || undefined) : existing.httpsProxy;
   const model = incoming.model !== undefined ? (incoming.model || undefined) : existing.model;
@@ -777,10 +775,10 @@ function mergeIMConfig(existing: IMConfig, incoming: IMConfig): IMConfig {
     const ex = existing.feishu ?? { appId: "", appSecret: "", verificationToken: "" };
     const inc = incoming.feishu;
     result.feishu = {
-      appId: inc.appId && !isMasked(inc.appId) ? inc.appId : ex.appId,
-      appSecret: inc.appSecret && !isMasked(inc.appSecret) ? inc.appSecret : ex.appSecret,
-      verificationToken: inc.verificationToken && !isMasked(inc.verificationToken) ? inc.verificationToken : ex.verificationToken,
-      ...(inc.encryptKey !== undefined && !isMasked(inc.encryptKey) ? { encryptKey: inc.encryptKey } : ex.encryptKey !== undefined ? { encryptKey: ex.encryptKey } : {}),
+      appId: inc.appId || ex.appId,
+      appSecret: inc.appSecret || ex.appSecret,
+      verificationToken: inc.verificationToken || ex.verificationToken,
+      ...(inc.encryptKey !== undefined ? (inc.encryptKey ? { encryptKey: inc.encryptKey } : {}) : ex.encryptKey !== undefined ? { encryptKey: ex.encryptKey } : {}),
       ...(inc.chatId !== undefined ? { chatId: inc.chatId } : ex.chatId !== undefined ? { chatId: ex.chatId } : {}),
     };
   }
