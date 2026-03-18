@@ -77,7 +77,6 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 
 | 工具 | 说明 |
 |------|------|
-| `save_news` | 将搜索到的新闻写入新闻库 |
 | `memory_save` | 保存长期记忆（文本 + 标签） |
 | `memory_search` | 关键词检索记忆库，返回摘要列表 |
 | `memory_get` | 按 id 取回完整记忆内容 |
@@ -184,11 +183,10 @@ src/
 │   └── index.ts        ClawServer，24/7 常驻服务
 ├── tools/
 │   ├── types.ts        Tool 接口、ToolResult、defineTool()
-│   ├── news.ts         createSaveNewsTool()
 │   ├── memory.ts       createMemoryTools()
 │   └── read-file.ts    createReadFileTool()（路径白名单）
 ├── news/
-│   └── storage.ts      NewsStorage，JSON 文件持久化（Agent save_news 工具用）
+│   └── types.ts        NewsArticle / NewsPage / NewsQuery 类型（供 server 和前端使用）
 ├── memory/
 │   └── storage.ts      MemoryStorage，JSON 文件持久化
 ├── cron/
@@ -216,6 +214,5 @@ src/
 - **接口优于实现** — `LLMProvider`、`Tool`、`IMPlatform` 均为接口，不锁定具体实现
 - **错误不崩溃** — 工具异常、IM 发送失败均捕获处理，不影响其他会话
 - **可测试** — 核心逻辑不依赖网络，Mock LLM 和 IMPlatform 即可单元测试
-- **最小依赖** — 运行时只需 `@anthropic-ai/sdk`、`zod` 和 `playwright`
-- **按需加载上下文** — 记忆和知识不预置在 system prompt，通过工具检索或 getContext 钩子按需注入
+- **最小依赖** — 运行时只需 `@anthropic-ai/sdk`、`zod` 和 `playwright`- **按需加载上下文** — 记忆和知识不预置在 system prompt，通过工具检索或 getContext 钩子按需注入
 - **Skill 职责单一** — Skill 只负责生成内容和保存文件，IM 投递由 CronScheduler 统一处理

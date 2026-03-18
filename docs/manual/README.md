@@ -89,7 +89,7 @@ pnpm start
 - 关键词搜索（匹配标题 + 摘要）
 - 分页浏览，每页 20 条
 - 点击标题在新标签页打开原文
-- 数据来源：`data/skills/*/YYYY-MM-DD.json`（Skill 每次运行后保存）
+- 数据来源：`data/skills/daily-digest/YYYY-MM-DD.json`（每次 Skill 运行后自动写入）
 
 ### 记忆库 — `/#memory`
 
@@ -193,10 +193,6 @@ Agent 是框架的核心单元，负责 LLM 调用与工具执行的编排。
 | `memory_save` | 保存文本记忆，支持标签分类 |
 | `memory_search` | 关键词检索，返回 id + 摘要列表 |
 | `memory_get` | 按 id 取回完整记忆内容 |
-
-### 新闻工具
-
-通过 `createSaveNewsTool(storage)` 创建。Agent 调用 `save_news` 将搜索到的新闻存入本地新闻库。
 
 ### 文件读取工具
 

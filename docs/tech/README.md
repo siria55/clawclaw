@@ -14,11 +14,10 @@ src/index.ts（公共入口）
 │
 ├── tools/
 │   ├── tools/types.ts     ← Tool 接口 / defineTool()
-│   ├── tools/news.ts      ← createSaveNewsTool()
 │   ├── tools/memory.ts    ← createMemoryTools()
 │   └── tools/read-file.ts ← createReadFileTool()
 │
-├── news/storage.ts        ← NewsStorage（JSON 持久化）
+├── news/types.ts          ← NewsArticle / NewsPage / NewsQuery 类型
 ├── memory/storage.ts      ← MemoryStorage（JSON 持久化）
 │
 ├── platform/feishu.ts     ← 飞书适配器
@@ -169,16 +168,9 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 ## NewsStorage / MemoryStorage / ConfigStorage
 
-三个存储类均基于 JSON 文件：
+`NewsStorage` 已移除（Sprint 36）。新闻数据来自 `DailyDigestSkill` 每次运行保存的 `YYYY-MM-DD.json`，`GET /api/news` 直接扫描这些文件。
 
-**NewsStorage / MemoryStorage** 设计对称：
-
-```
-读 → filter/sort/page → 返回
-写 → 读全部 → push → 写全部
-```
-
-**ConfigStorage\<T\>**（`src/config/storage.ts`）：泛型 JSON 配置文件读写。
+### MemoryStorage / ConfigStorage
 
 - `new ConfigStorage<IMConfig>("./data/im-config.json")` — IM 凭证
 - `new ConfigStorage<LLMConfig>("./data/llm-config.json")` — LLM 配置
@@ -206,7 +198,7 @@ defineTool({
 
 ### 工具工厂模式
 
-`createSaveNewsTool(storage)` 和 `createMemoryTools(storage)` 通过工厂函数注入 storage 依赖，便于测试时替换实例，也支持多 Agent 共享同一个 storage 或各自独立。
+`createMemoryTools(storage)` 通过工厂函数注入 storage 依赖，便于测试时替换实例，也支持多 Agent 共享同一个 storage 或各自独立。
 
 ---
 
