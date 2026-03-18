@@ -90,7 +90,8 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 触发模式：
 - **Agent 模式**：调用 Agent.run()，将 LLM 回复发送到 IM
 - **直发模式**（`direct: true`）：直接发送预设文本或图片
-- **Skill 模式**（`skillId`）：执行指定 Skill，生成内容后自动将产出文件发送到 IM
+- **Skill 生成**（`skillId`）：执行指定 Skill，生成并保存文件，不发 IM
+- **Skill 投递**（`sendSkillOutput`）：找指定 Skill 最新 PNG，发送到 IM
 
 ### Skills 系统
 
@@ -98,12 +99,14 @@ Skills 是独立的内容生成单元，职责收窄为"生成内容 + 保存文
 
 **架构：**
 ```
-CronScheduler → skill.run(ctx) → SkillResult { outputPath }
-              → 如有 outputPath → platform.sendImage(outputPath)
+Cron1(skillId)          → skill.run(ctx) → 保存文件，不发 IM
+Cron2(sendSkillOutput)  → 找最新 PNG → platform.sendImage()
 
 WebUI 手动运行：
-onRunSkill → skill.run(ctx) → SkillResult（outputPath 忽略，仅查看日志）
+onRunSkill → skill.run(ctx) → SkillResult → 展示日志 + 图片预览
 ```
+
+生成和投递解耦为两个独立 Cron Job，可分别设定时间（如 7:00 生成、8:00 发送）。
 
 **SKILL.md 标准：**
 每个 Skill 以子目录形式存放，包含 `SKILL.md`（元数据 + Agent 指令）和 `index.ts`（执行逻辑）。`SKILL.md` 使用简单 YAML frontmatter：
@@ -122,7 +125,7 @@ Agent 指令...
 2. 子 Agent 使用 `browser_navigate` / `browser_get_links` 工具，按 LLM 推理提取文章
 3. 渲染 HTML 日报，Playwright 截图为 PNG
 4. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
-5. 返回 `outputPath`，由 CronScheduler 调用飞书 `sendImage()` 发送
+5. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
 
 **数据目录：**
 ```
@@ -149,6 +152,7 @@ data/skills/{skillId}/
 | `GET /api/memory` | 记忆库查询（关键词、分页） |
 | `GET /api/skills` | 已注册 Skill 列表 |
 | `POST /api/skills/:id/run` | 手动触发 Skill（SSE 流式日志） |
+| `GET /api/skills/:id/latest-image` | 返回该 Skill 最新 PNG 截图 |
 | `GET/POST /api/im-config` | 飞书等 IM 凭证 |
 | `GET/POST /api/config/llm` | LLM 配置 |
 | `GET/POST /api/config/agent` | Agent 配置 |
