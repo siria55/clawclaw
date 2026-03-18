@@ -27,7 +27,7 @@ const RawArticleSchema = z.object({
 });
 
 /** Browser tools for the news sub-agent to operate a Playwright page. */
-function createBrowserTools(page: Page) {
+function createBrowserTools(page: Page): ReturnType<typeof defineTool>[] {
   return [
     defineTool({
       name: "browser_navigate",
@@ -67,6 +67,7 @@ function createBrowserTools(page: Page) {
  */
 async function searchNewsWithAgent(browser: Browser, ctx: SkillContext, queries: string[]): Promise<RawArticle[]> {
   const page = await browser.newPage();
+  const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   try {
     const subAgent = new Agent({
       name: "news-browser",
@@ -82,18 +83,36 @@ async function searchNewsWithAgent(browser: Browser, ctx: SkillContext, queries:
 
     const prompt = `请依次搜索以下新闻关键词（每行一个搜索 URL）：\n${searchUrls}\n\n步骤：\n1. 用 browser_navigate 访问每个 URL\n2. 用 browser_get_links 获取页面链接，从中识别新闻文章\n3. 汇总后返回 JSON 数组（最多 ${MAX_ARTICLES} 篇）：\n[{"title":"文章标题","url":"文章完整URL","summary":"摘要（若无则空字符串）","source":"来源媒体"}]\n\n只返回 JSON 数组。`;
 
-    const result = await subAgent.run(prompt, { maxTurns: 12 });
-    const lastMsg = [...result.messages].reverse().find((m) => m.role === "assistant");
-    const text = typeof lastMsg?.content === "string" ? lastMsg.content : "";
-    const match = text.match(/\[[\s\S]*\]/);
-    if (!match) return [];
+    log(`🔍 开始搜索：${queries.join("、")}`);
+
+    let finalText = "";
+    for await (const event of subAgent.stream(prompt, { maxTurns: 12 })) {
+      if (event.type === "tool_call") {
+        const input = event.input as Record<string, unknown>;
+        if (event.toolName === "browser_navigate") {
+          const url = typeof input["url"] === "string" ? input["url"] : "";
+          log(`🌐 访问 ${url}`);
+        } else if (event.toolName === "browser_get_links") {
+          log(`🔗 获取页面链接`);
+        }
+      } else if (event.type === "done") {
+        const lastMsg = [...event.result.messages].reverse().find((m) => m.role === "assistant");
+        finalText = typeof lastMsg?.content === "string" ? lastMsg.content : "";
+      }
+    }
+
+    const match = finalText.match(/\[[\s\S]*\]/);
+    if (!match) { log("⚠️ 未获取到有效 JSON"); return []; }
     const parsed = JSON.parse(match[0]) as unknown[];
-    return parsed.flatMap((item) => {
+    const articles = parsed.flatMap((item) => {
       const r = RawArticleSchema.safeParse(item);
       return r.success ? [r.data] : [];
     });
+    log(`✅ 共获取 ${articles.length} 篇文章`);
+    return articles;
   } catch (err) {
-    console.error("[DailyDigest] agent search failed:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`❌ 搜索失败：${msg}`);
     return [];
   } finally {
     await page.close();
@@ -193,7 +212,7 @@ export class DailyDigestSkill implements Skill {
     const browser = await chromium.launch({ headless: true });
     try {
       const articles = await searchNewsWithAgent(browser, ctx, this.#queries);
-      console.log(`[DailyDigest] got ${articles.length} articles`);
+      ctx.log?.(`✅ 获取 ${articles.length} 篇文章`);
 
       if (ctx.newsStorage) {
         for (const a of articles) {

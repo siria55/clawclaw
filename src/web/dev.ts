@@ -142,7 +142,7 @@ const server = new WebServer({
   onCronAdd: (cfg: CronJobConfig) => registerCronJob(cfg),
   onCronDelete: (id: string) => cron.remove(id),
   skillRegistry,
-  onRunSkill: async (skillId: string) => {
+  onRunSkill: async (skillId: string, log: (msg: string) => void) => {
     const skill = skillRegistry.get(skillId);
     if (!skill) throw new Error(`Skill not found: ${skillId}`);
     const dataDir = join("./data/skills", skillId);
@@ -155,7 +155,9 @@ const server = new WebServer({
       agent,
       ...(delivery !== undefined && { delivery }),
       imEventStorage,
+      newsStorage,
       dataDir,
+      log,
     });
   },
 });

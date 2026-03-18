@@ -90,7 +90,7 @@ export interface WebServerConfig {
   /** Skill registry for GET /api/skills. */
   skillRegistry?: SkillRegistry;
   /** Called when POST /api/skills/:id/run is triggered from WebUI. */
-  onRunSkill?: (skillId: string) => Promise<void>;
+  onRunSkill?: (skillId: string, log: (msg: string) => void) => Promise<void>;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -129,7 +129,7 @@ export class WebServer {
     onCronAdd: ((config: CronJobConfig) => void) | undefined;
     onCronDelete: ((id: string) => void) | undefined;
     skillRegistry: SkillRegistry | undefined;
-    onRunSkill: ((skillId: string) => Promise<void>) | undefined;
+    onRunSkill: ((skillId: string, log: (msg: string) => void) => Promise<void>) | undefined;
   };
   readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   readonly #server: ReturnType<typeof createServer>;
@@ -386,13 +386,21 @@ export class WebServer {
       res.end(JSON.stringify({ ok: false, error: "onRunSkill not configured" }));
       return;
     }
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Access-Control-Allow-Origin": "*",
+    });
+    const send = (data: Record<string, unknown>): void => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
     try {
-      await this.#config.onRunSkill(skillId);
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify({ ok: true }));
+      await this.#config.onRunSkill(skillId, (msg: string) => { send({ type: "log", text: msg }); });
+      send({ type: "done" });
     } catch (err) {
-      res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-      res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }));
+      send({ type: "error", error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      res.end();
     }
   }
 

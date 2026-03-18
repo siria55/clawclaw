@@ -15,6 +15,8 @@ export interface SkillContext {
   newsStorage?: NewsStorage;
   /** Directory where the skill should persist its output files. */
   dataDir?: string;
+  /** Optional progress logger — called during execution for WebUI real-time feedback. */
+  log?: (msg: string) => void;
 }
 
 /**

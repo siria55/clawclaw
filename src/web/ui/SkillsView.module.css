@@ -28,17 +28,20 @@
   padding: 12px 0;
 }
 
+.skillCard {
+  border-bottom: 1px solid var(--border-default);
+}
+
+.skillCard:last-child {
+  border-bottom: none;
+}
+
 .skillRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 14px 0;
-  border-bottom: 1px solid var(--border-default);
-}
-
-.skillRow:last-child {
-  border-bottom: none;
 }
 
 .skillInfo {
@@ -104,4 +107,22 @@
   max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.logPanel {
+  margin: 0 0 12px;
+  background: #0d1117;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: monospace;
+  font-size: 12px;
+  color: #e6edf3;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.logLine {
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
