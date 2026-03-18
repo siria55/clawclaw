@@ -45,6 +45,18 @@ interface CronJobConfig {
 
 const EMPTY_FORM: CronJobConfig = { id: "", schedule: "", message: "", chatId: "", platform: "feishu", enabled: true, direct: false, msgType: "text", skillId: "" };
 
+interface SkillInfo {
+  id: string;
+  description: string;
+}
+
+async function fetchSkills(): Promise<SkillInfo[]> {
+  const res = await fetch("/api/skills");
+  if (!res.ok) return [];
+  const data = await res.json() as { skills: SkillInfo[] };
+  return data.skills;
+}
+
 async function fetchStatus(): Promise<SystemStatus> {
   const res = await fetch("/api/status");
   if (!res.ok) return { cronJobs: [], connections: [] };
@@ -79,6 +91,7 @@ function formatTime(iso: string): string {
 
 export function StatusView(): React.JSX.Element {
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [cronJobs, setCronJobs] = useState<CronJobConfig[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -138,7 +151,7 @@ export function StatusView(): React.JSX.Element {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); void fetchSkills().then(setSkills); }, []);
 
   return (
     <div className={styles.page}>
@@ -164,6 +177,18 @@ export function StatusView(): React.JSX.Element {
           {!status && !loading && <p className={styles.empty}>—</p>}
         </section>
 
+        {/* Skills */}
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>Skills</h3>
+          {skills.length === 0 && <p className={styles.empty}>无已注册 skill</p>}
+          {skills.map((s) => (
+            <div key={s.id} className={styles.skillRow}>
+              <code className={styles.skillId}>{s.id}</code>
+              <span className={styles.skillDesc}>{s.description}</span>
+            </div>
+          ))}
+        </section>
+
         {/* Cron 任务 */}
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
@@ -183,7 +208,7 @@ export function StatusView(): React.JSX.Element {
               </div>
               <p className={styles.cronMsg}>{job.message}</p>
               <div className={styles.cronFooter}>
-                <span className={styles.cronMeta}>{job.platform} · {job.chatId || "—"}</span>
+                <span className={styles.cronMeta}>{job.platform} · {job.chatId || "—"}{job.chatId.startsWith("oc_") ? " 群聊" : job.chatId.startsWith("ou_") ? " 用户" : ""}</span>
                 <div className={styles.cronActions}>
                   <button className={styles.cronActionBtn} onClick={() => handleEdit(job)}>编辑</button>
                   <button className={`${styles.cronActionBtn} ${styles.cronDeleteBtn}`} onClick={() => handleDelete(job.id)}>删除</button>
@@ -204,7 +229,10 @@ export function StatusView(): React.JSX.Element {
               </div>
               <div className={styles.formRow}>
                 <label className={styles.formLabel}>Chat ID</label>
-                <input className={styles.formInput} value={form.chatId} placeholder="oc_xxxxxxxx" onChange={(e) => setForm((f) => ({ ...f, chatId: e.target.value }))} />
+                <div className={styles.formInputGroup}>
+                  <input className={styles.formInput} value={form.chatId} placeholder="ou_xxx（用户）/ oc_xxx（群聊）" onChange={(e) => setForm((f) => ({ ...f, chatId: e.target.value }))} />
+                  <span className={styles.formHint}>{form.chatId.startsWith("oc_") ? "群聊" : form.chatId.startsWith("ou_") ? "用户" : ""}</span>
+                </div>
               </div>
               <div className={styles.formRow}>
                 <label className={styles.formLabel}>消息</label>

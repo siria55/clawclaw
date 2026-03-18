@@ -1,8 +1,8 @@
 import type { Page, Browser } from "playwright";
 import { chromium } from "playwright";
-import type { Skill, SkillContext } from "./types.js";
-import type { NewsArticle } from "../news/types.js";
-import type { FeishuPlatform } from "../platform/feishu.js";
+import type { Skill, SkillContext } from "../types.js";
+import type { NewsArticle } from "../../news/types.js";
+import type { FeishuPlatform } from "../../platform/feishu.js";
 
 interface RawArticle {
   title: string;
@@ -100,10 +100,10 @@ async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
 }
 
 /**
- * News digest skill — crawls tech news, renders a styled digest, screenshots it, and sends the image to Feishu.
+ * Daily digest skill — crawls tech news, renders a styled digest, screenshots it, and sends the image to Feishu.
  */
-export class NewsDigestSkill implements Skill {
-  readonly id = "news-digest";
+export class DailyDigestSkill implements Skill {
+  readonly id = "daily-digest";
   readonly description = "爬取今日科技新闻，生成 HTML 日报截图并发送到飞书";
 
   async run(ctx: SkillContext): Promise<void> {

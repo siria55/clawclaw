@@ -433,3 +433,47 @@
   margin: 0;
   word-break: break-word;
 }
+
+.skillRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.skillRow:last-child {
+  border-bottom: none;
+}
+
+.skillId {
+  font-family: monospace;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.skillDesc {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.formInputGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.formInputGroup .formInput {
+  flex: 1;
+}
+
+.formHint {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}

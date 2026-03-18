@@ -15,6 +15,7 @@ import type { NewsStorage } from "../news/storage.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig } from "../config/types.js";
+import type { SkillRegistry } from "../skills/registry.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -86,6 +87,8 @@ export interface WebServerConfig {
   onCronAdd?: (config: CronJobConfig) => void;
   /** Called after DELETE /api/cron/:id to remove a job from the scheduler. */
   onCronDelete?: (id: string) => void;
+  /** Skill registry for GET /api/skills. */
+  skillRegistry?: SkillRegistry;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -107,7 +110,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "skillRegistry">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     newsStorage: NewsStorage | undefined;
@@ -123,6 +126,7 @@ export class WebServer {
     cronStorage: ConfigStorage<CronJobConfig[]> | undefined;
     onCronAdd: ((config: CronJobConfig) => void) | undefined;
     onCronDelete: ((id: string) => void) | undefined;
+    skillRegistry: SkillRegistry | undefined;
   };
   readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   readonly #server: ReturnType<typeof createServer>;
@@ -146,6 +150,7 @@ export class WebServer {
       cronStorage: undefined,
       onCronAdd: undefined,
       onCronDelete: undefined,
+      skillRegistry: undefined,
       ...config,
     };
     this.#routes = { ...config.routes };
@@ -210,6 +215,11 @@ export class WebServer {
 
     if (req.method === "GET" && path === "/api/im-log") {
       this.#handleIMLog(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/skills") {
+      this.#handleGetSkills(res);
       return;
     }
 
@@ -346,6 +356,18 @@ export class WebServer {
     const total = storage ? storage.total : 0;
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ events, total }));
+  }
+
+  #handleGetSkills(res: ServerResponse): void {
+    const registry = this.#config.skillRegistry;
+    const skills = registry
+      ? registry.ids.map((id) => {
+          const skill = registry.get(id)!;
+          return { id: skill.id, description: skill.description };
+        })
+      : [];
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ skills }));
   }
 
   #handleGetCron(res: ServerResponse): void {

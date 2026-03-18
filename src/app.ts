@@ -31,7 +31,7 @@ import { ConfigStorage } from "./config/storage.js";
 import { createSaveNewsTool } from "./tools/news.js";
 import { createMemoryTools } from "./tools/memory.js";
 import { SkillRegistry } from "./skills/registry.js";
-import { NewsDigestSkill } from "./skills/news-digest.js";
+import { DailyDigestSkill } from "./skills/daily-digest/index.js";
 import type { Message } from "./llm/types.js";
 import type { CronJobConfig } from "./cron/types.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig } from "./config/types.js";
@@ -126,6 +126,22 @@ const clawServer = new ClawServer({
 
 if (feishu) clawServer.setRoute("/feishu", { platform: feishu, agent });
 
+// ── SkillRegistry ─────────────────────────────────────────────────────────────
+
+const skillRegistry = new SkillRegistry();
+skillRegistry.register(new DailyDigestSkill());
+
+// ── CronScheduler（定时任务）─────────────────────────────────────────────────
+
+const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry });
+
+/** Register one CronJobConfig into the scheduler (if enabled and platform is available). */
+function registerCronJob(cfg: CronJobConfig): void {
+  const platform = cfg.platform === "feishu" ? feishu : undefined;
+  if (!platform || !cfg.chatId) return;
+  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, direct: cfg.direct ?? false, msgType: cfg.msgType ?? "text", ...(cfg.skillId !== undefined && { skillId: cfg.skillId }), agent, delivery: { platform, chatId: cfg.chatId } });
+}
+
 // ── WebServer（本地调试界面）─────────────────────────────────────────────────
 
 const webServer = new WebServer({
@@ -174,23 +190,8 @@ const webServer = new WebServer({
   cronStorage,
   onCronAdd: (cfg) => registerCronJob(cfg),
   onCronDelete: (id) => cron.remove(id),
+  skillRegistry,
 });
-
-// ── SkillRegistry ─────────────────────────────────────────────────────────────
-
-const skillRegistry = new SkillRegistry();
-skillRegistry.register(new NewsDigestSkill());
-
-// ── CronScheduler（定时任务）─────────────────────────────────────────────────
-
-const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry });
-
-/** Register one CronJobConfig into the scheduler (if enabled and platform is available). */
-function registerCronJob(cfg: CronJobConfig): void {
-  const platform = cfg.platform === "feishu" ? feishu : undefined;
-  if (!platform || !cfg.chatId) return;
-  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, direct: cfg.direct ?? false, msgType: cfg.msgType ?? "text", ...(cfg.skillId !== undefined && { skillId: cfg.skillId }), agent, delivery: { platform, chatId: cfg.chatId } });
-}
 
 // Seed default daily-digest job if cron-config.json is empty
 if (cronStorage.read().length === 0) {
