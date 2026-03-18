@@ -39,9 +39,10 @@ interface CronJobConfig {
   platform: string;
   enabled: boolean;
   direct: boolean;
+  msgType: "text" | "image";
 }
 
-const EMPTY_FORM: CronJobConfig = { id: "", schedule: "", message: "", chatId: "", platform: "feishu", enabled: true, direct: false };
+const EMPTY_FORM: CronJobConfig = { id: "", schedule: "", message: "", chatId: "", platform: "feishu", enabled: true, direct: false, msgType: "text" };
 
 async function fetchStatus(): Promise<SystemStatus> {
   const res = await fetch("/api/status");
@@ -212,6 +213,15 @@ export function StatusView(): React.JSX.Element {
                 <label className={styles.formLabel}>直发</label>
                 <input type="checkbox" checked={form.direct} onChange={(e) => setForm((f) => ({ ...f, direct: e.target.checked }))} />
               </div>
+              {form.direct && (
+                <div className={styles.formRow}>
+                  <label className={styles.formLabel}>类型</label>
+                  <select className={styles.formInput} value={form.msgType} onChange={(e) => setForm((f) => ({ ...f, msgType: e.target.value as "text" | "image" }))}>
+                    <option value="text">文本</option>
+                    <option value="image">图片</option>
+                  </select>
+                </div>
+              )}
               <div className={styles.formRow}>
                 <label className={styles.formLabel}>启用</label>
                 <input type="checkbox" checked={form.enabled} onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))} />

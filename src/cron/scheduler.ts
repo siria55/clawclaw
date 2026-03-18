@@ -1,5 +1,6 @@
 import type { CronJob, CronSchedulerOptions } from "./types.js";
 import type { IMEventStorage } from "../im/storage.js";
+import type { FeishuPlatform } from "../platform/feishu.js";
 
 interface ScheduledJob {
   job: CronJob;
@@ -111,6 +112,12 @@ export class CronScheduler {
     try {
       let reply: string;
       if (job.direct) {
+        if (job.msgType === "image") {
+          const p = job.delivery.platform as unknown as FeishuPlatform;
+          await p.sendImage(job.delivery.chatId, job.message);
+          if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, "[图片]");
+          return;
+        }
         reply = job.message;
       } else {
         const result = await job.agent.run(job.message);

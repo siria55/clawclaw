@@ -1,4 +1,5 @@
 import { createDecipheriv, createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { IMPlatform, IMMessage, IMVerifyParams } from "./types.js";
 
 interface FeishuConfig {
@@ -108,6 +109,53 @@ export class FeishuPlatform implements IMPlatform {
       text: content.text?.trim() ?? "",
       raw: event,
     };
+  }
+
+  /**
+   * Upload an image (URL or local file path) and send it as a Feishu image message.
+   */
+  async sendImage(chatId: string, source: string): Promise<void> {
+    const token = await this.#getAccessToken();
+    const imageKey = await this.#uploadImage(token, source);
+    const receiveIdType = chatId.startsWith("ou_") ? "open_id" : "chat_id";
+    const response = await fetch(
+      `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ receive_id: chatId, msg_type: "image", content: JSON.stringify({ image_key: imageKey }) }),
+      },
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Feishu sendImage failed: ${response.status} ${body}`);
+    }
+  }
+
+  async #uploadImage(token: string, source: string): Promise<string> {
+    const isUrl = source.startsWith("http://") || source.startsWith("https://");
+    const imageBuffer = isUrl
+      ? Buffer.from(await (await fetch(source)).arrayBuffer())
+      : readFileSync(source);
+
+    const form = new FormData();
+    form.append("image_type", "message");
+    form.append("image", new Blob([imageBuffer]), "image.png");
+
+    const response = await fetch("https://open.feishu.cn/open-apis/im/v1/images", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Feishu uploadImage failed: ${response.status} ${body}`);
+    }
+    const data = await response.json() as { code: number; data?: { image_key: string } };
+    if (data.code !== 0 || !data.data?.image_key) {
+      throw new Error(`Feishu uploadImage error: ${JSON.stringify(data)}`);
+    }
+    return data.data.image_key;
   }
 
   async send(chatId: string, text: string): Promise<void> {

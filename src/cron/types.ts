@@ -10,6 +10,8 @@ export interface CronJob {
   message: string;
   /** When true, send message directly without running through agent */
   direct: boolean;
+  /** Message type for direct mode. Defaults to "text". */
+  msgType: "text" | "image";
   /** Agent to run */
   agent: Agent;
   /** Where to deliver the agent's reply */
@@ -29,6 +31,8 @@ export interface CronJobConfig {
   message: string;
   /** When true, send message directly without running through agent */
   direct?: boolean;
+  /** Message type for direct mode: "text" (default) or "image" (message = URL or local path) */
+  msgType?: "text" | "image";
   chatId: string;
   platform: string;
   enabled: boolean;
