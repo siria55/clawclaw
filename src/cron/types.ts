@@ -1,5 +1,6 @@
 import type { Agent } from "../core/agent.js";
 import type { IMPlatform } from "../platform/types.js";
+import type { SkillRegistry } from "../skills/registry.js";
 
 export interface CronJob {
   /** Unique identifier */
@@ -12,6 +13,8 @@ export interface CronJob {
   direct: boolean;
   /** Message type for direct mode. Defaults to "text". */
   msgType: "text" | "image";
+  /** Skill id to execute instead of agent/direct. */
+  skillId?: string;
   /** Agent to run */
   agent: Agent;
   /** Where to deliver the agent's reply */
@@ -33,6 +36,8 @@ export interface CronJobConfig {
   direct?: boolean;
   /** Message type for direct mode: "text" (default) or "image" (message = URL or local path) */
   msgType?: "text" | "image";
+  /** Skill id to execute instead of agent/direct. */
+  skillId?: string;
   chatId: string;
   platform: string;
   enabled: boolean;
@@ -43,4 +48,6 @@ export interface CronSchedulerOptions {
   timezone?: string;
   /** Storage for recording cron-fired messages (same as IM event log). */
   imEventStorage?: import("../im/storage.js").IMEventStorage;
+  /** Registry for named skills. */
+  skillRegistry?: SkillRegistry;
 }

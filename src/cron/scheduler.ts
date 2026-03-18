@@ -1,6 +1,7 @@
 import type { CronJob, CronSchedulerOptions } from "./types.js";
 import type { IMEventStorage } from "../im/storage.js";
 import type { FeishuPlatform } from "../platform/feishu.js";
+import type { SkillRegistry } from "../skills/registry.js";
 
 interface ScheduledJob {
   job: CronJob;
@@ -20,11 +21,13 @@ export class CronScheduler {
   readonly #jobs = new Map<string, ScheduledJob>();
   readonly #tz: string;
   readonly #imEventStorage: IMEventStorage | undefined;
+  readonly #skillRegistry: SkillRegistry | undefined;
   #pollTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: CronSchedulerOptions = {}) {
     this.#tz = options.timezone ?? "Asia/Shanghai";
     this.#imEventStorage = options.imEventStorage;
+    this.#skillRegistry = options.skillRegistry;
   }
 
   /** Add a job. Replaces any existing job with the same id. */
@@ -111,7 +114,17 @@ export class CronScheduler {
     });
     try {
       let reply: string;
-      if (job.direct) {
+      if (job.skillId) {
+        const skill = this.#skillRegistry?.get(job.skillId);
+        if (!skill) throw new Error(`Skill not found: ${job.skillId}`);
+        await skill.run({
+          agent: job.agent,
+          delivery: job.delivery,
+          ...(this.#imEventStorage !== undefined && { imEventStorage: this.#imEventStorage }),
+        });
+        if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, `[skill:${job.skillId}]`);
+        return;
+      } else if (job.direct) {
         if (job.msgType === "image") {
           const p = job.delivery.platform as unknown as FeishuPlatform;
           await p.sendImage(job.delivery.chatId, job.message);

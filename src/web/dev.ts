@@ -16,6 +16,8 @@ import { IMEventStorage } from "../im/storage.js";
 import { ConversationStorage } from "../im/conversations.js";
 import { createMemoryTools } from "../tools/memory.js";
 import { createSaveNewsTool } from "../tools/news.js";
+import { SkillRegistry } from "../skills/registry.js";
+import { NewsDigestSkill } from "../skills/news-digest.js";
 import type { Message } from "../llm/types.js";
 import type { LLMConfig, IMConfig, AgentMetaConfig } from "../config/types.js";
 import { WebServer } from "./server.js";
@@ -124,12 +126,15 @@ const server = new WebServer({
   onCronDelete: (id: string) => cron.remove(id),
 });
 
-const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage });
+const skillRegistry = new SkillRegistry();
+skillRegistry.register(new NewsDigestSkill());
+
+const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry });
 
 function registerCronJob(cfg: CronJobConfig): void {
   const platform = cfg.platform === "feishu" ? feishu : undefined;
   if (!platform || !cfg.chatId) return;
-  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, direct: cfg.direct ?? false, msgType: cfg.msgType ?? "text", agent, delivery: { platform, chatId: cfg.chatId } });
+  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, direct: cfg.direct ?? false, msgType: cfg.msgType ?? "text", ...(cfg.skillId !== undefined && { skillId: cfg.skillId }), agent, delivery: { platform, chatId: cfg.chatId } });
 }
 
 for (const cfg of cronStorage.read()) {

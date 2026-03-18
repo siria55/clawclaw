@@ -132,6 +132,48 @@ export class FeishuPlatform implements IMPlatform {
     }
   }
 
+  /**
+   * Upload a raw image buffer and send it as a Feishu image message.
+   */
+  async sendImageBuffer(chatId: string, buffer: Buffer): Promise<void> {
+    const token = await this.#getAccessToken();
+    const imageKey = await this.#uploadImageBuffer(token, buffer);
+    const receiveIdType = chatId.startsWith("ou_") ? "open_id" : "chat_id";
+    const response = await fetch(
+      `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ receive_id: chatId, msg_type: "image", content: JSON.stringify({ image_key: imageKey }) }),
+      },
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Feishu sendImageBuffer failed: ${response.status} ${body}`);
+    }
+  }
+
+  async #uploadImageBuffer(token: string, buffer: Buffer): Promise<string> {
+    const form = new FormData();
+    form.append("image_type", "message");
+    form.append("image", new Blob([buffer]), "image.png");
+
+    const response = await fetch("https://open.feishu.cn/open-apis/im/v1/images", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Feishu uploadImage failed: ${response.status} ${body}`);
+    }
+    const data = await response.json() as { code: number; data?: { image_key: string } };
+    if (data.code !== 0 || !data.data?.image_key) {
+      throw new Error(`Feishu uploadImage error: ${JSON.stringify(data)}`);
+    }
+    return data.data.image_key;
+  }
+
   async #uploadImage(token: string, source: string): Promise<string> {
     const isUrl = source.startsWith("http://") || source.startsWith("https://");
     const imageBuffer = isUrl
