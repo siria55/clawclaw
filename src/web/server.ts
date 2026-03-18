@@ -89,6 +89,8 @@ export interface WebServerConfig {
   onCronDelete?: (id: string) => void;
   /** Skill registry for GET /api/skills. */
   skillRegistry?: SkillRegistry;
+  /** Called when POST /api/skills/:id/run is triggered from WebUI. */
+  onRunSkill?: (skillId: string) => Promise<void>;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -110,7 +112,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "skillRegistry">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "newsStorage" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "skillRegistry" | "onRunSkill">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     newsStorage: NewsStorage | undefined;
@@ -127,6 +129,7 @@ export class WebServer {
     onCronAdd: ((config: CronJobConfig) => void) | undefined;
     onCronDelete: ((id: string) => void) | undefined;
     skillRegistry: SkillRegistry | undefined;
+    onRunSkill: ((skillId: string) => Promise<void>) | undefined;
   };
   readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   readonly #server: ReturnType<typeof createServer>;
@@ -151,6 +154,7 @@ export class WebServer {
       onCronAdd: undefined,
       onCronDelete: undefined,
       skillRegistry: undefined,
+      onRunSkill: undefined,
       ...config,
     };
     this.#routes = { ...config.routes };
@@ -220,6 +224,12 @@ export class WebServer {
 
     if (req.method === "GET" && path === "/api/skills") {
       this.#handleGetSkills(res);
+      return;
+    }
+
+    if (req.method === "POST" && path.startsWith("/api/skills/") && path.endsWith("/run")) {
+      const skillId = path.slice("/api/skills/".length, -"/run".length);
+      await this.#handleRunSkill(skillId, res);
       return;
     }
 
@@ -368,6 +378,22 @@ export class WebServer {
       : [];
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ skills }));
+  }
+
+  async #handleRunSkill(skillId: string, res: ServerResponse): Promise<void> {
+    if (!this.#config.onRunSkill) {
+      res.writeHead(503, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: false, error: "onRunSkill not configured" }));
+      return;
+    }
+    try {
+      await this.#config.onRunSkill(skillId);
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }));
+    }
   }
 
   #handleGetCron(res: ServerResponse): void {

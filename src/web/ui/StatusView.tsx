@@ -78,7 +78,15 @@ async function deleteCronJob(id: string): Promise<void> {
   await fetch(`/api/cron/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-async function fetchIMLog(since?: string): Promise<{ events: IMEvent[]; total: number }> {
+async function runSkill(id: string): Promise<void> {
+  const res = await fetch(`/api/skills/${encodeURIComponent(id)}/run`, { method: "POST" });
+  if (!res.ok) {
+    const data = await res.json() as { error?: string };
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
+}
+
+
   const url = since ? `/api/im-log?since=${since}` : "/api/im-log";
   const res = await fetch(url);
   if (!res.ok) return { events: [], total: 0 };
@@ -87,6 +95,44 @@ async function fetchIMLog(since?: string): Promise<{ events: IMEvent[]; total: n
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function SkillRow({ skill }: { skill: SkillInfo }): React.JSX.Element {
+  const [state, setState] = useState<"idle" | "running" | "ok" | "err">("idle");
+  const [errMsg, setErrMsg] = useState("");
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleRun = (): void => {
+    setState("running");
+    void runSkill(skill.id)
+      .then(() => {
+        setState("ok");
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setState("idle"), 3000);
+      })
+      .catch((e: unknown) => {
+        setErrMsg(e instanceof Error ? e.message : String(e));
+        setState("err");
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setState("idle"), 5000);
+      });
+  };
+
+  return (
+    <div className={styles.skillRow}>
+      <code className={styles.skillId}>{skill.id}</code>
+      <span className={styles.skillDesc}>{skill.description}</span>
+      <button
+        className={styles.skillRunBtn}
+        onClick={handleRun}
+        disabled={state === "running"}
+      >
+        {state === "running" ? "运行中…" : "运行"}
+      </button>
+      {state === "ok" && <span className={styles.skillRunOk}>✓ 完成</span>}
+      {state === "err" && <span className={styles.skillRunErr}>{errMsg}</span>}
+    </div>
+  );
 }
 
 export function StatusView(): React.JSX.Element {
@@ -182,10 +228,7 @@ export function StatusView(): React.JSX.Element {
           <h3 className={styles.sectionTitle}>Skills</h3>
           {skills.length === 0 && <p className={styles.empty}>无已注册 skill</p>}
           {skills.map((s) => (
-            <div key={s.id} className={styles.skillRow}>
-              <code className={styles.skillId}>{s.id}</code>
-              <span className={styles.skillDesc}>{s.description}</span>
-            </div>
+            <SkillRow key={s.id} skill={s} />
           ))}
         </section>
 

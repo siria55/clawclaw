@@ -6,6 +6,7 @@
  * Falls back to ANTHROPIC_API_KEY env var if not configured.
  */
 import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { Agent } from "../core/agent.js";
 import { AnthropicProvider } from "../llm/anthropic.js";
 import { FeishuPlatform } from "../platform/feishu.js";
@@ -141,6 +142,22 @@ const server = new WebServer({
   onCronAdd: (cfg: CronJobConfig) => registerCronJob(cfg),
   onCronDelete: (id: string) => cron.remove(id),
   skillRegistry,
+  onRunSkill: async (skillId: string) => {
+    const skill = skillRegistry.get(skillId);
+    if (!skill) throw new Error(`Skill not found: ${skillId}`);
+    const dataDir = join("./data/skills", skillId);
+    mkdirSync(dataDir, { recursive: true });
+    const feishuConfig = imConfigStorage.read().feishu;
+    const delivery = feishu && feishuConfig?.chatId
+      ? { platform: feishu, chatId: feishuConfig.chatId }
+      : undefined;
+    await skill.run({
+      agent,
+      ...(delivery !== undefined && { delivery }),
+      imEventStorage,
+      dataDir,
+    });
+  },
 });
 
 for (const cfg of cronStorage.read()) {

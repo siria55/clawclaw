@@ -7,8 +7,8 @@ import type { NewsStorage } from "../news/storage.js";
 export interface SkillContext {
   /** Agent instance for LLM calls if needed. */
   agent: Agent;
-  /** Delivery target — where to send results. */
-  delivery: { platform: IMPlatform; chatId: string };
+  /** Delivery target — where to send results. Optional for manual/dry runs. */
+  delivery?: { platform: IMPlatform; chatId: string };
   /** Optional IM event log for recording outgoing skill messages. */
   imEventStorage?: IMEventStorage;
   /** Optional news storage for reading/writing articles. */

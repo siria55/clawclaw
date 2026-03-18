@@ -155,8 +155,10 @@ export class DailyDigestSkill implements Skill {
         writeFileSync(join(dataDirPath, `${dateKey}.md`), renderMarkdown(articles, dateLabel), "utf8");
       }
 
-      const platform = ctx.delivery.platform as unknown as FeishuPlatform;
-      await platform.sendImageBuffer(ctx.delivery.chatId, imageBuffer);
+      if (ctx.delivery) {
+        const platform = ctx.delivery.platform as unknown as FeishuPlatform;
+        await platform.sendImageBuffer(ctx.delivery.chatId, imageBuffer);
+      }
     } finally {
       await browser.close();
     }
