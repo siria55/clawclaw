@@ -4,6 +4,7 @@ import type { CronJob, CronSchedulerOptions } from "./types.js";
 import type { IMEventStorage } from "../im/storage.js";
 import type { FeishuPlatform } from "../platform/feishu.js";
 import type { SkillRegistry } from "../skills/registry.js";
+import { findLatestSkillPng } from "../skills/loader.js";
 
 interface ScheduledJob {
   job: CronJob;
@@ -126,18 +127,21 @@ export class CronScheduler {
           dataDir = join(this.#skillDataRoot, job.skillId);
           mkdirSync(dataDir, { recursive: true });
         }
-        const result = await skill.run({
+        await skill.run({
           agent: job.agent,
           ...(this.#imEventStorage !== undefined && { imEventStorage: this.#imEventStorage }),
           ...(dataDir !== undefined && { dataDir }),
         });
-        if (result.outputPath) {
-          const p = job.delivery.platform as unknown as FeishuPlatform;
-          await p.sendImage(job.delivery.chatId, result.outputPath);
-          if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, "[图片]");
-        } else {
-          if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, `[skill:${job.skillId}]`);
-        }
+        if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, `[skill:${job.skillId}]`);
+        return;
+      } else if (job.sendSkillOutput) {
+        const pngPath = this.#skillDataRoot
+          ? findLatestSkillPng(this.#skillDataRoot, job.sendSkillOutput)
+          : undefined;
+        if (!pngPath) throw new Error(`No output PNG found for skill: ${job.sendSkillOutput}`);
+        const p = job.delivery.platform as unknown as FeishuPlatform;
+        await p.sendImage(job.delivery.chatId, pngPath);
+        if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, "[图片]");
         return;
       } else if (job.direct) {
         if (job.msgType === "image") {

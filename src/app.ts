@@ -142,7 +142,7 @@ const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skil
 function registerCronJob(cfg: CronJobConfig): void {
   const platform = cfg.platform === "feishu" ? feishu : undefined;
   if (!platform || !cfg.chatId) return;
-  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, direct: cfg.direct ?? false, msgType: cfg.msgType ?? "text", ...(cfg.skillId !== undefined && { skillId: cfg.skillId }), agent, delivery: { platform, chatId: cfg.chatId } });
+  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, direct: cfg.direct ?? false, msgType: cfg.msgType ?? "text", ...(cfg.skillId !== undefined && { skillId: cfg.skillId }), ...(cfg.sendSkillOutput !== undefined && { sendSkillOutput: cfg.sendSkillOutput }), agent, delivery: { platform, chatId: cfg.chatId } });
 }
 
 // ── WebServer（本地调试界面）─────────────────────────────────────────────────

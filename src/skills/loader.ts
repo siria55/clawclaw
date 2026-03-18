@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 /** Parsed SKILL.md definition — metadata + agent instructions. */
@@ -21,6 +21,20 @@ export interface SkillDef {
 export function loadSkillDef(skillDir: string): SkillDef {
   const content = readFileSync(join(skillDir, "SKILL.md"), "utf8");
   return parseSkillMd(content);
+}
+
+/**
+ * Find the most recent `YYYY-MM-DD.png` output file for a skill.
+ * Returns the absolute path, or undefined if none exists.
+ */
+export function findLatestSkillPng(dataRoot: string, skillId: string): string | undefined {
+  const dir = join(dataRoot, skillId);
+  if (!existsSync(dir)) return undefined;
+  const pngs = readdirSync(dir)
+    .filter((f) => /^\d{4}-\d{2}-\d{2}\.png$/.test(f))
+    .sort();
+  if (pngs.length === 0) return undefined;
+  return join(dir, pngs[pngs.length - 1]!);
 }
 
 /** Exported for testing. */

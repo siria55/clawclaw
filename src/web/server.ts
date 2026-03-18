@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, createReadStream } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "../core/agent.js";
@@ -15,6 +15,8 @@ import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig } from "../config/types.js";
 import type { SkillRegistry } from "../skills/registry.js";
+import type { SkillResult } from "../skills/types.js";
+import { findLatestSkillPng } from "../skills/loader.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -89,7 +91,7 @@ export interface WebServerConfig {
   /** Skill registry for GET /api/skills. */
   skillRegistry?: SkillRegistry;
   /** Called when POST /api/skills/:id/run is triggered from WebUI. */
-  onRunSkill?: (skillId: string, log: (msg: string) => void) => Promise<void>;
+  onRunSkill?: (skillId: string, log: (msg: string) => void) => Promise<SkillResult>;
 }
 
 /** Config passed from browser via X-Claw-Config header */
@@ -229,6 +231,12 @@ export class WebServer {
     if (req.method === "POST" && path.startsWith("/api/skills/") && path.endsWith("/run")) {
       const skillId = path.slice("/api/skills/".length, -"/run".length);
       await this.#handleRunSkill(skillId, res);
+      return;
+    }
+
+    if (req.method === "GET" && path.startsWith("/api/skills/") && path.endsWith("/latest-image")) {
+      const skillId = path.slice("/api/skills/".length, -"/latest-image".length);
+      this.#handleLatestImage(skillId, res);
       return;
     }
 
@@ -391,13 +399,24 @@ export class WebServer {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
     try {
-      await this.#config.onRunSkill(skillId, (msg: string) => { send({ type: "log", text: msg }); });
-      send({ type: "done" });
+      const result = await this.#config.onRunSkill(skillId, (msg: string) => { send({ type: "log", text: msg }); });
+      send({ type: "done", ...(result.outputPath !== undefined && { outputPath: result.outputPath }) });
     } catch (err) {
       send({ type: "error", error: err instanceof Error ? err.message : String(err) });
     } finally {
       res.end();
     }
+  }
+
+  #handleLatestImage(skillId: string, res: ServerResponse): void {
+    const root = this.#config.skillDataRoot;
+    const pngPath = root ? findLatestSkillPng(root, skillId) : undefined;
+    if (!pngPath) {
+      res.writeHead(404, { "Access-Control-Allow-Origin": "*" }).end("No image found");
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "image/png", "Access-Control-Allow-Origin": "*" });
+    createReadStream(pngPath).pipe(res);
   }
 
   #handleGetCron(res: ServerResponse): void {

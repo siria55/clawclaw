@@ -17,12 +17,14 @@ interface SSEEvent {
   type: "log" | "done" | "error";
   text?: string;
   error?: string;
+  outputPath?: string;
 }
 
 function SkillRow({ skill }: { skill: SkillInfo }): React.JSX.Element {
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState<"ok" | "err" | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
 
@@ -34,6 +36,7 @@ function SkillRow({ skill }: { skill: SkillInfo }): React.JSX.Element {
     setRunning(true);
     setDone(null);
     setLogs([]);
+    setPreviewUrl(null);
 
     void (async () => {
       try {
@@ -62,6 +65,7 @@ function SkillRow({ skill }: { skill: SkillInfo }): React.JSX.Element {
               });
             } else if (event.type === "done") {
               setDone("ok");
+              setPreviewUrl(`/api/skills/${encodeURIComponent(skill.id)}/latest-image?t=${Date.now()}`);
             } else if (event.type === "error") {
               setLogs((prev) => [...prev, `✗ ${event.error ?? "未知错误"}`]);
               setDone("err");
@@ -96,6 +100,14 @@ function SkillRow({ skill }: { skill: SkillInfo }): React.JSX.Element {
         <div className={styles.logPanel} ref={logRef}>
           {logs.map((line, i) => <div key={i} className={styles.logLine}>{line}</div>)}
         </div>
+      )}
+      {previewUrl && (
+        <img
+          className={styles.previewImg}
+          src={previewUrl}
+          alt="skill output"
+          onError={() => { setPreviewUrl(null); }}
+        />
       )}
     </div>
   );
