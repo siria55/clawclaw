@@ -176,7 +176,7 @@ const webServer = new WebServer({
 
 // ── CronScheduler（定时任务）─────────────────────────────────────────────────
 
-const cron = new CronScheduler({ timezone: "Asia/Shanghai" });
+const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage });
 
 /** Register one CronJobConfig into the scheduler (if enabled and platform is available). */
 function registerCronJob(cfg: CronJobConfig): void {

@@ -1,4 +1,5 @@
 import type { CronJob, CronSchedulerOptions } from "./types.js";
+import type { IMEventStorage } from "../im/storage.js";
 
 interface ScheduledJob {
   job: CronJob;
@@ -17,10 +18,12 @@ type CronFields = [Set<number>, Set<number>, Set<number>, Set<number>, Set<numbe
 export class CronScheduler {
   readonly #jobs = new Map<string, ScheduledJob>();
   readonly #tz: string;
+  readonly #imEventStorage: IMEventStorage | undefined;
   #pollTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: CronSchedulerOptions = {}) {
     this.#tz = options.timezone ?? "Asia/Shanghai";
+    this.#imEventStorage = options.imEventStorage;
   }
 
   /** Add a job. Replaces any existing job with the same id. */
@@ -99,9 +102,17 @@ export class CronScheduler {
 
   async #fire(job: CronJob): Promise<void> {
     try {
+      const eventId = this.#imEventStorage?.append({
+        platform: job.delivery.platform.name,
+        userId: "",
+        chatId: job.delivery.chatId,
+        text: `[cron:${job.id}] ${job.message}`,
+        replyText: undefined,
+      });
       const result = await job.agent.run(job.message);
       const lastMsg = result.messages.findLast((m) => m.role === "assistant");
       const reply = extractText(lastMsg?.content);
+      if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, reply);
       if (reply) {
         await job.delivery.platform.send(job.delivery.chatId, reply);
       }

@@ -19,6 +19,8 @@ import { createSaveNewsTool } from "../tools/news.js";
 import type { Message } from "../llm/types.js";
 import type { LLMConfig, IMConfig, AgentMetaConfig } from "../config/types.js";
 import { WebServer } from "./server.js";
+import { CronScheduler } from "../cron/scheduler.js";
+import type { CronJobConfig } from "../cron/types.js";
 
 mkdirSync("./data/agent", { recursive: true });
 mkdirSync("./data/im", { recursive: true });
@@ -113,13 +115,30 @@ const server = new WebServer({
     agent.updateSystem(() => config.systemPrompt ?? DEFAULT_SYSTEM);
   },
   getStatus: () => ({
-    cronJobs: cronStorage.read().map((j) => ({ ...j, timezone: "Asia/Shanghai" })),
+    cronJobs: cron.list().map((j) => ({ ...j, timezone: "Asia/Shanghai" })),
     connections: [
       { platform: "feishu", label: "飞书 Bot", connected: !!feishu },
     ],
   }),
+  onCronAdd: (cfg: CronJobConfig) => registerCronJob(cfg),
+  onCronDelete: (id: string) => cron.remove(id),
 });
+
+const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage });
+
+function registerCronJob(cfg: CronJobConfig): void {
+  const platform = cfg.platform === "feishu" ? feishu : undefined;
+  if (!platform || !cfg.chatId) return;
+  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, agent, delivery: { platform, chatId: cfg.chatId } });
+}
+
+for (const cfg of cronStorage.read()) {
+  if (cfg.enabled) registerCronJob(cfg);
+}
+
 await server.start();
+cron.start();
 console.log(`WebUI + IM Webhook → http://localhost:3000`);
 console.log(`飞书  ${feishu ? "✓ 已连接（/feishu）" : "✗ 未配置"}`);
+console.log(`CronScheduler 已启动，${cron.jobIds.length} 个任务`);
 

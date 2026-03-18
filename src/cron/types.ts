@@ -35,4 +35,6 @@ export interface CronJobConfig {
 export interface CronSchedulerOptions {
   /** Timezone for cron expressions. Defaults to "Asia/Shanghai". */
   timezone?: string;
+  /** Storage for recording cron-fired messages (same as IM event log). */
+  imEventStorage?: import("../im/storage.js").IMEventStorage;
 }
