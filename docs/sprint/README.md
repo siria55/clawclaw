@@ -105,5 +105,5 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 29 — WebUI 手动触发 Skill
 `POST /api/skills/:id/run`；SkillContext.delivery 改为可选；Skills 列表加「运行」按钮 + 状态反馈。
 
-### Sprint 30 — Skills 独立 Tab
-SkillsView 独立页面；侧边栏新增「Skills」tab。
+### Sprint 31 — DailyDigest 浏览器搜索新闻
+`searchBaiduNews(page, query)` 用 Playwright 搜索百度新闻；`DailyDigestSkill` 构造器接受 `queries?: string[]`；多源（N 次百度搜索 + 36Kr 兜底）去重取 top 12；dev.ts 传入默认 3 个关键词。

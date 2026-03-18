@@ -88,7 +88,7 @@ function buildFeishu(): FeishuPlatform | undefined {
 let feishu = buildFeishu();
 
 const skillRegistry = new SkillRegistry();
-skillRegistry.register(new DailyDigestSkill());
+skillRegistry.register(new DailyDigestSkill({ queries: ["AI科技", "创业投资", "互联网动态"] }));
 
 const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry, skillDataRoot: "./data/skills" });
 

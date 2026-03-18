@@ -13,6 +13,31 @@ interface RawArticle {
   source: string;
 }
 
+const DEFAULT_QUERIES = ["AI科技", "创业投资", "互联网动态"];
+const MAX_ARTICLES = 12;
+
+/**
+ * Search Baidu News for a given query using Playwright.
+ */
+async function searchBaiduNews(page: Page, query: string): Promise<RawArticle[]> {
+  const url = `https://news.baidu.com/ns?word=${encodeURIComponent(query)}&tn=news&cl=2&rn=20&ct=1`;
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  const items = await page.locator(".result").all();
+  const articles: RawArticle[] = [];
+  for (const item of items) {
+    if (articles.length >= 8) break;
+    const titleEl = item.locator("h3 a").first();
+    const title = ((await titleEl.textContent()) ?? "").trim();
+    if (!title) continue;
+    const href = (await titleEl.getAttribute("href")) ?? "";
+    if (!href) continue;
+    const summary = ((await item.locator(".news-summary, .c-summary").first().textContent().catch(() => "")) ?? "").trim();
+    const source = ((await item.locator(".news-from, .c-author").first().textContent().catch(() => "")) ?? "").trim();
+    articles.push({ title, url: href, summary, source: source || "百度新闻" });
+  }
+  return articles;
+}
+
 /**
  * Crawl top articles from 36Kr homepage using Playwright locators.
  */
@@ -112,22 +137,47 @@ async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
 }
 
 /**
- * Daily digest skill — crawls tech news, renders a styled digest, screenshots it, and sends the image to Feishu.
+ * Collect articles from Baidu News searches + 36Kr fallback, deduplicated, top MAX_ARTICLES.
+ */
+async function collectArticles(browser: Browser, queries: string[]): Promise<RawArticle[]> {
+  const seen = new Set<string>();
+  const all: RawArticle[] = [];
+  const page = await browser.newPage();
+  try {
+    for (const query of queries) {
+      const results = await searchBaiduNews(page, query);
+      for (const a of results) {
+        if (!seen.has(a.url)) { seen.add(a.url); all.push(a); }
+      }
+    }
+    if (all.length < MAX_ARTICLES) {
+      const fallback = await crawl36kr(page);
+      for (const a of fallback) {
+        if (!seen.has(a.url)) { seen.add(a.url); all.push(a); }
+      }
+    }
+  } finally {
+    await page.close();
+  }
+  return all.slice(0, MAX_ARTICLES);
+}
+
+/**
+ * Daily digest skill — searches tech news via browser, renders a styled digest, screenshots it, and sends the image to Feishu.
  */
 export class DailyDigestSkill implements Skill {
   readonly id = "daily-digest";
-  readonly description = "爬取今日科技新闻，生成 HTML 日报截图并发送到飞书";
+  readonly description = "浏览器搜索科技新闻，生成 HTML 日报截图并发送到飞书";
+  readonly #queries: string[];
+
+  constructor(options: { queries?: string[] } = {}) {
+    this.#queries = options.queries ?? DEFAULT_QUERIES;
+  }
 
   async run(ctx: SkillContext): Promise<void> {
     const browser = await chromium.launch({ headless: true });
     try {
-      const crawlPage = await browser.newPage();
-      let articles: RawArticle[] = [];
-      try {
-        articles = await crawl36kr(crawlPage);
-      } finally {
-        await crawlPage.close();
-      }
+      const articles = await collectArticles(browser, this.#queries);
 
       if (ctx.newsStorage) {
         for (const a of articles) {
@@ -136,12 +186,12 @@ export class DailyDigestSkill implements Skill {
             url: a.url,
             summary: a.summary,
             source: a.source,
-            tags: ["tech", "36kr"],
+            tags: ["tech", "daily-digest"],
           } satisfies Omit<NewsArticle, "id" | "savedAt">);
         }
       }
 
-      const dateKey = new Date().toLocaleDateString("sv-SE");  // YYYY-MM-DD
+      const dateKey = new Date().toLocaleDateString("sv-SE");
       const dateLabel = new Date().toLocaleDateString("zh-CN", {
         year: "numeric", month: "long", day: "numeric",
       });
