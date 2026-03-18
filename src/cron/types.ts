@@ -50,4 +50,6 @@ export interface CronSchedulerOptions {
   imEventStorage?: import("../im/storage.js").IMEventStorage;
   /** Registry for named skills. */
   skillRegistry?: SkillRegistry;
+  /** Root directory under which per-skill data dirs are created. */
+  skillDataRoot?: string;
 }

@@ -16,6 +16,7 @@ import { IMEventStorage } from "../im/storage.js";
 import { ConversationStorage } from "../im/conversations.js";
 import { createMemoryTools } from "../tools/memory.js";
 import { createSaveNewsTool } from "../tools/news.js";
+import { createReadFileTool } from "../tools/read-file.js";
 import { SkillRegistry } from "../skills/registry.js";
 import { DailyDigestSkill } from "../skills/daily-digest/index.js";
 import type { Message } from "../llm/types.js";
@@ -27,6 +28,7 @@ import type { CronJobConfig } from "../cron/types.js";
 mkdirSync("./data/agent", { recursive: true });
 mkdirSync("./data/im", { recursive: true });
 mkdirSync("./data/cron", { recursive: true });
+mkdirSync("./data/skills", { recursive: true });
 
 const memoryStorage = new MemoryStorage("./data/agent/memory.json");
 const newsStorage = new NewsStorage("./data/agent/news.json");
@@ -55,6 +57,7 @@ const agentConfig = {
   tools: [
     createSaveNewsTool(newsStorage),
     ...createMemoryTools(memoryStorage),
+    createReadFileTool(() => agentConfigStorage.read().allowedPaths ?? ["./data/skills"]),
   ],
   getContext: async (messages: Message[]) => {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
@@ -85,7 +88,7 @@ let feishu = buildFeishu();
 const skillRegistry = new SkillRegistry();
 skillRegistry.register(new DailyDigestSkill());
 
-const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry });
+const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry, skillDataRoot: "./data/skills" });
 
 function registerCronJob(cfg: CronJobConfig): void {
   const platform = cfg.platform === "feishu" ? feishu : undefined;

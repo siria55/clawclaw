@@ -178,3 +178,10 @@
   border-color: var(--error-accent);
   color: var(--error-accent);
 }
+
+.fieldHint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  display: block;
+}

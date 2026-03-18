@@ -501,6 +501,7 @@ export class WebServer {
     const merged: AgentMetaConfig = {
       ...(incoming.name !== undefined ? { name: incoming.name } : existing.name !== undefined ? { name: existing.name } : {}),
       ...(incoming.systemPrompt !== undefined ? { systemPrompt: incoming.systemPrompt } : existing.systemPrompt !== undefined ? { systemPrompt: existing.systemPrompt } : {}),
+      ...(incoming.allowedPaths !== undefined ? { allowedPaths: incoming.allowedPaths } : existing.allowedPaths !== undefined ? { allowedPaths: existing.allowedPaths } : {}),
     };
     this.#config.agentConfigStorage.write(merged);
     this.#config.onAgentConfig?.(merged);

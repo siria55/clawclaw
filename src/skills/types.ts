@@ -13,6 +13,8 @@ export interface SkillContext {
   imEventStorage?: IMEventStorage;
   /** Optional news storage for reading/writing articles. */
   newsStorage?: NewsStorage;
+  /** Directory where the skill should persist its output files. */
+  dataDir?: string;
 }
 
 /**

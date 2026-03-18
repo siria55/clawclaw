@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import type { CronJob, CronSchedulerOptions } from "./types.js";
 import type { IMEventStorage } from "../im/storage.js";
 import type { FeishuPlatform } from "../platform/feishu.js";
@@ -22,12 +24,14 @@ export class CronScheduler {
   readonly #tz: string;
   readonly #imEventStorage: IMEventStorage | undefined;
   readonly #skillRegistry: SkillRegistry | undefined;
+  readonly #skillDataRoot: string | undefined;
   #pollTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: CronSchedulerOptions = {}) {
     this.#tz = options.timezone ?? "Asia/Shanghai";
     this.#imEventStorage = options.imEventStorage;
     this.#skillRegistry = options.skillRegistry;
+    this.#skillDataRoot = options.skillDataRoot;
   }
 
   /** Add a job. Replaces any existing job with the same id. */
@@ -117,10 +121,16 @@ export class CronScheduler {
       if (job.skillId) {
         const skill = this.#skillRegistry?.get(job.skillId);
         if (!skill) throw new Error(`Skill not found: ${job.skillId}`);
+        let dataDir: string | undefined;
+        if (this.#skillDataRoot) {
+          dataDir = join(this.#skillDataRoot, job.skillId);
+          mkdirSync(dataDir, { recursive: true });
+        }
         await skill.run({
           agent: job.agent,
           delivery: job.delivery,
           ...(this.#imEventStorage !== undefined && { imEventStorage: this.#imEventStorage }),
+          ...(dataDir !== undefined && { dataDir }),
         });
         if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, `[skill:${job.skillId}]`);
         return;

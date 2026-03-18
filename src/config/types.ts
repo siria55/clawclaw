@@ -26,4 +26,6 @@ export interface IMConfig {
 export interface AgentMetaConfig {
   name?: string;
   systemPrompt?: string;
+  /** Paths the agent is allowed to read via read_file tool (default: ["./data/skills"]). */
+  allowedPaths?: string[];
 }

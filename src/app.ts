@@ -30,6 +30,7 @@ import { ConversationStorage } from "./im/conversations.js";
 import { ConfigStorage } from "./config/storage.js";
 import { createSaveNewsTool } from "./tools/news.js";
 import { createMemoryTools } from "./tools/memory.js";
+import { createReadFileTool } from "./tools/read-file.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { DailyDigestSkill } from "./skills/daily-digest/index.js";
 import type { Message } from "./llm/types.js";
@@ -41,6 +42,7 @@ import type { IMConfig, LLMConfig, AgentMetaConfig } from "./config/types.js";
 mkdirSync("./data/agent", { recursive: true });
 mkdirSync("./data/im", { recursive: true });
 mkdirSync("./data/cron", { recursive: true });
+mkdirSync("./data/skills", { recursive: true });
 
 const newsStorage = new NewsStorage("./data/agent/news.json");
 const memoryStorage = new MemoryStorage("./data/agent/memory.json");
@@ -82,7 +84,7 @@ const agent = new Agent({
   tools: [
     createSaveNewsTool(newsStorage),
     ...createMemoryTools(memoryStorage),
-    // 在这里添加更多工具，如浏览器工具等
+    createReadFileTool(() => agentConfigStorage.read().allowedPaths ?? ["./data/skills"]),
   ],
 
   // getContext：每轮调用前，根据用户最新消息自动检索相关记忆
@@ -133,7 +135,7 @@ skillRegistry.register(new DailyDigestSkill());
 
 // ── CronScheduler（定时任务）─────────────────────────────────────────────────
 
-const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry });
+const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry, skillDataRoot: "./data/skills" });
 
 /** Register one CronJobConfig into the scheduler (if enabled and platform is available). */
 function registerCronJob(cfg: CronJobConfig): void {

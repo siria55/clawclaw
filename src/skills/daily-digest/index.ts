@@ -1,5 +1,7 @@
 import type { Page, Browser } from "playwright";
 import { chromium } from "playwright";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Skill, SkillContext } from "../types.js";
 import type { NewsArticle } from "../../news/types.js";
 import type { FeishuPlatform } from "../../platform/feishu.js";
@@ -83,6 +85,16 @@ function escapeHtml(s: string): string {
 }
 
 /**
+ * Render articles as a Markdown digest.
+ */
+function renderMarkdown(articles: RawArticle[], date: string): string {
+  const rows = articles
+    .map((a, i) => `${i + 1}. **[${a.title}](${a.url})**${a.summary ? `\n   ${a.summary}` : ""}\n   _${a.source}_`)
+    .join("\n\n");
+  return `# 每日新闻日报\n\n**${date}**\n\n${rows}\n`;
+}
+
+/**
  * Take a screenshot of HTML content. Returns a PNG buffer.
  */
 async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
@@ -129,11 +141,19 @@ export class DailyDigestSkill implements Skill {
         }
       }
 
-      const date = new Date().toLocaleDateString("zh-CN", {
+      const dateKey = new Date().toLocaleDateString("sv-SE");  // YYYY-MM-DD
+      const dateLabel = new Date().toLocaleDateString("zh-CN", {
         year: "numeric", month: "long", day: "numeric",
       });
-      const html = renderHtml(articles, date);
+      const html = renderHtml(articles, dateLabel);
       const imageBuffer = await screenshotHtml(browser, html);
+
+      const dataDirPath = ctx.dataDir ?? "";
+      if (dataDirPath) {
+        writeFileSync(join(dataDirPath, `${dateKey}.html`), html, "utf8");
+        writeFileSync(join(dataDirPath, `${dateKey}.png`), imageBuffer);
+        writeFileSync(join(dataDirPath, `${dateKey}.md`), renderMarkdown(articles, dateLabel), "utf8");
+      }
 
       const platform = ctx.delivery.platform as unknown as FeishuPlatform;
       await platform.sendImageBuffer(ctx.delivery.chatId, imageBuffer);

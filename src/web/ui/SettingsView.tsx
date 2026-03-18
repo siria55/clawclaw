@@ -33,22 +33,24 @@ export function SettingsView(): React.JSX.Element {
 interface AgentFields {
   name: string;
   systemPrompt: string;
+  allowedPaths: string;  // newline-separated
 }
 
 /** Agent meta config — name and system prompt, saved to data/agent-config.json. */
 function AgentSection(): React.JSX.Element {
-  const [fields, setFields] = useState<AgentFields>({ name: "", systemPrompt: "" });
+  const [fields, setFields] = useState<AgentFields>({ name: "", systemPrompt: "", allowedPaths: "./data/skills" });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetch("/api/config/agent")
-      .then((r) => r.json() as Promise<Partial<AgentFields>>)
+      .then((r) => r.json() as Promise<{ name?: string; systemPrompt?: string; allowedPaths?: string[] }>)
       .then((data) => {
         setFields((f) => ({
           name: data.name ?? f.name,
           systemPrompt: data.systemPrompt ?? f.systemPrompt,
+          allowedPaths: data.allowedPaths?.join("\n") ?? f.allowedPaths,
         }));
       })
       .catch(() => { /* no config yet */ });
@@ -66,6 +68,7 @@ function AgentSection(): React.JSX.Element {
       body: JSON.stringify({
         ...(fields.name ? { name: fields.name } : {}),
         ...(fields.systemPrompt ? { systemPrompt: fields.systemPrompt } : {}),
+        allowedPaths: fields.allowedPaths.split("\n").map((p) => p.trim()).filter(Boolean),
       }),
     })
       .then((r) => {
@@ -102,6 +105,19 @@ function AgentSection(): React.JSX.Element {
             autoComplete="off"
             spellCheck={false}
           />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.fieldLabel}>允许读取的路径（每行一个）</label>
+          <textarea
+            className={styles.fieldInput}
+            placeholder="./data/skills"
+            value={fields.allowedPaths}
+            onChange={(e) => setField("allowedPaths", e.target.value)}
+            rows={3}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <span className={styles.fieldHint}>agent 的 read_file 工具只能读取这些目录下的文件，默认 ./data/skills</span>
         </div>
       </div>
       <div className={styles.saveRow}>
