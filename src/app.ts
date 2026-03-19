@@ -26,6 +26,7 @@ import { CronScheduler } from "./cron/scheduler.js";
 import { MemoryStorage } from "./memory/storage.js";
 import { IMEventStorage } from "./im/storage.js";
 import { ConversationStorage } from "./im/conversations.js";
+import { createDailyDigestNewsReplyHandler } from "./im/news-reply.js";
 import { ConfigStorage } from "./config/storage.js";
 import { createFeishuOrgTools } from "./tools/feishu-org.js";
 import { createMemoryTools } from "./tools/memory.js";
@@ -163,12 +164,18 @@ const clawServer = new ClawServer({
   conversationStorage,
 });
 
-if (feishu) clawServer.setRoute("/feishu", { platform: feishu, agent });
-
 // ── SkillRegistry ─────────────────────────────────────────────────────────────
 
 const skillRegistry = new SkillRegistry();
 skillRegistry.register(new DailyDigestSkill({ configStorage: dailyDigestConfigStorage }));
+const handleNewsRequest = createDailyDigestNewsReplyHandler({
+  agent,
+  getPlatform: () => feishu,
+  getSkill: () => skillRegistry.get("daily-digest"),
+  dataRoot: "./data/skills",
+});
+
+if (feishu) clawServer.setRoute("/feishu", { platform: feishu, agent, onMessage: handleNewsRequest });
 
 // ── CronScheduler（定时任务）─────────────────────────────────────────────────
 
@@ -208,7 +215,7 @@ async function runCronJob(cfg: CronJobConfig): Promise<void> {
 const webServer = new WebServer({
   agent,
   port: 3001,
-  routes: feishu ? { "/feishu": { platform: feishu, agent } } : {},
+  routes: feishu ? { "/feishu": { platform: feishu, agent, onMessage: handleNewsRequest } } : {},
   skillDataRoot: "./data/skills",
   memoryStorage,
   imConfigStorage,
@@ -227,8 +234,8 @@ const webServer = new WebServer({
       : undefined;
     feishu = newFeishu;
     if (newFeishu) {
-      clawServer.setRoute("/feishu", { platform: newFeishu, agent });
-      webServer.setRoute("/feishu", { platform: newFeishu, agent });
+      clawServer.setRoute("/feishu", { platform: newFeishu, agent, onMessage: handleNewsRequest });
+      webServer.setRoute("/feishu", { platform: newFeishu, agent, onMessage: handleNewsRequest });
     } else {
       clawServer.removeRoute("/feishu");
       webServer.removeRoute("/feishu");

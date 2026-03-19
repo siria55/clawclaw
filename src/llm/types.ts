@@ -1,4 +1,5 @@
 import type { Tool } from "../tools/types.js";
+import type { ToolResult } from "../tools/types.js";
 
 export type MessageRole = "user" | "assistant" | "tool";
 
@@ -11,6 +12,12 @@ export interface ToolCall {
   id: string;
   name: string;
   input: unknown;
+}
+
+export interface ToolCallResult {
+  toolCallId: string;
+  toolName: string;
+  result: ToolResult;
 }
 
 export interface LLMResponse {

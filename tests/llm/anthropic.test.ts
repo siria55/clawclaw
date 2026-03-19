@@ -67,4 +67,34 @@ describe("AnthropicProvider — proxy & baseURL", () => {
     const instance = vi.mocked(MockAnthropic).mock.results[0]?.value as { _opts: Record<string, unknown> };
     expect(instance._opts["baseURL"]).toBe("https://config-proxy.example.com");
   });
+
+  it("encodes internal tool results as Anthropic tool_result blocks", async () => {
+    const { create } = await getInternals();
+    create.mockResolvedValue({
+      content: [{ type: "text", text: "done" }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+
+    const provider = new AnthropicProvider({ apiKey: "test" });
+    await provider.complete({
+      system: "sys",
+      messages: [{
+        role: "tool",
+        content: [{
+          toolCallId: "call_1",
+          toolName: "memory_search",
+          result: { output: "命中 1 条记忆" },
+        }],
+      }],
+    });
+
+    const payload = create.mock.calls[0]?.[0] as { messages: Array<{ content: unknown }> };
+    expect(payload.messages[0]?.content).toEqual([
+      {
+        type: "tool_result",
+        tool_use_id: "call_1",
+        content: "命中 1 条记忆",
+      },
+    ]);
+  });
 });

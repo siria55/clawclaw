@@ -11,6 +11,7 @@ import type { IMPlatform } from "../platform/types.js";
 import type { IMEventStorage } from "../im/storage.js";
 import type { ConversationStorage } from "../im/conversations.js";
 import { buildIMRunContext, persistIMRunContext } from "../im/context.js";
+import type { IMRoute } from "../im/route.js";
 import type { CronJobConfig } from "../cron/types.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
@@ -121,7 +122,7 @@ export interface WebServerConfig {
    * e.g. { "/feishu": { platform: feishuPlatform, agent } }
    * Requests to these paths are handled as IM webhooks (verify → parse → agent.run).
    */
-  routes?: Record<string, { platform: IMPlatform; agent: Agent }>;
+  routes?: Record<string, IMRoute>;
   port?: number;
   /** Override static file directory (default: `<__dirname>/dist`). Used in tests. */
   staticDir?: string;
@@ -209,7 +210,7 @@ export class WebServer {
     skillRegistry: SkillRegistry | undefined;
     onRunSkill: ((skillId: string, log: (msg: string) => void) => Promise<SkillResult>) | undefined;
   };
-  readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
+  readonly #routes: Record<string, IMRoute>;
   readonly #server: ReturnType<typeof createServer>;
 
   constructor(config: WebServerConfig) {
@@ -246,7 +247,7 @@ export class WebServer {
   }
 
   /** Dynamically add or replace an IM webhook route at runtime. */
-  setRoute(path: string, route: { platform: IMPlatform; agent: Agent }): void {
+  setRoute(path: string, route: IMRoute): void {
     this.#routes[path] = route;
   }
 
@@ -960,7 +961,7 @@ export class WebServer {
     req: IncomingMessage,
     res: ServerResponse,
     path: string,
-    route: { platform: IMPlatform; agent: Agent },
+    route: IMRoute,
   ): Promise<void> {
     const url = new URL(req.url ?? "/", "http://localhost");
     const body = req.method === "POST" ? await readBody(req) : "";
@@ -1015,6 +1016,23 @@ export class WebServer {
 
     if (message.eventType && message.eventType !== "message") {
       return;
+    }
+
+    if (route.onMessage) {
+      try {
+        const handled = await route.onMessage(message);
+        if (handled?.handled) {
+          if (handled.messages) {
+            persistIMRunContext(this.#config.conversationStorage, message, handled.messages);
+          }
+          if (eventId !== undefined && handled.replyText) {
+            this.#config.imEventStorage?.setReply(eventId, handled.replyText);
+          }
+          return;
+        }
+      } catch (err) {
+        console.error(`[${path}] Route handler error:`, err);
+      }
     }
 
     const runContext = buildIMRunContext(message, this.#config.conversationStorage);

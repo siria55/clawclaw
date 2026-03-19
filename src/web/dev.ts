@@ -14,6 +14,7 @@ import { ConfigStorage } from "../config/storage.js";
 import { MemoryStorage } from "../memory/storage.js";
 import { IMEventStorage } from "../im/storage.js";
 import { ConversationStorage } from "../im/conversations.js";
+import { createDailyDigestNewsReplyHandler } from "../im/news-reply.js";
 import { createFeishuOrgTools } from "../tools/feishu-org.js";
 import { createMemoryTools } from "../tools/memory.js";
 import { createReadFileTool } from "../tools/read-file.js";
@@ -125,6 +126,12 @@ let feishuSource: FeishuRuntimeSource = resolveFeishuSource(imConfigStorage.read
 
 const skillRegistry = new SkillRegistry();
 skillRegistry.register(new DailyDigestSkill({ configStorage: dailyDigestConfigStorage }));
+const handleNewsRequest = createDailyDigestNewsReplyHandler({
+  agent,
+  getPlatform: () => feishu,
+  getSkill: () => skillRegistry.get("daily-digest"),
+  dataRoot: "./data/skills",
+});
 
 const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry, skillDataRoot: "./data/skills" });
 
@@ -160,7 +167,7 @@ const server = new WebServer({
   agent,
   agentConfig,
   port: 3000,
-  routes: feishu ? { "/feishu": { platform: feishu, agent } } : {},
+  routes: feishu ? { "/feishu": { platform: feishu, agent, onMessage: handleNewsRequest } } : {},
   skillDataRoot: "./data/skills",
   memoryStorage,
   imConfigStorage,
@@ -178,7 +185,7 @@ const server = new WebServer({
       : undefined;
     feishu = newFeishu;
     if (newFeishu) {
-      server.setRoute("/feishu", { platform: newFeishu, agent });
+      server.setRoute("/feishu", { platform: newFeishu, agent, onMessage: handleNewsRequest });
     } else {
       server.removeRoute("/feishu");
     }

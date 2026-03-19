@@ -513,6 +513,45 @@ describe("WebServer", () => {
     rmSync(imDir, { recursive: true, force: true });
   });
 
+  it("uses route-level onMessage handler before invoking the agent on IM routes", async () => {
+    const agent = makeMockAgent();
+    const imEventStorage = new IMEventStorage();
+    const onMessage = vi.fn(async () => ({ handled: true, replyText: "[日报文本] 2026-03-19" }));
+    const platform = {
+      name: "mock",
+      verify: vi.fn(async () => undefined),
+      parse: vi.fn(async () => ({
+        platform: "feishu",
+        chatId: "oc_daily",
+        sessionId: "oc_daily",
+        continuityId: "feishu:oc_daily:ou_user",
+        userId: "ou_user",
+        text: "今天新闻文本版",
+        raw: {},
+      })),
+      send: vi.fn(async () => undefined),
+    };
+
+    const server = new WebServer({
+      agent,
+      port: 0,
+      staticDir,
+      routes: { "/hook": { platform, agent, onMessage } },
+      imEventStorage,
+    });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/hook`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(onMessage).toHaveBeenCalledOnce();
+    expect(vi.mocked(agent.run)).not.toHaveBeenCalled();
+    expect(imEventStorage.since(undefined)[0]?.replyText).toBe("[日报文本] 2026-03-19");
+
+    await server.stop();
+  });
+
   it("POST /api/im-config saves feishu config and returns ok", async () => {
     const agent = makeMockAgent();
     const imDir = join(tmpdir(), `clawclaw-im-mask-${Date.now()}`);

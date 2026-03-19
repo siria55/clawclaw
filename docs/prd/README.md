@@ -56,6 +56,7 @@ WebServer                 ← 本地调试 + 新闻库查阅界面
 飞书当前支持两条发送路径：
 - 普通文本走 `text` 消息
 - 命中明显 Markdown 结构的内容可升级为飞书 `post` Markdown 渲染
+- 问“给我今天的新闻”时，服务端会优先命中 `daily-digest` 快捷链路：优先发今日图片，缺失时先生成；显式要文本版时发送 Markdown
 
 `IMMessage` 同时携带两个标识：
 - `chatId`：IM 平台真实回包目标
@@ -109,6 +110,11 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 - **直发模式**（`direct: true`）：直接发送预设文本、Markdown 或图片
 - **Skill 生成**（`skillId`）：执行指定 Skill，生成并保存文件，不发 IM
 - **Skill 投递**（`sendSkillOutput`）：找指定 Skill 最新 PNG，发送到 IM
+
+除 Cron 外，飞书 IM 入口也有一条面向日报的快捷处理：
+- 当用户直接在飞书里问“给我今天的新闻”这类短请求时，服务端优先返回 `daily-digest` 的今日结果
+- 默认返回图片；如果用户显式要求“文本版 / Markdown / 文字”，则发送 Markdown 正文
+- 若今日文件还不存在，服务端会先触发一次 `daily-digest` 生成
 
 ### Skills 系统
 
@@ -223,13 +229,14 @@ Agent 可挂载一组飞书文档来源（名称 + URL），由服务端使用 P
 - 飞书群聊列表：机器人已加入过的群、群名、最近事件和最近时间
 - 配置文件状态：各 JSON 配置文件 / 存储文件的路径、是否已落盘、更新时间、体积和摘要
 - 运行指标：长期记忆条数、IM 事件数、会话数、挂载文档同步数、Cron 启用数
-- `状态` / `设置` 两个长页面 tab 内置页内 TOC，可直接跳到对应区块
+- `状态` / `设置` 两个长页面 tab 内置页内 TOC，并固定在页面外侧，减少遮挡主内容
 
 Web UI 七个标签页各对应独立 URL（hash 路由）：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#cron` / `#settings`，支持直接访问和浏览器前进/后退。
 
 其中：
 - `#status` 和 `#settings` 内部支持页内 TOC 跳转，不影响原有 tab hash 路由
 - `#cron` 的直发模式支持 `text` / `markdown` / `image`
+- 飞书 IM 对“今天的新闻”类请求支持直接回图片 / 文本，不必先配置 Cron
 
 ---
 

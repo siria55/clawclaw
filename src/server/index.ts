@@ -6,10 +6,11 @@ import type { IMPlatform } from "../platform/types.js";
 import type { IMEventStorage } from "../im/storage.js";
 import type { ConversationStorage } from "../im/conversations.js";
 import { buildIMRunContext, persistIMRunContext } from "../im/context.js";
+import type { IMRoute } from "../im/route.js";
 
 export interface ClawServerConfig {
   port?: number;
-  routes: Record<string, { platform: IMPlatform; agent: Agent }>;
+  routes: Record<string, IMRoute>;
   /** Optional storage for recording incoming IM events. */
   imEventStorage?: IMEventStorage;
   /** Optional storage for per-session conversation history (multi-turn memory). */
@@ -30,7 +31,7 @@ export interface ClawServerConfig {
  */
 export class ClawServer {
   readonly #config: Required<Omit<ClawServerConfig, "imEventStorage" | "conversationStorage">> & { imEventStorage: IMEventStorage | undefined; conversationStorage: ConversationStorage | undefined };
-  readonly #routes: Record<string, { platform: IMPlatform; agent: Agent }>;
+  readonly #routes: Record<string, IMRoute>;
   readonly #server: ReturnType<typeof createServer>;
   #activeRequests = 0;
   #shutdownHandler: (() => void) | undefined;
@@ -44,7 +45,7 @@ export class ClawServer {
   }
 
   /** Dynamically add or replace a route at runtime. */
-  setRoute(path: string, route: { platform: IMPlatform; agent: Agent }): void {
+  setRoute(path: string, route: IMRoute): void {
     this.#routes[path] = route;
   }
 
@@ -159,6 +160,23 @@ export class ClawServer {
 
     if (message.eventType && message.eventType !== "message") {
       return;
+    }
+
+    if (route.onMessage) {
+      try {
+        const handled = await route.onMessage(message);
+        if (handled?.handled) {
+          if (handled.messages) {
+            persistIMRunContext(this.#config.conversationStorage, message, handled.messages);
+          }
+          if (eventId !== undefined && handled.replyText) {
+            this.#config.imEventStorage?.setReply(eventId, handled.replyText);
+          }
+          return;
+        }
+      } catch (err) {
+        console.error(`[${route.platform.name}] Route handler error:`, err);
+      }
     }
 
     const runContext = buildIMRunContext(message, this.#config.conversationStorage);

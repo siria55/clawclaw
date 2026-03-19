@@ -218,4 +218,38 @@ describe("ClawServer", () => {
 
     await server.stop();
   });
+
+  it("uses route-level onMessage handler before invoking the agent", async () => {
+    const agent = makeMockAgent();
+    const imEventStorage = new IMEventStorage();
+    const onMessage = vi.fn(async () => ({ handled: true, replyText: "[日报图片] 2026-03-19" }));
+    const platform = makeMockPlatform({
+      parse: vi.fn(async () => ({
+        platform: "feishu",
+        chatId: "oc_daily",
+        sessionId: "oc_daily",
+        continuityId: "feishu:oc_daily:ou_user",
+        userId: "ou_user",
+        text: "给我今天的新闻",
+        raw: {},
+      })),
+    });
+
+    const server = new ClawServer({
+      port: 0,
+      routes: { "/hook": { platform, agent, onMessage } },
+      imEventStorage,
+    });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/hook`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(onMessage).toHaveBeenCalledOnce();
+    expect(vi.mocked(agent.run)).not.toHaveBeenCalled();
+    expect(imEventStorage.since(undefined)[0]?.replyText).toBe("[日报图片] 2026-03-19");
+
+    await server.stop();
+  });
 });

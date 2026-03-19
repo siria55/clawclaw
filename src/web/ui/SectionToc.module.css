@@ -1,7 +1,9 @@
 .toc {
   position: sticky;
-  top: 0;
+  top: 12px;
   align-self: start;
+  width: 100%;
+  justify-self: end;
   display: flex;
   flex-direction: column;
   gap: 10px;

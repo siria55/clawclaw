@@ -1,6 +1,5 @@
 import type { AgentConfig, AgentOptions, AgentRunResult, AgentEvent } from "./types.js";
-import type { LLMProvider } from "../llm/types.js";
-import type { Message } from "../llm/types.js";
+import type { LLMProvider, Message, ToolCallResult } from "../llm/types.js";
 
 const DEFAULT_MAX_TURNS = 20;
 
@@ -134,21 +133,33 @@ export class Agent {
 
   async #executeTools(
     calls: NonNullable<Awaited<ReturnType<AgentConfig["llm"]["complete"]>>["toolCalls"]>,
-  ): Promise<Array<{ toolName: string; result: import("../tools/types.js").ToolResult }>> {
+  ): Promise<ToolCallResult[]> {
     const tools = this.#config.tools ?? [];
 
     return Promise.all(
       calls.map(async (call) => {
         const tool = tools.find((t) => t.name === call.name);
         if (!tool) {
-          return { toolName: call.name, result: { error: `Tool "${call.name}" not found` } };
+          return {
+            toolCallId: call.id,
+            toolName: call.name,
+            result: { error: `Tool "${call.name}" not found` },
+          };
         }
         try {
           const result = await tool.execute(call.input);
-          return { toolName: call.name, result };
+          return {
+            toolCallId: call.id,
+            toolName: call.name,
+            result,
+          };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          return { toolName: call.name, result: { error: message } };
+          return {
+            toolCallId: call.id,
+            toolName: call.name,
+            result: { error: message },
+          };
         }
       }),
     );

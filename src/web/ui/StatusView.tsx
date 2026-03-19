@@ -162,7 +162,6 @@ export function StatusView(): React.JSX.Element {
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
-        <SectionToc items={tocItems} />
         <div className={styles.main}>
           <div className={styles.header}>
             <h2 className={styles.title}>系统状态</h2>
@@ -171,148 +170,149 @@ export function StatusView(): React.JSX.Element {
             </button>
           </div>
 
-        <section id="status-overview" className={styles.section}>
-          <h3 className={styles.sectionTitle}>运行概览</h3>
-          <div className={styles.metricGrid}>
-            {(overview?.metrics ?? []).map((metric) => (
-              <div key={metric.key} className={styles.metricCard}>
-                <span className={styles.metricLabel}>{metric.label}</span>
-                <strong className={styles.metricValue}>{metric.value}</strong>
-                <span className={styles.metricHint}>{metric.hint ?? ""}</span>
-              </div>
-            ))}
-            {(overview?.metrics ?? []).length === 0 && <p className={styles.empty}>暂无运行概览</p>}
-          </div>
-          {overview?.lastIMEvent && (
-            <div className={styles.lastEventCard}>
-              <div className={styles.lastEventTop}>
-                <span className={styles.lastEventTitle}>最近一条 IM 活动</span>
-                <span className={styles.lastEventTime}>{formatDateTime(overview.lastIMEvent.timestamp)}</span>
-              </div>
-              <div className={styles.lastEventMeta}>
-                <span>{overview.lastIMEvent.platform}</span>
-                <span>会话 {overview.lastIMEvent.chatId}</span>
-                <span>用户 {overview.lastIMEvent.userId || "-"}</span>
-              </div>
-              <p className={styles.lastEventText}>{overview.lastIMEvent.textPreview}</p>
-            </div>
-          )}
-        </section>
-
-        <section id="status-feishu" className={styles.section}>
-          <h3 className={styles.sectionTitle}>飞书概览</h3>
-          {status?.connections.length === 0 && <p className={styles.empty}>未配置 IM 平台</p>}
-          {status?.connections.map((c) => (
-            <div key={c.platform} className={styles.connRow}>
-              <span className={`${styles.dot} ${c.connected ? styles.dotOn : styles.dotOff}`} />
-              <span className={styles.connLabel}>{c.label}</span>
-              <span className={styles.connStatus}>{c.connected ? "已连接" : "未连接"}</span>
-            </div>
-          ))}
-          {feishu && (
-            <div className={styles.platformCard}>
-              <div className={styles.platformHeader}>
-                <strong className={styles.platformTitle}>飞书运行状态</strong>
-                <span className={`${styles.platformBadge} ${feishu.runtime.active ? styles.platformOn : styles.platformOff}`}>
-                  {feishu.runtime.active ? "运行中" : "未运行"}
-                </span>
-              </div>
-              <div className={styles.platformGrid}>
-                <InfoItem label="配置来源" value={describeFeishuSource(feishu.runtime.source)} />
-                <InfoItem label="Webhook" value={feishu.runtime.webhookPath} mono />
-                <InfoItem label="App ID" value={feishu.appId ?? "-"} mono />
-                <InfoItem label="Chat ID" value={feishu.chatId ?? "-"} mono />
-                <InfoItem label="App Secret" value={feishu.hasAppSecret ? "已配置" : "未配置"} />
-                <InfoItem label="Verification Token" value={feishu.hasVerificationToken ? "已配置" : "未配置"} />
-                <InfoItem label="Encrypt Key" value={feishu.hasEncryptKey ? "已配置" : "未配置"} />
-                <InfoItem label="通讯录读取前提" value="需在飞书开放平台开通相应 read 权限" />
-              </div>
-              <p className={styles.platformHint}>{feishu.permissionsHint}</p>
-            </div>
-          )}
-          {!!overview?.chats.length && (
-            <div className={styles.chatList}>
-              {overview.chats.map((chat) => (
-                <div key={chat.chatId} className={styles.chatCard}>
-                  <div className={styles.chatHeader}>
-                    <strong className={styles.chatTitle}>{chat.chatName ?? "未命名群"}</strong>
-                    <span className={`${styles.chatBadge} ${chat.active ? styles.chatActive : styles.chatInactive}`}>
-                      {chat.active ? "已加入" : "已移出"}
-                    </span>
-                  </div>
-                  <div className={styles.chatMeta}>
-                    <span className={styles.mono}>{chat.chatId}</span>
-                    <span>最近事件：{describeEventType(chat.lastEventType)}</span>
-                    <span>最近时间：{formatDateTime(chat.lastSeen)}</span>
-                    <span>加入时间：{formatDateTime(chat.joinedAt)}</span>
-                  </div>
+          <section id="status-overview" className={styles.section}>
+            <h3 className={styles.sectionTitle}>运行概览</h3>
+            <div className={styles.metricGrid}>
+              {(overview?.metrics ?? []).map((metric) => (
+                <div key={metric.key} className={styles.metricCard}>
+                  <span className={styles.metricLabel}>{metric.label}</span>
+                  <strong className={styles.metricValue}>{metric.value}</strong>
+                  <span className={styles.metricHint}>{metric.hint ?? ""}</span>
                 </div>
               ))}
+              {(overview?.metrics ?? []).length === 0 && <p className={styles.empty}>暂无运行概览</p>}
             </div>
-          )}
-          {!status && !loading && <p className={styles.empty}>—</p>}
-        </section>
+            {overview?.lastIMEvent && (
+              <div className={styles.lastEventCard}>
+                <div className={styles.lastEventTop}>
+                  <span className={styles.lastEventTitle}>最近一条 IM 活动</span>
+                  <span className={styles.lastEventTime}>{formatDateTime(overview.lastIMEvent.timestamp)}</span>
+                </div>
+                <div className={styles.lastEventMeta}>
+                  <span>{overview.lastIMEvent.platform}</span>
+                  <span>会话 {overview.lastIMEvent.chatId}</span>
+                  <span>用户 {overview.lastIMEvent.userId || "-"}</span>
+                </div>
+                <p className={styles.lastEventText}>{overview.lastIMEvent.textPreview}</p>
+              </div>
+            )}
+          </section>
 
-        <section id="status-files" className={styles.section}>
-          <h3 className={styles.sectionTitle}>配置文件</h3>
-          <div className={styles.fileList}>
-            {(overview?.configFiles ?? []).map((file) => (
-              <div key={file.key} className={styles.fileCard}>
-                <div className={styles.fileHeader}>
-                  <strong className={styles.fileTitle}>{file.label}</strong>
-                  <span className={`${styles.fileBadge} ${file.exists ? styles.fileExists : styles.fileMissing}`}>
-                    {file.exists ? "已落盘" : "未落盘"}
+          <section id="status-feishu" className={styles.section}>
+            <h3 className={styles.sectionTitle}>飞书概览</h3>
+            {status?.connections.length === 0 && <p className={styles.empty}>未配置 IM 平台</p>}
+            {status?.connections.map((c) => (
+              <div key={c.platform} className={styles.connRow}>
+                <span className={`${styles.dot} ${c.connected ? styles.dotOn : styles.dotOff}`} />
+                <span className={styles.connLabel}>{c.label}</span>
+                <span className={styles.connStatus}>{c.connected ? "已连接" : "未连接"}</span>
+              </div>
+            ))}
+            {feishu && (
+              <div className={styles.platformCard}>
+                <div className={styles.platformHeader}>
+                  <strong className={styles.platformTitle}>飞书运行状态</strong>
+                  <span className={`${styles.platformBadge} ${feishu.runtime.active ? styles.platformOn : styles.platformOff}`}>
+                    {feishu.runtime.active ? "运行中" : "未运行"}
                   </span>
                 </div>
-                <p className={styles.fileSummary}>{file.summary}</p>
-                <div className={styles.fileMeta}>
-                  <span className={styles.filePath}>{file.path}</span>
-                  <span>{formatDateTime(file.updatedAt)}</span>
-                  <span>{formatSize(file.sizeBytes)}</span>
+                <div className={styles.platformGrid}>
+                  <InfoItem label="配置来源" value={describeFeishuSource(feishu.runtime.source)} />
+                  <InfoItem label="Webhook" value={feishu.runtime.webhookPath} mono />
+                  <InfoItem label="App ID" value={feishu.appId ?? "-"} mono />
+                  <InfoItem label="Chat ID" value={feishu.chatId ?? "-"} mono />
+                  <InfoItem label="App Secret" value={feishu.hasAppSecret ? "已配置" : "未配置"} />
+                  <InfoItem label="Verification Token" value={feishu.hasVerificationToken ? "已配置" : "未配置"} />
+                  <InfoItem label="Encrypt Key" value={feishu.hasEncryptKey ? "已配置" : "未配置"} />
+                  <InfoItem label="通讯录读取前提" value="需在飞书开放平台开通相应 read 权限" />
                 </div>
+                <p className={styles.platformHint}>{feishu.permissionsHint}</p>
               </div>
-            ))}
-            {(overview?.configFiles ?? []).length === 0 && <p className={styles.empty}>暂无配置文件信息</p>}
-          </div>
-        </section>
+            )}
+            {!!overview?.chats.length && (
+              <div className={styles.chatList}>
+                {overview.chats.map((chat) => (
+                  <div key={chat.chatId} className={styles.chatCard}>
+                    <div className={styles.chatHeader}>
+                      <strong className={styles.chatTitle}>{chat.chatName ?? "未命名群"}</strong>
+                      <span className={`${styles.chatBadge} ${chat.active ? styles.chatActive : styles.chatInactive}`}>
+                        {chat.active ? "已加入" : "已移出"}
+                      </span>
+                    </div>
+                    <div className={styles.chatMeta}>
+                      <span className={styles.mono}>{chat.chatId}</span>
+                      <span>最近事件：{describeEventType(chat.lastEventType)}</span>
+                      <span>最近时间：{formatDateTime(chat.lastSeen)}</span>
+                      <span>加入时间：{formatDateTime(chat.joinedAt)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!status && !loading && <p className={styles.empty}>—</p>}
+          </section>
 
-        <section id="status-im-log" className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h3 className={styles.sectionTitle}>IM 消息日志</h3>
-            <div className={styles.imTabs}>
-              {(["all", "group", "direct"] as const).map((f) => (
-                <button key={f} className={`${styles.imTab} ${imFilter === f ? styles.imTabActive : ""}`} onClick={() => setIMFilter(f)}>
-                  {f === "all" ? "全部" : f === "group" ? "群聊" : "直发"}
-                </button>
-              ))}
-            </div>
-          </div>
-          {(() => {
-            const filtered = [...imEvents].reverse().filter((e) => {
-              if (imFilter === "group") return e.chatId.startsWith("oc_");
-              if (imFilter === "direct") return e.chatId.startsWith("ou_");
-              return true;
-            });
-            if (filtered.length === 0) return <p className={styles.empty}>暂无 IM 消息</p>;
-            return filtered.map((e) => (
-              <div key={e.id} className={styles.imCard}>
-                <div className={styles.imMeta}>
-                  <span className={styles.imPlatform}>{e.platform}</span>
-                  {e.eventType && <span className={styles.imEventType}>{describeEventType(e.eventType)}</span>}
-                  {e.chatName && <span className={styles.imChatName}>{e.chatName}</span>}
-                  {e.userId && <span className={styles.imId} title={`点击复制: ${e.userId}`} onClick={() => void navigator.clipboard.writeText(e.userId)}>用户 {e.userId.slice(0, 16)}</span>}
-                  {e.chatId && <span className={styles.imId} title={`点击复制: ${e.chatId}`} onClick={() => void navigator.clipboard.writeText(e.chatId)}>会话 {e.chatId.slice(0, 16)}</span>}
-                  <span className={styles.imTime}>{formatTime(e.timestamp)}</span>
+          <section id="status-files" className={styles.section}>
+            <h3 className={styles.sectionTitle}>配置文件</h3>
+            <div className={styles.fileList}>
+              {(overview?.configFiles ?? []).map((file) => (
+                <div key={file.key} className={styles.fileCard}>
+                  <div className={styles.fileHeader}>
+                    <strong className={styles.fileTitle}>{file.label}</strong>
+                    <span className={`${styles.fileBadge} ${file.exists ? styles.fileExists : styles.fileMissing}`}>
+                      {file.exists ? "已落盘" : "未落盘"}
+                    </span>
+                  </div>
+                  <p className={styles.fileSummary}>{file.summary}</p>
+                  <div className={styles.fileMeta}>
+                    <span className={styles.filePath}>{file.path}</span>
+                    <span>{formatDateTime(file.updatedAt)}</span>
+                    <span>{formatSize(file.sizeBytes)}</span>
+                  </div>
                 </div>
-                <p className={styles.imText}>{e.text}</p>
-                {e.replyText !== undefined && (
-                  <p className={styles.imReply}>{e.replyText.slice(0, 120)}{e.replyText.length > 120 ? "…" : ""}</p>
-                )}
+              ))}
+              {(overview?.configFiles ?? []).length === 0 && <p className={styles.empty}>暂无配置文件信息</p>}
+            </div>
+          </section>
+
+          <section id="status-im-log" className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h3 className={styles.sectionTitle}>IM 消息日志</h3>
+              <div className={styles.imTabs}>
+                {(["all", "group", "direct"] as const).map((f) => (
+                  <button key={f} className={`${styles.imTab} ${imFilter === f ? styles.imTabActive : ""}`} onClick={() => setIMFilter(f)}>
+                    {f === "all" ? "全部" : f === "group" ? "群聊" : "直发"}
+                  </button>
+                ))}
               </div>
-            ));
-          })()}
-        </section>
+            </div>
+            {(() => {
+              const filtered = [...imEvents].reverse().filter((e) => {
+                if (imFilter === "group") return e.chatId.startsWith("oc_");
+                if (imFilter === "direct") return e.chatId.startsWith("ou_");
+                return true;
+              });
+              if (filtered.length === 0) return <p className={styles.empty}>暂无 IM 消息</p>;
+              return filtered.map((e) => (
+                <div key={e.id} className={styles.imCard}>
+                  <div className={styles.imMeta}>
+                    <span className={styles.imPlatform}>{e.platform}</span>
+                    {e.eventType && <span className={styles.imEventType}>{describeEventType(e.eventType)}</span>}
+                    {e.chatName && <span className={styles.imChatName}>{e.chatName}</span>}
+                    {e.userId && <span className={styles.imId} title={`点击复制: ${e.userId}`} onClick={() => void navigator.clipboard.writeText(e.userId)}>用户 {e.userId.slice(0, 16)}</span>}
+                    {e.chatId && <span className={styles.imId} title={`点击复制: ${e.chatId}`} onClick={() => void navigator.clipboard.writeText(e.chatId)}>会话 {e.chatId.slice(0, 16)}</span>}
+                    <span className={styles.imTime}>{formatTime(e.timestamp)}</span>
+                  </div>
+                  <p className={styles.imText}>{e.text}</p>
+                  {e.replyText !== undefined && (
+                    <p className={styles.imReply}>{e.replyText.slice(0, 120)}{e.replyText.length > 120 ? "…" : ""}</p>
+                  )}
+                </div>
+              ));
+            })()}
+          </section>
         </div>
+        <SectionToc items={tocItems} />
       </div>
     </div>
   );

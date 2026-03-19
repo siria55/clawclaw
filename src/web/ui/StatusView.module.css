@@ -9,9 +9,9 @@
 
 .inner {
   width: 100%;
-  max-width: 1140px;
+  max-width: 1320px;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 240px;
   gap: 24px;
   align-items: start;
 }

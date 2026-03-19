@@ -20,7 +20,9 @@ src/index.ts（公共入口）
 │
 ├── im/
 │   ├── conversations.ts   ← ConversationStorage（session 历史 + bridge）
-│   └── context.ts         ← buildIMRunContext() / persistIMRunContext()
+│   ├── context.ts         ← buildIMRunContext() / persistIMRunContext()
+│   ├── news-reply.ts      ← 飞书“今天新闻”快捷处理
+│   └── route.ts           ← IM 路由类型 / onMessage 拦截
 │
 ├── memory/storage.ts      ← MemoryStorage（JSON 持久化）
 ├── docs/library.ts        ← MountedDocLibrary（文档同步 / 缓存 / 检索）
@@ -166,6 +168,38 @@ Cron 直发链路也同步支持 `msgType: "markdown"`：
 
 - 当 `direct === true && msgType === "markdown"` 时，`CronScheduler` 优先调用 `platform.sendMarkdown()`
 - 未实现 `sendMarkdown()` 的平台继续回退到普通 `send()`，避免破坏跨平台接口
+
+---
+
+## Anthropic Tool Result 编码
+
+此前 Agent 触发工具调用后，内部工具执行结果会直接以普通对象数组写回消息历史；而 Anthropic 要求工具结果必须是标准 `tool_result` block。
+
+修复后链路为：
+
+- `Agent.#executeTools()` 保留 `toolCallId`
+- 工具执行结果写入历史时保留 `{ toolCallId, toolName, result }`
+- `AnthropicProvider` 在发送前把这层内部结构转换成 `{ type: "tool_result", tool_use_id, content, is_error? }`
+
+这样可以避免代理或 Anthropic API 返回 `invalid_request_error: ... type: Field required`，也就是飞书里“触发了工具后整段对话没回复”的根因。
+
+---
+
+## IM 路由短路处理
+
+`ClawServer` 和 `WebServer` 的 IM route 现在支持可选的 `onMessage(message)` 拦截器：
+
+- 返回 `handled: true` 时，本轮请求不会进入 Agent
+- 适合实现强约束、可预测的 IM 快捷命令
+- 目前用于飞书里的 `daily-digest` 快捷请求
+
+`daily-digest` 快捷处理规则：
+
+- 匹配“给我今天的新闻”“今天新闻文本版”这类短请求
+- 默认返回今日 PNG 图片
+- 显式要求“文本版 / Markdown / 文字”时返回今日 Markdown
+- 今日文件不存在时先执行一次 `daily-digest` skill
+- 生成中请求会复用同一轮 Promise，避免重复起多个日报生成任务
 
 ---
 
@@ -379,15 +413,15 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 新闻库 | `#news` | `NewsView` | 关键词搜索、分页浏览（读 skill JSON 输出） |
 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起，只展示已通过 `memory_save` 落库的条目 |
 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志 |
-| 状态 | `#status` | `StatusView` | 运行概览、飞书概览、配置文件、IM 日志，并带页内 TOC |
+| 状态 | `#status` | `StatusView` | 运行概览、飞书概览、配置文件、IM 日志，并带停靠在页面右侧的页内 TOC |
 | Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行、直发文本 / Markdown / 图片 |
-| 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / DailyDigest 搜索主题 / LLM 配置 / 飞书 IM 配置，并带页内 TOC |
+| 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / DailyDigest 搜索主题 / LLM 配置 / 飞书 IM 配置，并带停靠在页面右侧的页内 TOC |
 
 URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读 `window.location.hash`，切换 tab 更新 hash，监听 `hashchange` 支持浏览器前进/后退。
 
 `CronView` 通过 `GET /api/cron` 读取配置，`POST /api/cron` 保存，`DELETE /api/cron/:id` 删除，`POST /api/cron/:id/run` 直接触发一次运行；后端再通过 `CronScheduler.runNow()` 复用既有 Skill / IM 投递链路。直发模式下可选择 `text` / `markdown` / `image`，其中 Markdown 会优先走平台的 `sendMarkdown()` 能力。
 
-`SettingsView` 和 `StatusView` 都会在页面左侧渲染 `SectionToc`，点击后使用 `scrollIntoView()` 在当前 tab 内平滑滚动到目标区块，不修改 URL hash。
+`SettingsView` 和 `StatusView` 都会在页面右侧渲染 `SectionToc`，点击后使用 `scrollIntoView()` 在当前 tab 内平滑滚动到目标区块，不修改 URL hash。
 
 `SettingsView` 的飞书文档区块通过 `GET /api/config/feishu-docs` 读取配置和同步状态，`POST /api/config/feishu-docs` 保存来源列表，`POST /api/config/feishu-docs/sync` 调用 `MountedDocLibrary` 用 Playwright 拉取正文并写入本地缓存。
 

@@ -58,7 +58,6 @@ export function SettingsView(): React.JSX.Element {
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
-        <SectionToc items={tocItems} />
         <div className={styles.main}>
           <h2 className={styles.title}>设置</h2>
           <AgentSection />
@@ -67,6 +66,7 @@ export function SettingsView(): React.JSX.Element {
           <LLMSection />
           <FeishuSection />
         </div>
+        <SectionToc items={tocItems} />
       </div>
     </div>
   );

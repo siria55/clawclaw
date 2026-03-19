@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { LLMProvider, LLMConfig, LLMCompleteParams, LLMResponse, ToolCall } from "./types.js";
+import type { LLMProvider, LLMConfig, LLMCompleteParams, LLMResponse, Message, ToolCall, ToolCallResult } from "./types.js";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DEFAULT_MAX_TOKENS = 8192;
@@ -75,17 +75,41 @@ export class AnthropicProvider implements LLMProvider {
   }
 }
 
-function toAnthropicMessage(msg: import("./types.js").Message): Anthropic.MessageParam {
+export function toAnthropicMessage(msg: Message): Anthropic.MessageParam {
   if (msg.role === "tool") {
     return {
       role: "user",
-      content: msg.content as Anthropic.ToolResultBlockParam[],
+      content: toAnthropicToolResults(msg.content),
     };
   }
   return {
     role: msg.role as "user" | "assistant",
     content: msg.content as string | Anthropic.ContentBlock[],
   };
+}
+
+function toAnthropicToolResults(content: unknown): Anthropic.ToolResultBlockParam[] {
+  if (!Array.isArray(content)) return [];
+  return content
+    .filter(isToolCallResult)
+    .map((item) => ({
+      type: "tool_result",
+      tool_use_id: item.toolCallId,
+      content: formatToolResult(item.result),
+      ...(item.result.error ? { is_error: true } : {}),
+    }));
+}
+
+function isToolCallResult(value: unknown): value is ToolCallResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record["toolCallId"] === "string" && typeof record["toolName"] === "string" && typeof record["result"] === "object";
+}
+
+function formatToolResult(result: ToolCallResult["result"]): string {
+  if (result.output) return result.output;
+  if (result.error) return result.error;
+  return JSON.stringify(result);
 }
 
 function buildProxyAgent(proxyUrl: string): unknown {

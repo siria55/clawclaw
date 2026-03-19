@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`。
 
 ---
 
@@ -60,6 +60,13 @@
 - Agent 回复命中明显 Markdown 结构时自动升级为飞书 Markdown 发送
 - Cron 直发支持 `markdown` 类型，补齐文本 / Markdown / 图片三种直发方式
 
+## 第九阶段：IM 新闻捷径与工具调用修复（Sprint 51）
+
+- 修复 Anthropic tool call 回传格式，解决飞书里一旦触发工具调用就可能无回复的问题
+- 飞书 IM 新增 `daily-digest` 快捷链路：问“给我今天的新闻”默认发今日新闻图片
+- 今日日报缺失时会自动执行 `daily-digest` 再发送；显式要文本版时发送 Markdown
+- `状态` / `设置` 页内 TOC 改为停靠在页面右侧外沿，避免压在主内容旁边
+
 ---
 
 ## 当前落点
@@ -70,3 +77,4 @@
 - 长期记忆来自 `data/agent/memory.json`，仅保存 `memory_save` 显式写入的内容
 - 飞书文档挂载、飞书组织读取、Cron 立即执行、飞书群聊可视化均已可用
 - 飞书回复已支持 Markdown 渲染，Cron 直发可选 `text` / `markdown` / `image`
+- 飞书里问“给我今天的新闻”会优先收到今日日报图片；文本版可显式索取
