@@ -1,162 +1,63 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。以下按阶段分组，压缩记录关键里程碑。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档。
 
 ---
 
 ## 第一阶段：核心框架（Sprint 1–4）
 
-### Sprint 1 — 项目初始化
-TypeScript strict 模式，建立 Agent/LLM/Tool 核心模块，配置 ESLint + Vitest，11 tests 通过。
+- 建立 TypeScript strict 工程、Agent / LLM / Tool 核心模块和基础测试体系
+- 接入 Anthropic provider、SSE 对话接口、飞书 / 企业微信 webhook 服务
+- 引入 CronScheduler、上下文压缩和最早期的 WebUI 配置能力
 
-### Sprint 2 — 代理 + Web UI 雏形
-AnthropicProvider 支持 `HTTPS_PROXY` / `ANTHROPIC_BASE_URL`；原生 Node.js HTTP 提供 `POST /api/chat`（SSE 流）。
+## 第二阶段：WebUI 基础能力（Sprint 5–10）
 
-### Sprint 3 — IM 平台接入
-`IMPlatform` 接口；飞书适配器（SHA256 验签、时间戳、challenge）；企业微信适配器（SHA1、AES-256）；ClawServer 统一处理。46 tests 通过。
+- 前端迁移到 React + Vite，形成 Chat / News / Status / Settings 基础界面
+- 补齐状态接口、思考流渲染、新闻库和记忆模块
+- 完成 `docs/manual/` 快速上手与 CLI 使用说明
 
-### Sprint 4 — Cron + 上下文压缩 + UI 配置
-CronScheduler（cron 表达式调度）；ContextCompressor（超限自动摘要）；WebUI 设置面板（本地存储）；`X-Claw-Config` 请求头传递配置。
+## 第三阶段：IM 与运行时配置（Sprint 11–23）
 
----
+- IM 平台改为可选启动，支持在 WebUI 配置和热更新飞书凭证
+- 增加 Agent 配置、记忆库查看、Markdown 渲染、IM 日志与会话持久化
+- 完成 Cron 可视化、图片发送、`data/agent` / `data/im` / `data/cron` 分目录存储
 
-## 第二阶段：WebUI 体系（Sprint 5–10）
+## 第四阶段：Skills 体系成型（Sprint 24–30）
 
-### Sprint 5 — React + Vite 重构
-迁移至 React 19 + Vite；App / ChatView / InputBar / useChatStream 组件结构；热更新开发体验。
+- 建立 Skill 接口、注册表和 `daily-digest` 首个内容生成 Skill
+- 输出统一落盘到 `data/skills/{id}/YYYY-MM-DD.*`
+- WebUI 支持 Skill 列表、手动运行和 settings 持久化修复
 
-### Sprint 6 — 状态面板 + 思考 Bubble
-`GET /api/status`；StatusPanel 展示 Cron 任务和连接状态；ThinkingBubble 渲染 extended thinking；`thinking` SSE 事件。
+## 第五阶段：Skills 存储与交付收敛（Sprint 31–37）
 
-### Sprint 7 — 新闻库
-NewsStorage（JSON 持久化、搜索、分页）；`save_news` 工具；`GET /api/news`；NewsView（搜索 + 分页 + 外链）。
+- `daily-digest` 从固定站点抓取转向浏览器搜索新闻，逐步沉淀为独立内容流水线
+- WebUI 新增 Skill 执行日志流，便于实时观察运行过程
+- Skill 定义抽离到 `SKILL.md`，新闻库直接读取 Skill 输出 JSON
+- Skill 生成与 IM 投递彻底解耦，引入 `sendSkillOutput`，WebUI 可展示最新图片预览
+- 删除 `NewsStorage`、`save_news` 和 `src/news/` 遗留死代码，统一以 Skill 输出作为新闻来源
 
-### Sprint 8 — UI 体验优化
-TypingBubble（跳点动画）；浮层转全页 tab；4-tab 导航（对话 / 新闻 / 状态 / 设置）。
+## 第六阶段：日报链路加固（Sprint 38、40–44）
 
-### Sprint 9 — 记忆模块
-MemoryStorage（save / search / get）；三个 memory 工具；`system` 函数化 + `getContext` 钩子；支持 RAG pull 和 push。
+- `daily-digest` 改用 Playwright 直接搜索，去掉高成本 sub-agent 搜索链路
+- 抽取阶段切到专用 LLM 调用与宽松 JSON 解析，修复“抓到链接但日报为空”
+- HTML 渲染改为模板 + `layout.css`，截图升级为 `1080px` 版心 + `4x` 高清
+- 日报支持国内 / 国际分栏、配额控制和模板化渲染
+- 搜索主题支持 WebUI 配置并落盘到 `data/skills/daily-digest/config.json`
 
-### Sprint 10 — 使用文档
-`docs/manual/` 完整快速上手 + CLI 参考文档。
+## 第七阶段：会话、知识和飞书可视化（Sprint 39、45–49）
 
----
-
-## 第三阶段：IM 全功能（Sprint 11–23）
-
-### Sprint 11 — 可选 IM 配置
-飞书 / 企业微信平台改为可选启动，无凭证正常运行。
-
-### Sprint 12 — WebUI IM 配置
-IMConfigStorage；`GET/POST /api/im-config`；热更新路由；持久化到 `data/im/im-config.json`。
-
-### Sprint 13 — 设置页交互
-密码字段眼睛 toggle；LLM 设置独立保存；草稿模式 + 保存确认。
-
-### Sprint 14 — Agent Meta 配置
-AgentMetaConfig（name / systemPrompt）；`GET/POST /api/config/agent`；热更新系统提示；持久化到 `data/agent/agent-config.json`。
-
-### Sprint 15 — Memory 预览 + URL 路由
-`GET /api/memory`；MemoryView（搜索 + 分页）；URL hash 路由；浏览器前进后退。
-
-### Sprint 16 — Markdown 渲染
-react-markdown 渲染 Assistant 消息；确认 IM 与 WebUI 共用同一 Agent 实例。
-
-### Sprint 17 — IM 上下文 + 消息日志
-userId/chatId 注入 Agent；IMEventStorage（ring buffer 200 条）；`GET /api/im-log?since=`；状态页实时日志轮询。
-
-### Sprint 18 — Cron 可视化
-CronJobConfig 可序列化；`GET/POST/DELETE /api/cron`；WebUI Cron CRUD；持久化到 `data/cron/cron-config.json`。
-
-### Sprint 19 — IM 持久化 + 多轮记忆
-IMEventStorage 写文件；ConversationStorage（按 chatId 存多轮历史，40 条裁剪）；重启后记忆保留。
-
-### Sprint 20 — data/ 目录分类
-`data/` 拆分为 agent/ / im/ / cron/ 子目录。
-
-### Sprint 21 — Cron 消息记录
-Cron 消息写入 IMEventStorage；dev.ts 补全调度器接入。
-
-### Sprint 22 — IM 日志分类 + JSON 可读
-chatId 前缀分类（`oc_` 群聊 / `ou_` 直发）；JSON 文件 2-space 缩进；日志 tab 过滤。
-
-### Sprint 23 — Cron 图片发送
-`msgType: "text" | "image"`；FeishuPlatform.sendImage() 支持 URL / 本地路径；Cron 表单加类型选择。
+- IM 会话从 `chatId` 扩展为 `sessionId` / `continuityId`，支持飞书线程拆分和短桥接
+- `Cron` 从状态页拆成独立 tab，并支持直接点击「运行」立即执行
+- Agent 支持挂载飞书文档并在对话前检索命中片段作为上下文
+- Agent 支持读取飞书通讯录 / 部门权限数据，覆盖 Web 与 IM 对话
+- WebUI 状态页增强为运行概览，可直接查看飞书配置来源、配置文件状态、关键指标
+- 状态页新增飞书群聊摘要，可看到机器人已加入的群、群名、最近事件和时间
 
 ---
 
-## 第四阶段：Skills 系统（Sprint 24–30）
+## 当前落点
 
-### Sprint 24 — Skills 架构 + DailyDigestSkill
-Skill 接口 + SkillRegistry；DailyDigestSkill：爬取 36Kr → 渲染 HTML → Playwright 截图 → 发送飞书；CronJob 绑定 skillId。
-
-### Sprint 25 — Skills 目录 + WebUI 展示
-Skills 按子目录组织；`GET /api/skills`；状态页展示 skill 描述。
-
-### Sprint 26 — Skill 数据持久化 + Agent 权限
-Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`read_file` 工具 + 路径白名单；`allowedPaths` 在 WebUI 可编辑。
-
-### Sprint 27 — 侧边栏布局重构
-左竖排 sidebar 替换顶部横排 tab；移除 `max-width: 760px`；内部 view 放宽至 720px。
-
-### Sprint 28 — Settings 数据同步修复
-`httpsProxy` 接入 AnthropicProvider；清空字段可持久化；去掉脱敏返回；服务端 merge 空字符串表示清除。
-
-### Sprint 29 — WebUI 手动触发 Skill
-`POST /api/skills/:id/run`；SkillContext.delivery 改为可选；Skills 列表加「运行」按钮 + 状态反馈。
-
-### Sprint 33 — SKILL.md 标准 + 新闻库合并
-`src/skills/loader.ts` 解析 SKILL.md frontmatter；`daily-digest/SKILL.md` 抽离元数据+Agent指令；skill 保存 `articles.json`，移除 newsStorage 依赖；`GET /api/news` 改为扫描 `data/skills/*/YYYY-MM-DD.json`；`WebServerConfig.skillDataRoot` 替代 newsStorage。
-
-### Sprint 38 — DailyDigestSkill 改用 Playwright 直接搜索
-原 sub-agent 方案（12 turns × N 关键词）触发 API rate limit。改为 Playwright 直接导航搜索页、locator 提取所有链接（零 LLM 调用），完成后**一次** `ctx.agent.run()` 筛选为结构化 JSON。移除 `createBrowserTools` / `defineTool` / `Agent` 导入，新增 `extractPageLinks()` + `searchNewsWithBrowser()`。typecheck 通过。
-
-### Sprint 39 — 飞书 Session 拆分 + 会话桥接
-`IMMessage` 新增 `sessionId` / `continuityId`。飞书普通消息沿用 `chatId`，线程消息改用 `chatId#thread:<rootId|threadId|parentId>`，避免不同来源串 session。`ConversationStorage` 改为按 `sessionId` 持久化，并在同 `chatId + userId` 的新 session 首轮注入一条短桥接消息；长期记忆仍由全局 `MemoryStorage` 共用。143 tests 通过。
-
-### Sprint 40 — DailyDigestSkill 抽取链路加固
-`DailyDigestSkill` 抽取阶段不再复用聊天 Agent 的 `run()`，改为直接调用 `ctx.agent.llm.complete()` + 专用 `EXTRACTION_SYSTEM`，避免被人设 prompt 干扰。新增 fenced json 提取和 near-JSON 宽松解析兜底，修复“抓到链接但日报为空”的问题；真实重跑后 `2026-03-19.json` 恢复为 12 篇文章。
-
-### Sprint 41 — DailyDigest HTML 改用 layout.css
-`DailyDigestSkill` 的 HTML 样式不再硬编码在 `renderHtml()` 中，改为从 `src/skills/daily-digest/layout.css` 读取并内联。`layout.css` 同步整理为真正可驱动日报结构的样式表，截图宽度切到 1080px，并补渲染测试。
-
-### Sprint 42 — DailyDigest 截图升级为 4x 高清
-`DailyDigestSkill` 截图上下文改为 `1080px + deviceScaleFactor: 4`，并显式使用 `scale: "device"` 输出 PNG。这样版面尺寸不变，但导出的日报图分辨率提升到 4x 高清，适合飞书预览和放大查看。
-
-### Sprint 43 — DailyDigest 改为国内 / 国际分栏模板
-`DailyDigestSkill` 抽取结果新增 `category`，按国内 10 / 国际 5 的配额裁成 15 篇，并把渲染层拆为 `template.html` / `section.html` / `item.html` + `layout.css` 模板体系，`index.ts` 只填内容不再硬编码整页 HTML。真实重跑后当天日报已按国内 / 国际分栏输出。
-
-### Sprint 44 — DailyDigest 主题支持 WebUI 配置
-`DailyDigestSkill` 新增运行时配置：WebUI 设置页可直接修改搜索主题，服务端写入 `data/skills/daily-digest/config.json`，skill 下次运行自动读取覆盖 `SKILL.md` 默认主题。同时放大 HTML 日报中的编号数字，提高视觉层级。
-
-### Sprint 45 — Cron 独立 Tab 与手动执行
-`CronView` 从 `StatusView` 拆出为独立 tab；新增 `POST /api/cron/:id/run` 和 `CronScheduler.runNow()`，支持从 WebUI 直接执行单条 Cron 任务。状态页回归为 IM 连接和日志视图。
-
-### Sprint 46 — Agent 挂载飞书文档资料
-新增 `MountedDocLibrary`，支持在设置页挂载飞书文档 URL、用 Playwright 同步正文到 `data/agent/feishu-docs/`，并在 `getContext` 里按用户问题检索命中文档片段，驱动 Agent 做更特异化的回答。
-
-### Sprint 47 — Agent 读取飞书通讯录权限数据
-`FeishuPlatform` 新增 Contact v3 读取能力，Agent 可通过 `feishu_department_info` / `feishu_department_users` 查询部门人数、直属成员等组织信息；Web 对话与 IM 对话共用同一套工具和权限模型。
-
-### Sprint 48 — WebUI 可视化飞书配置与运行状态
-状态页新增统一运行概览：集中展示飞书运行摘要、配置文件落盘状态和关键存储指标；设置页中的飞书表单也会显示当前运行摘要，便于确认配置来源和生效状态。
-
-### Sprint 49 — WebUI 展示飞书已加入群与群名
-飞书适配器新增机器人进群 / 退群事件解析，IM 存储会持久化群聊摘要；状态页现在可直接看到机器人已加入的飞书群、群名、最近事件和最近时间。
-
-### Sprint 37 — 清理 src/news/ 死代码目录
-Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
-
-### Sprint 36 — 移除 NewsStorage 和 save_news 工具
-`NewsStorage` / `createSaveNewsTool` / `save_news` 是遗留死代码（Sprint 33 后 `/api/news` 已改读 skill 输出）。删除 `src/news/storage.ts`、`src/tools/news.ts`、相关测试，更新 `news/index.ts` 仅保留类型，同步 prd/tech/manual 文档。137 tests 通过。
-
-### Sprint 35 — Skill 生成与投递分离 + WebUI 图片预览
-`sendSkillOutput` 新 Cron 类型：只发送指定 skill 最新 PNG，不执行 skill；skill cron 只生成不发送；`GET /api/skills/:id/latest-image` 返回最新 PNG；SkillsView 运行完成后展示图片预览。
-
-### Sprint 34 — Skill 架构解耦：skill 只生成内容，IM 发送由项目配置负责
-`SkillResult { outputPath? }` 取代 `Promise<void>`；`SkillContext` 移除 `delivery` 和 `newsStorage`；`CronScheduler.#fire()` 获得 `outputPath` 后调 `platform.sendImage()`；WebUI 手动运行不再传 delivery；prd/tech/manual 文档同步更新。
-
-### Sprint 32 — Skill 执行日志 WebUI 实时展示
-`SkillContext.log?` 回调；`POST /api/skills/:id/run` 改为 SSE 流式响应；`DailyDigestSkill` 用 `agent.stream()` 捕获 tool_call 事件透传 log；SkillsView 实时渲染深色 log 面板，自动滚动。
-
-`searchBaiduNews(page, query)` 用 Playwright 搜索百度新闻；`DailyDigestSkill` 构造器接受 `queries?: string[]`；多源（N 次百度搜索 + 36Kr 兜底）去重取 top 12；dev.ts 传入默认 3 个关键词。
+- WebUI 为 7 个标签页：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#cron` / `#settings`
+- 新闻库来自 `data/skills/*/YYYY-MM-DD.json`
+- 长期记忆来自 `data/agent/memory.json`，仅保存 `memory_save` 显式写入的内容
+- 飞书文档挂载、飞书组织读取、Cron 立即执行、飞书群聊可视化均已可用
