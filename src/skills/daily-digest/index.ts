@@ -27,6 +27,12 @@ interface LinkItem {
 }
 
 const SKILL_DIR = dirname(fileURLToPath(import.meta.url));
+const EXTRACTION_SYSTEM = [
+  "你是一个严谨的新闻链接筛选器。",
+  "你的任务是从候选链接中挑出真实新闻文章，并返回严格 JSON。",
+  "不要聊天，不要解释，不要使用 markdown，除了 JSON 数组不要输出任何别的内容。",
+  "如果字符串里出现双引号，必须转义。",
+].join("\n");
 
 /** Extract all anchor links from the current page using Playwright locators (zero LLM calls). */
 async function extractPageLinks(page: Page): Promise<LinkItem[]> {
@@ -97,18 +103,21 @@ ${linkText}
 只返回 JSON 数组，不要其他文字：
 [{"title":"文章标题","url":"文章完整URL","summary":"摘要（无则空字符串）","source":"来源媒体"}]`;
 
-  const result = await ctx.agent.run(prompt);
-  const lastMsg = [...result.messages].reverse().find((m) => m.role === "assistant");
-  const text = extractText(lastMsg?.content);
+  const response = await ctx.agent.llm.complete({
+    system: EXTRACTION_SYSTEM,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const text = extractText(response.message.content);
   const jsonText = extractJsonArray(text);
   if (!jsonText) {
     log("⚠️ LLM 未返回有效 JSON");
     if (text) log(`🪵 LLM 原始输出: ${text.slice(0, 200)}`);
     return [];
   }
-  const articles = parseArticlesFromLLMOutput(lastMsg?.content);
+  const articles = parseArticlesFromLLMOutput(response.message.content);
   if (!articles) {
     log("⚠️ JSON 解析失败");
+    log(`🪵 LLM 原始输出: ${text.slice(0, 200)}`);
     return [];
   }
   log(`✅ 筛选出 ${articles.length} 篇文章`);
@@ -233,18 +242,16 @@ export class DailyDigestSkill implements Skill {
   }
 }
 
-export function parseArticlesFromLLMOutput(content: unknown): RawArticle[] {
+export function parseArticlesFromLLMOutput(content: unknown): RawArticle[] | undefined {
   const text = extractText(content);
   const jsonText = extractJsonArray(text);
-  if (!jsonText) return [];
+  if (!jsonText) return undefined;
   try {
     const parsed = JSON.parse(jsonText) as unknown[];
-    return parsed.flatMap((item) => {
-      const result = RawArticleSchema.safeParse(item);
-      return result.success ? [result.data] : [];
-    });
+    return validateArticles(parsed);
   } catch {
-    return [];
+    const repaired = parseArticlesLoosely(jsonText);
+    return repaired.length > 0 ? repaired : undefined;
   }
 }
 
@@ -271,4 +278,53 @@ function isTextBlock(value: unknown): value is { type: "text"; text: string } {
     && !Array.isArray(value)
     && (value as { type?: unknown }).type === "text"
     && typeof (value as { text?: unknown }).text === "string";
+}
+
+function validateArticles(items: unknown[]): RawArticle[] {
+  return items.flatMap((item) => {
+    const result = RawArticleSchema.safeParse(item);
+    return result.success ? [result.data] : [];
+  });
+}
+
+function parseArticlesLoosely(text: string): RawArticle[] {
+  const objects = text.match(/\{[\s\S]*?\}/g) ?? [];
+  return objects.flatMap((objectText) => {
+    const title = extractLooseField(objectText, "title", "url");
+    const url = extractLooseField(objectText, "url", "summary");
+    const summary = extractLooseField(objectText, "summary", "source");
+    const source = extractLooseLastField(objectText, "source");
+    const result = RawArticleSchema.safeParse({
+      title,
+      url,
+      summary,
+      source,
+    });
+    return result.success ? [result.data] : [];
+  });
+}
+
+function extractLooseField(text: string, field: string, nextField: string): string {
+  const escapedField = escapeRegExp(field);
+  const escapedNextField = escapeRegExp(nextField);
+  const match = text.match(new RegExp(`"${escapedField}":"([\\s\\S]*?)","${escapedNextField}":"`));
+  return decodeLooseString(match?.[1] ?? "");
+}
+
+function extractLooseLastField(text: string, field: string): string {
+  const escapedField = escapeRegExp(field);
+  const match = text.match(new RegExp(`"${escapedField}":"([\\s\\S]*?)"\\s*\\}?\\s*$`));
+  return decodeLooseString(match?.[1] ?? "");
+}
+
+function decodeLooseString(value: string): string {
+  return value
+    .replace(/\\"/g, "\"")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\\\/g, "\\");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
