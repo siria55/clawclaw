@@ -39,6 +39,12 @@ interface LinkItem {
   hintCategory: DigestCategory;
 }
 
+interface SearchPlan {
+  query: string;
+  searchText: string;
+  hintCategory: DigestCategory;
+}
+
 interface DigestQuota {
   domestic: number;
   international: number;
@@ -143,18 +149,19 @@ async function searchNewsWithBrowser(
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   const allLinks: LinkItem[] = [];
+  const searchPlans = buildDailyDigestSearchPlans(queries);
   const page = await browser.newPage();
   try {
-    for (const query of queries) {
-      const hintCategory = classifyQuery(query);
-      const url = `https://news.baidu.com/ns?word=${encodeURIComponent(query)}&tn=news&cl=2&rn=20&ct=1`;
-      log(`🌐 搜索: ${query}（${CATEGORY_LABEL[hintCategory]}）`);
+    log(`🧭 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求`);
+    for (const plan of searchPlans) {
+      const url = `https://news.baidu.com/ns?word=${encodeURIComponent(plan.searchText)}&tn=news&cl=2&rn=20&ct=1`;
+      log(`🌐 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
       try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
       } catch {
         // timeout: continue with whatever content has rendered
       }
-      const links = await extractPageLinks(page, hintCategory);
+      const links = await extractPageLinks(page, plan.hintCategory);
       log(`🔗 获取 ${links.length} 个链接`);
       allLinks.push(...links);
     }
@@ -359,9 +366,43 @@ export function resolveDailyDigestQueries(
   return normalized.length > 0 ? normalized : normalizeQueryList(fallback);
 }
 
-function classifyQuery(query: string): DigestCategory {
+export function buildDailyDigestSearchPlans(queries: string[]): Array<{
+  query: string;
+  searchText: string;
+  hintCategory: DigestCategory;
+}> {
+  const seen = new Set<string>();
+  const plans: SearchPlan[] = [];
+  for (const query of queries) {
+    for (const plan of buildSearchPlansForQuery(query)) {
+      const key = `${plan.hintCategory}:${plan.searchText}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      plans.push(plan);
+    }
+  }
+  return plans;
+}
+
+function buildSearchPlansForQuery(query: string): SearchPlan[] {
+  const scope = classifyQueryScope(query);
+  if (scope === "domestic" || scope === "international") {
+    return [{ query, searchText: query, hintCategory: scope }];
+  }
+  return [
+    { query, searchText: scopeQuery(query, "domestic"), hintCategory: "domestic" },
+    { query, searchText: scopeQuery(query, "international"), hintCategory: "international" },
+  ];
+}
+
+function classifyQueryScope(query: string): DigestCategory | "neutral" {
   const match = QUERY_HINT_PATTERNS.find((item) => item.pattern.test(query));
-  return match?.category ?? "domestic";
+  return match?.category ?? "neutral";
+}
+
+function scopeQuery(query: string, category: DigestCategory): string {
+  const prefix = category === "domestic" ? "国内" : "国际";
+  return `${prefix}${query}`.trim();
 }
 
 async function extractArticlesFromLinks(

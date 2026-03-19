@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildDailyDigestSearchPlans,
   DAILY_DIGEST_SCREENSHOT,
   parseArticlesFromLLMOutput,
   renderDailyDigestHtml,
@@ -98,6 +99,25 @@ describe("resolveDailyDigestQueries", () => {
 
   it("falls back to defaults when configured queries are empty", () => {
     expect(resolveDailyDigestQueries(["", "   "], ["fallback-a", "fallback-b"])).toEqual(["fallback-a", "fallback-b"]);
+  });
+});
+
+describe("buildDailyDigestSearchPlans", () => {
+  it("expands neutral queries into domestic and international searches", () => {
+    expect(buildDailyDigestSearchPlans(["AI", "教育"])).toEqual([
+      { query: "AI", searchText: "国内AI", hintCategory: "domestic" },
+      { query: "AI", searchText: "国际AI", hintCategory: "international" },
+      { query: "教育", searchText: "国内教育", hintCategory: "domestic" },
+      { query: "教育", searchText: "国际教育", hintCategory: "international" },
+    ]);
+  });
+
+  it("keeps explicitly scoped queries as single-category searches", () => {
+    expect(buildDailyDigestSearchPlans(["国内AI", "国际AI", "OpenAI"])).toEqual([
+      { query: "国内AI", searchText: "国内AI", hintCategory: "domestic" },
+      { query: "国际AI", searchText: "国际AI", hintCategory: "international" },
+      { query: "OpenAI", searchText: "OpenAI", hintCategory: "international" },
+    ]);
   });
 });
 
