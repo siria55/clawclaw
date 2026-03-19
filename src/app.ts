@@ -35,6 +35,7 @@ import { SkillRegistry } from "./skills/registry.js";
 import { DEFAULT_DAILY_DIGEST_QUERIES, DailyDigestSkill } from "./skills/daily-digest/index.js";
 import { MountedDocLibrary } from "./docs/library.js";
 import type { Message } from "./llm/types.js";
+import { normalizeCronChatIds, normalizeCronJobConfig } from "./cron/types.js";
 import type { CronJob, CronJobConfig } from "./cron/types.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "./config/types.js";
 
@@ -183,7 +184,8 @@ const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skil
 
 function buildRuntimeCronJob(cfg: CronJobConfig): CronJob | undefined {
   const platform = cfg.platform === "feishu" ? feishu : undefined;
-  if (!platform || !cfg.chatId) return undefined;
+  const chatIds = normalizeCronChatIds(cfg);
+  if (!platform || chatIds.length === 0) return undefined;
   return {
     id: cfg.id,
     schedule: cfg.schedule,
@@ -193,7 +195,7 @@ function buildRuntimeCronJob(cfg: CronJobConfig): CronJob | undefined {
     ...(cfg.skillId !== undefined && { skillId: cfg.skillId }),
     ...(cfg.sendSkillOutput !== undefined && { sendSkillOutput: cfg.sendSkillOutput }),
     agent,
-    delivery: { platform, chatId: cfg.chatId },
+    delivery: { platform, chatId: chatIds[0]!, chatIds },
   };
 }
 
@@ -278,14 +280,14 @@ const webServer = new WebServer({
 if (cronStorage.read().length === 0) {
   const chatId = imConfigStorage.read().feishu?.chatId ?? process.env["FEISHU_CHAT_ID"] ?? "";
   if (chatId) {
-    cronStorage.write([{
+    cronStorage.write([normalizeCronJobConfig({
       id: "daily-digest",
       schedule: "0 9 * * *",
       message: "请搜索今天的科技新闻头条，保存到新闻库，并生成一份简短的日报摘要。",
       chatId,
       platform: "feishu",
       enabled: true,
-    }]);
+    })]);
   }
 }
 

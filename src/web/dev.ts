@@ -25,6 +25,7 @@ import type { Message } from "../llm/types.js";
 import type { LLMConfig, IMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "../config/types.js";
 import { WebServer } from "./server.js";
 import { CronScheduler } from "../cron/scheduler.js";
+import { normalizeCronChatIds } from "../cron/types.js";
 import type { CronJob, CronJobConfig } from "../cron/types.js";
 
 mkdirSync("./data/agent", { recursive: true });
@@ -137,7 +138,8 @@ const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skil
 
 function buildRuntimeCronJob(cfg: CronJobConfig): CronJob | undefined {
   const platform = cfg.platform === "feishu" ? feishu : undefined;
-  if (!platform || !cfg.chatId) return undefined;
+  const chatIds = normalizeCronChatIds(cfg);
+  if (!platform || chatIds.length === 0) return undefined;
   return {
     id: cfg.id,
     schedule: cfg.schedule,
@@ -147,7 +149,7 @@ function buildRuntimeCronJob(cfg: CronJobConfig): CronJob | undefined {
     ...(cfg.skillId !== undefined && { skillId: cfg.skillId }),
     ...(cfg.sendSkillOutput !== undefined && { sendSkillOutput: cfg.sendSkillOutput }),
     agent,
-    delivery: { platform, chatId: cfg.chatId },
+    delivery: { platform, chatId: chatIds[0]!, chatIds },
   };
 }
 

@@ -212,4 +212,26 @@ describe("CronScheduler cron parsing", () => {
     expect(sendMarkdown).toHaveBeenCalledWith("room-3", "## 更新\n\n- 第一条");
     expect(platform.sentMessages).toEqual([]);
   });
+
+  it("runNow sends the same reply to all configured chatIds", async () => {
+    const platform = makeMockPlatform();
+    const agent = makeAgent("群发 reply");
+    const job: CronJob = {
+      id: "manual-multi",
+      schedule: "0 9 * * *",
+      message: "run now",
+      direct: false,
+      msgType: "text",
+      agent,
+      delivery: { platform, chatId: "room-1", chatIds: ["room-1", "room-2"] },
+    };
+
+    const sched = new CronScheduler();
+    await sched.runNow(job);
+
+    expect(platform.sentMessages).toEqual([
+      { chatId: "room-1", text: "群发 reply" },
+      { chatId: "room-2", text: "群发 reply" },
+    ]);
+  });
 });

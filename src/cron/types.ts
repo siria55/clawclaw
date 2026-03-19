@@ -26,6 +26,7 @@ export interface CronJob {
   delivery: {
     platform: IMPlatform;
     chatId: string;
+    chatIds?: string[];
   };
 }
 
@@ -46,6 +47,8 @@ export interface CronJobConfig {
   /** Skill id whose latest PNG output should be sent to IM. */
   sendSkillOutput?: string;
   chatId: string;
+  /** Additional delivery targets. When set, the same message is sent to all chatIds. */
+  chatIds?: string[];
   platform: string;
   enabled: boolean;
 }
@@ -59,4 +62,26 @@ export interface CronSchedulerOptions {
   skillRegistry?: SkillRegistry;
   /** Root directory under which per-skill data dirs are created. */
   skillDataRoot?: string;
+}
+
+export function normalizeCronChatIds(input: { chatId?: string; chatIds?: string[] }): string[] {
+  const values = [
+    ...(input.chatIds ?? []),
+    ...(input.chatId ? [input.chatId] : []),
+  ];
+  const deduped = new Set<string>();
+  for (const value of values) {
+    const normalized = value.trim();
+    if (normalized) deduped.add(normalized);
+  }
+  return [...deduped];
+}
+
+export function normalizeCronJobConfig(config: CronJobConfig): CronJobConfig {
+  const chatIds = normalizeCronChatIds(config);
+  return {
+    ...config,
+    chatId: chatIds[0] ?? "",
+    ...(chatIds.length > 0 ? { chatIds } : {}),
+  };
 }

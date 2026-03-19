@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { normalizeCronChatIds } from "./types.js";
 import type { CronJob, CronSchedulerOptions } from "./types.js";
 import type { IMEventStorage } from "../im/storage.js";
 import type { FeishuPlatform } from "../platform/feishu.js";
@@ -75,12 +76,13 @@ export class CronScheduler {
   }
 
   /** Return serializable info for all registered jobs. */
-  list(): Array<{ id: string; schedule: string; message: string; chatId: string; platform: string }> {
+  list(): Array<{ id: string; schedule: string; message: string; chatId: string; chatIds: string[]; platform: string }> {
     return [...this.#jobs.values()].map(({ job }) => ({
       id: job.id,
       schedule: job.schedule,
       message: job.message,
       chatId: job.delivery.chatId,
+      chatIds: getDeliveryChatIds(job.delivery),
       platform: job.delivery.platform.name,
     }));
   }
@@ -115,14 +117,20 @@ export class CronScheduler {
   }
 
   async #fire(job: CronJob): Promise<void> {
-    const eventId = this.#imEventStorage?.append({
-      platform: job.delivery.platform.name,
-      userId: "",
-      chatId: job.delivery.chatId,
-      eventType: "cron",
-      text: `[cron:${job.id}] ${job.message}`,
-      replyText: undefined,
-    });
+    const targetChatIds = getDeliveryChatIds(job.delivery);
+    const eventIds = this.#imEventStorage
+      ? targetChatIds.map((chatId) => ({
+          chatId,
+          eventId: this.#imEventStorage?.append({
+            platform: job.delivery.platform.name,
+            userId: "",
+            chatId,
+            eventType: "cron",
+            text: `[cron:${job.id}] ${job.message}`,
+            replyText: undefined,
+          }),
+        }))
+      : [];
     try {
       let reply: string;
       if (job.skillId) {
@@ -138,7 +146,7 @@ export class CronScheduler {
           ...(this.#imEventStorage !== undefined && { imEventStorage: this.#imEventStorage }),
           ...(dataDir !== undefined && { dataDir }),
         });
-        if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, `[skill:${job.skillId}]`);
+        setCronReplies(this.#imEventStorage, eventIds, `[skill:${job.skillId}]`);
         return;
       } else if (job.sendSkillOutput) {
         const pngPath = this.#skillDataRoot
@@ -146,19 +154,25 @@ export class CronScheduler {
           : undefined;
         if (!pngPath) throw new Error(`No output PNG found for skill: ${job.sendSkillOutput}`);
         const p = job.delivery.platform as unknown as FeishuPlatform;
-        await p.sendImage(job.delivery.chatId, pngPath);
-        if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, "[图片]");
+        for (const chatId of targetChatIds) {
+          await p.sendImage(chatId, pngPath);
+        }
+        setCronReplies(this.#imEventStorage, eventIds, "[图片]");
         return;
       } else if (job.direct) {
         if (job.msgType === "image") {
           const p = job.delivery.platform as unknown as FeishuPlatform;
-          await p.sendImage(job.delivery.chatId, job.message);
-          if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, "[图片]");
+          for (const chatId of targetChatIds) {
+            await p.sendImage(chatId, job.message);
+          }
+          setCronReplies(this.#imEventStorage, eventIds, "[图片]");
           return;
         }
         if (job.msgType === "markdown" && job.delivery.platform.sendMarkdown) {
-          await job.delivery.platform.sendMarkdown(job.delivery.chatId, job.message);
-          if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, job.message);
+          for (const chatId of targetChatIds) {
+            await job.delivery.platform.sendMarkdown(chatId, job.message);
+          }
+          setCronReplies(this.#imEventStorage, eventIds, job.message);
           return;
         }
         reply = job.message;
@@ -167,12 +181,16 @@ export class CronScheduler {
         const lastMsg = result.messages.findLast((m) => m.role === "assistant");
         reply = extractText(lastMsg?.content);
       }
-      if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, reply);
-      if (reply) await job.delivery.platform.send(job.delivery.chatId, reply);
+      setCronReplies(this.#imEventStorage, eventIds, reply);
+      if (reply) {
+        for (const chatId of targetChatIds) {
+          await job.delivery.platform.send(chatId, reply);
+        }
+      }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[cron:${job.id}] error:`, errMsg);
-      if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, `[ERROR] ${errMsg}`);
+      setCronReplies(this.#imEventStorage, eventIds, `[ERROR] ${errMsg}`);
     }
   }
 }
@@ -241,4 +259,19 @@ function extractText(content: unknown): string {
       .join("");
   }
   return "";
+}
+
+function getDeliveryChatIds(delivery: CronJob["delivery"]): string[] {
+  const chatIds = normalizeCronChatIds(delivery);
+  return chatIds.length > 0 ? chatIds : [delivery.chatId];
+}
+
+function setCronReplies(
+  storage: IMEventStorage | undefined,
+  eventIds: Array<{ chatId: string; eventId: string | undefined }>,
+  replyText: string,
+): void {
+  for (const item of eventIds) {
+    if (item.eventId !== undefined) storage?.setReply(item.eventId, replyText);
+  }
 }

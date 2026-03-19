@@ -111,6 +111,12 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 - **Skill 生成**（`skillId`）：执行指定 Skill，生成并保存文件，不发 IM
 - **Skill 投递**（`sendSkillOutput`）：找指定 Skill 最新 PNG，发送到 IM
 
+Cron 投递目标支持两种配置：
+- 单目标：`chatId`
+- 多目标：`chatIds`
+
+当 `chatIds` 存在时，同一条 Cron 会把同一份内容广播到全部目标，可同时覆盖飞书私聊和群聊。
+
 除 Cron 外，飞书 IM 入口也有一条面向日报的快捷处理：
 - 当用户直接在飞书里问“给我今天的新闻”这类短请求时，服务端优先返回 `daily-digest` 的今日结果
 - 默认返回图片；如果用户显式要求“文本版 / Markdown / 文字”，则发送 Markdown 正文
@@ -236,6 +242,7 @@ Web UI 七个标签页各对应独立 URL（hash 路由）：`#chat` / `#news` /
 其中：
 - `#status` 和 `#settings` 内部支持页内 TOC 跳转，不影响原有 tab hash 路由
 - `#cron` 的直发模式支持 `text` / `markdown` / `image`
+- `#cron` 的发送目标支持多行配置，一个任务可同时发给多个 chatId
 - 飞书 IM 对“今天的新闻”类请求支持直接回图片 / 文本，不必先配置 Cron
 
 ---

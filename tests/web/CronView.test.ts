@@ -24,6 +24,7 @@ describe("CronView", () => {
         schedule: "0 9 * * *",
         message: "生成日报",
         chatId: "oc_daily",
+        chatIds: ["oc_daily"],
         platform: "feishu",
         enabled: true,
         direct: false,
@@ -46,6 +47,7 @@ describe("CronView", () => {
             schedule: "0 9 * * *",
             message: "生成日报",
             chatId: "oc_daily",
+            chatIds: ["oc_daily"],
             platform: "feishu",
             enabled: true,
             direct: false,
@@ -77,5 +79,25 @@ describe("CronView", () => {
     fireEvent.click(screen.getAllByRole("checkbox")[0]!);
 
     expect(await screen.findByRole("option", { name: "Markdown（飞书渲染）" })).toBeDefined();
+  });
+
+  it("renders multiple delivery targets for one cron job", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => makeResponse({
+      jobs: [{
+        id: "multi-target",
+        schedule: "0 9 * * *",
+        message: "群发日报",
+        chatId: "ou_owner",
+        chatIds: ["ou_owner", "oc_team"],
+        platform: "feishu",
+        enabled: true,
+        direct: false,
+        msgType: "text",
+      }],
+    })));
+
+    render(React.createElement(CronView));
+
+    expect(await screen.findByText(/共 2 个目标/)).toBeDefined();
   });
 });

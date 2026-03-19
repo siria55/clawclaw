@@ -12,6 +12,7 @@ import type { IMEventStorage } from "../im/storage.js";
 import type { ConversationStorage } from "../im/conversations.js";
 import { buildIMRunContext, persistIMRunContext } from "../im/context.js";
 import type { IMRoute } from "../im/route.js";
+import { normalizeCronJobConfig } from "../cron/types.js";
 import type { CronJobConfig } from "../cron/types.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
@@ -30,6 +31,7 @@ export interface CronJobStatus {
   message: string;
   timezone: string;
   chatId: string;
+  chatIds?: string[];
   platform: string;
 }
 
@@ -701,7 +703,7 @@ export class WebServer {
   }
 
   #handleGetCron(res: ServerResponse): void {
-    const jobs = this.#config.cronStorage?.read() ?? [];
+    const jobs = (this.#config.cronStorage?.read() ?? []).map(normalizeCronJobConfig);
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ jobs }));
   }
@@ -710,7 +712,7 @@ export class WebServer {
     const body = await readBody(req);
     let incoming: CronJobConfig;
     try {
-      incoming = JSON.parse(body) as CronJobConfig;
+      incoming = normalizeCronJobConfig(JSON.parse(body) as CronJobConfig);
     } catch {
       res.writeHead(400).end("Invalid JSON");
       return;
@@ -719,7 +721,7 @@ export class WebServer {
       res.writeHead(503).end("Cron storage not configured");
       return;
     }
-    const jobs = this.#config.cronStorage.read();
+    const jobs = this.#config.cronStorage.read().map(normalizeCronJobConfig);
     const idx = jobs.findIndex((j) => j.id === incoming.id);
     if (idx >= 0) {
       jobs[idx] = incoming;
@@ -756,7 +758,7 @@ export class WebServer {
       res.end(JSON.stringify({ ok: false, error: "onCronRun not configured" }));
       return;
     }
-    const job = this.#config.cronStorage.read().find((item) => item.id === id);
+    const job = this.#config.cronStorage.read().map(normalizeCronJobConfig).find((item) => item.id === id);
     if (!job) {
       res.writeHead(404, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
       res.end(JSON.stringify({ ok: false, error: `Cron job not found: ${id}` }));

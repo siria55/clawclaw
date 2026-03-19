@@ -171,6 +171,29 @@ Cron 直发链路也同步支持 `msgType: "markdown"`：
 
 ---
 
+## Cron 多目标投递
+
+`CronJobConfig` 现在兼容两种投递字段：
+
+- `chatId`: 旧字段，单目标
+- `chatIds`: 新字段，多目标
+
+归一化规则：
+
+- 服务端保存 Cron 时会把两者归一化
+- `chatId` 永远保留为第一个目标，兼容旧代码路径
+- `chatIds` 保存全部去重后的目标列表
+
+执行规则：
+
+- Agent 只执行一次
+- 生成出的同一条回复或同一张图片会依次发送到所有目标
+- `sendSkillOutput` 也是按同样的多目标广播逻辑执行
+
+这样可以避免“为了同时发个人和群而复制两条完全相同的 Cron 任务”。
+
+---
+
 ## Anthropic Tool Result 编码
 
 此前 Agent 触发工具调用后，内部工具执行结果会直接以普通对象数组写回消息历史；而 Anthropic 要求工具结果必须是标准 `tool_result` block。
@@ -414,12 +437,12 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起，只展示已通过 `memory_save` 落库的条目 |
 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志 |
 | 状态 | `#status` | `StatusView` | 运行概览、飞书概览、配置文件、IM 日志，并带停靠在页面右侧的页内 TOC |
-| Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行、直发文本 / Markdown / 图片 |
+| Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行、直发文本 / Markdown / 图片、支持多目标发送 |
 | 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / DailyDigest 搜索主题 / LLM 配置 / 飞书 IM 配置，并带停靠在页面右侧的页内 TOC |
 
 URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读 `window.location.hash`，切换 tab 更新 hash，监听 `hashchange` 支持浏览器前进/后退。
 
-`CronView` 通过 `GET /api/cron` 读取配置，`POST /api/cron` 保存，`DELETE /api/cron/:id` 删除，`POST /api/cron/:id/run` 直接触发一次运行；后端再通过 `CronScheduler.runNow()` 复用既有 Skill / IM 投递链路。直发模式下可选择 `text` / `markdown` / `image`，其中 Markdown 会优先走平台的 `sendMarkdown()` 能力。
+`CronView` 通过 `GET /api/cron` 读取配置，`POST /api/cron` 保存，`DELETE /api/cron/:id` 删除，`POST /api/cron/:id/run` 直接触发一次运行；后端再通过 `CronScheduler.runNow()` 复用既有 Skill / IM 投递链路。直发模式下可选择 `text` / `markdown` / `image`，其中 Markdown 会优先走平台的 `sendMarkdown()` 能力。发送目标支持多行输入，保存后会归一化为 `chatId + chatIds`。
 
 `SettingsView` 和 `StatusView` 都会在页面右侧渲染 `SectionToc`，点击后使用 `scrollIntoView()` 在当前 tab 内平滑滚动到目标区块，不修改 URL hash。
 

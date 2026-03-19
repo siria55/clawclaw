@@ -125,6 +125,7 @@ pnpm start
 
 管理所有定时任务：
 - 新增、编辑、删除定时任务
+- 发送目标支持多行输入，每行一个 chatId，可同时发给个人和群
 - 支持绑定 Skill（`skillId`）或发送最新 Skill 图片（`sendSkillOutput`）
 - 支持直发文本、Markdown 或图片（`direct: true`）
 - 支持点击「运行」立即执行单条任务，便于调试和校验
@@ -364,6 +365,12 @@ ngrok http 3000
 - **直发模式**（`direct: true`）：直接发送预设文本、Markdown 或图片，不经 LLM
 - **Skill 生成**（`skillId`）：执行指定 Skill，保存文件，不发 IM
 - **Skill 投递**（`sendSkillOutput`）：找指定 Skill 最新 PNG，发送到飞书
+
+发送目标支持多目标：
+
+- 表单里每行一个 chatId
+- 可同时填写 `ou_xxx`（用户）和 `oc_xxx`（群聊）
+- 同一条 Cron 只运行一次，再把结果广播到所有目标
 
 生成和发送推荐拆成两个 Cron Job，分别设定时间，例如：
 - 7:00 `skillId: "daily-digest"` — 生成日报

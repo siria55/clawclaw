@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { normalizeCronChatIds, normalizeCronJobConfig } from "../../cron/types";
 import styles from "./CronView.module.css";
 
 interface CronJobConfig {
@@ -6,6 +7,7 @@ interface CronJobConfig {
   schedule: string;
   message: string;
   chatId: string;
+  chatIds?: string[];
   platform: string;
   enabled: boolean;
   direct: boolean;
@@ -37,7 +39,7 @@ async function fetchCronJobs(): Promise<CronJobConfig[]> {
   const res = await fetch("/api/cron");
   if (!res.ok) throw new Error(await readError(res, "加载 Cron 任务失败"));
   const data = await res.json() as { jobs: CronJobConfig[] };
-  return data.jobs;
+  return data.jobs.map(normalizeCronJobConfig);
 }
 
 async function saveCronJob(job: CronJobConfig): Promise<void> {
@@ -76,6 +78,20 @@ function getChatHint(chatId: string): string {
   return "";
 }
 
+function formatChatTargets(job: Pick<CronJobConfig, "chatId" | "chatIds">): string {
+  return normalizeCronChatIds(job).join("\n");
+}
+
+function describeChatTargets(job: Pick<CronJobConfig, "chatId" | "chatIds">): string {
+  const chatIds = normalizeCronChatIds(job);
+  if (chatIds.length === 0) return "—";
+  if (chatIds.length === 1) {
+    const only = chatIds[0]!;
+    return `${only} ${getChatHint(only)}`.trim();
+  }
+  return `${chatIds.join(" / ")} · 共 ${chatIds.length} 个目标`;
+}
+
 function getCardNotice(notice: Notice | null, jobId: string): Notice | null {
   return notice?.jobId === jobId ? notice : null;
 }
@@ -86,6 +102,7 @@ export function CronView(): React.JSX.Element {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<CronJobConfig>(EMPTY_FORM);
+  const [chatTargets, setChatTargets] = useState("");
   const [saving, setSaving] = useState(false);
   const [runningId, setRunningId] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -105,16 +122,22 @@ export function CronView(): React.JSX.Element {
 
   const resetForm = (): void => {
     setForm(EMPTY_FORM);
+    setChatTargets("");
     setShowForm(false);
   };
 
   const handleSave = async (): Promise<void> => {
-    if (!form.id || !form.schedule || !form.message) return;
+    const targetIds = normalizeCronChatIds({ chatIds: chatTargets.split("\n") });
+    if (!form.id || !form.schedule || !form.message || targetIds.length === 0) return;
     const savedId = form.id;
     setSaving(true);
     setNotice(null);
     try {
-      await saveCronJob(form);
+      await saveCronJob(normalizeCronJobConfig({
+        ...form,
+        chatId: targetIds[0]!,
+        chatIds: targetIds,
+      }));
       await load();
       resetForm();
       setNotice({ type: "success", text: `已保存 ${savedId}` });
@@ -151,6 +174,7 @@ export function CronView(): React.JSX.Element {
 
   const handleEdit = (job: CronJobConfig): void => {
     setForm(job);
+    setChatTargets(formatChatTargets(job));
     setShowForm(true);
     setNotice(null);
   };
@@ -171,7 +195,7 @@ export function CronView(): React.JSX.Element {
             <button className={styles.refreshBtn} onClick={() => { setNotice(null); void load().catch(showError); }} aria-label="刷新" disabled={loading}>
               {loading ? "…" : "↺"}
             </button>
-            <button className={styles.addBtn} onClick={() => { setForm(EMPTY_FORM); setShowForm(true); setNotice(null); }}>
+            <button className={styles.addBtn} onClick={() => { setForm(EMPTY_FORM); setChatTargets(""); setShowForm(true); setNotice(null); }}>
               + 新增
             </button>
           </div>
@@ -196,7 +220,7 @@ export function CronView(): React.JSX.Element {
                 </div>
                 <p className={styles.cronMsg}>{job.message}</p>
                 <div className={styles.metaList}>
-                  <span className={styles.cronMeta}>{job.platform} · {job.chatId || "—"}{job.chatId ? ` ${getChatHint(job.chatId)}` : ""}</span>
+                  <span className={styles.cronMeta}>{job.platform} · {describeChatTargets(job)}</span>
                   {job.skillId && <span className={styles.cronMeta}>skillId: {job.skillId}</span>}
                   {job.sendSkillOutput && <span className={styles.cronMeta}>sendSkillOutput: {job.sendSkillOutput}</span>}
                   {job.direct && <span className={styles.cronMeta}>直发 {describeMsgType(job.msgType)}</span>}
@@ -234,10 +258,16 @@ export function CronView(): React.JSX.Element {
                 <input className={styles.formInput} value={form.schedule} placeholder="0 9 * * *" onChange={(e) => setForm((value) => ({ ...value, schedule: e.target.value }))} />
               </div>
               <div className={styles.formRow}>
-                <label className={styles.formLabel}>Chat ID</label>
+                <label className={styles.formLabel}>发送目标</label>
                 <div className={styles.formInputGroup}>
-                  <input className={styles.formInput} value={form.chatId} placeholder="ou_xxx（用户）/ oc_xxx（群聊）" onChange={(e) => setForm((value) => ({ ...value, chatId: e.target.value }))} />
-                  <span className={styles.formHint}>{getChatHint(form.chatId)}</span>
+                  <textarea
+                    className={styles.formTextarea}
+                    value={chatTargets}
+                    rows={3}
+                    placeholder={"每行一个\nou_xxx（用户）\noc_xxx（群聊）"}
+                    onChange={(e) => setChatTargets(e.target.value)}
+                  />
+                  <span className={styles.formHint}>{normalizeCronChatIds({ chatIds: chatTargets.split("\n") }).map(getChatHint).filter(Boolean).join(" / ") || "支持同时发给个人和群"}</span>
                 </div>
               </div>
               <div className={styles.formRow}>
