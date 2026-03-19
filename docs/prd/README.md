@@ -89,7 +89,7 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 
 | 工具 | 说明 |
 |------|------|
-| `memory_save` | 保存长期记忆（文本 + 标签） |
+| `memory_save` | 显式保存长期记忆（文本 + 标签） |
 | `memory_search` | 关键词检索记忆库，返回摘要列表 |
 | `memory_get` | 按 id 取回完整记忆内容 |
 | `feishu_department_info` | 读取飞书部门信息，返回部门 ID、上级部门、部门人数等 |
@@ -162,7 +162,16 @@ data/skills/{skillId}/
 
 ### MemoryStorage（记忆库）
 
-文件持久化的长期记忆。Agent 通过工具主动存取记忆：搜索相关记忆（RAG pull），或通过 `getContext` 钩子自动注入上下文（RAG push）。
+文件持久化的长期记忆，默认路径 `data/agent/memory.json`。
+
+当前实现分成“自动检索、显式写入”两部分：
+- 读取侧：`getContext` 会在每轮调用前按用户最新消息自动搜索已有记忆，并把命中摘要作为临时上下文注入
+- 写入侧：只有 Agent 显式调用 `memory_save` 时，内容才会写入记忆库并出现在 WebUI
+
+这意味着：
+- 记忆库为空通常表示尚未发生 `memory_save`
+- 当前版本不会自动把每轮对话或“看起来重要”的内容写入长期记忆
+- “重要”暂无独立规则引擎，主要由模型结合 system prompt、工具描述和当前上下文自行判断
 
 ### 挂载飞书文档资料
 
@@ -274,5 +283,6 @@ src/
 - **接口优于实现** — `LLMProvider`、`Tool`、`IMPlatform` 均为接口，不锁定具体实现
 - **错误不崩溃** — 工具异常、IM 发送失败均捕获处理，不影响其他会话
 - **可测试** — 核心逻辑不依赖网络，Mock LLM 和 IMPlatform 即可单元测试
-- **最小依赖** — 运行时只需 `@anthropic-ai/sdk`、`zod` 和 `playwright`- **按需加载上下文** — 记忆和知识不预置在 system prompt，通过工具检索或 getContext 钩子按需注入
+- **最小依赖** — 运行时只需 `@anthropic-ai/sdk`、`zod` 和 `playwright`
+- **按需加载上下文** — 记忆和知识不预置在 system prompt，通过工具检索或 getContext 钩子按需注入
 - **Skill 职责单一** — Skill 只负责生成内容和保存文件，IM 投递由 CronScheduler 统一处理

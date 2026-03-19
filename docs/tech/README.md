@@ -107,6 +107,12 @@ getContext?: (messages: Message[]) => Message[] | Promise<Message[]>
 
 与此同时，系统提示词会显式要求 Agent 在回答飞书组织问题时优先调用飞书工具，而不是凭空生成部门人数或成员信息。
 
+记忆侧当前只有“自动搜、显式存”两段链路：
+- `getContext` 会自动执行 `memoryStorage.search()`，但不会自动写入 `MemoryStorage`
+- `memory_save` 是长期记忆唯一写入口，执行路径在 `src/tools/memory.ts`
+- 因此 `data/agent/memory.json` 为空通常表示尚未发生显式保存，而不是检索失效
+- “重要性”当前不由服务端规则判定，是否调用 `memory_save` 由模型结合 system prompt、工具描述和上下文决定
+
 ---
 
 ## IM 会话模型
@@ -229,15 +235,16 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 ### MemoryStorage / ConversationStorage / ConfigStorage
 
+- `new MemoryStorage("./data/agent/memory.json")` — 长期记忆，仅保存 `memory_save` 写入的条目
 - `new ConversationStorage("./data/im/conversations.json")` — IM session 历史
-- `new ConfigStorage<IMConfig>("./data/im-config.json")` — IM 凭证
-- `new ConfigStorage<LLMConfig>("./data/llm-config.json")` — LLM 配置
-- `new ConfigStorage<AgentMetaConfig>("./data/agent-config.json")` — Agent 名称和系统提示词
+- `new ConfigStorage<IMConfig>("./data/im/im-config.json")` — IM 凭证
+- `new ConfigStorage<LLMConfig>("./data/agent/llm-config.json")` — LLM 配置
+- `new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json")` — Agent 名称和系统提示词
 - `new ConfigStorage<MountedDocConfig>("./data/agent/feishu-docs/config.json", { docs: [] })` — 挂载飞书文档配置
 - `new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json")` — DailyDigest 搜索主题
-- `new ConfigStorage<CronJobConfig[]>("./data/cron-config.json", [])` — Cron 任务配置
+- `new ConfigStorage<CronJobConfig[]>("./data/cron/cron-config.json", [])` — Cron 任务配置
 
-ConversationStorage 负责短期 session 历史；MemoryStorage 负责长期共享记忆。三个配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。
+ConversationStorage 负责短期 session 历史；MemoryStorage 负责长期共享记忆，两者不会自动互相镜像。也就是说，IM 多轮对话会持久化到 `conversations.json`，但不会自动沉淀到 `memory.json`。各配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。
 
 ---
 
@@ -301,9 +308,9 @@ defineTool({
 | `/api/skills` | GET | 已注册 Skill 列表（id + description） |
 | `/api/skills/:id/run` | POST | 手动触发 Skill，SSE 流式日志 |
 | `/api/skills/:id/latest-image` | GET | 返回该 Skill 最新 PNG（`image/png`），404 表示无输出 |
-| `/api/im-config` | GET/POST | 飞书等 IM 凭证（读写 `data/im-config.json`） |
-| `/api/config/llm` | GET/POST | LLM 配置（读写 `data/llm-config.json`） |
-| `/api/config/agent` | GET/POST | Agent 配置（读写 `data/agent-config.json`） |
+| `/api/im-config` | GET/POST | 飞书等 IM 凭证（读写 `data/im/im-config.json`） |
+| `/api/config/llm` | GET/POST | LLM 配置（读写 `data/agent/llm-config.json`） |
+| `/api/config/agent` | GET/POST | Agent 配置（读写 `data/agent/agent-config.json`） |
 | `/api/config/daily-digest` | GET/POST | DailyDigest 搜索主题（读写 `data/skills/daily-digest/config.json`） |
 | `/api/config/feishu-docs` | GET/POST | 挂载飞书文档配置（读写 `data/agent/feishu-docs/config.json`） |
 | `/api/config/feishu-docs/sync` | POST | 用 Playwright 同步飞书文档正文到本地缓存 |
@@ -352,7 +359,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 |-----|----------|------|------|
 | 对话 | `#chat` | `ChatView` | 消息气泡 + 工具事件 + 思考气泡 + 等待动画 |
 | 新闻库 | `#news` | `NewsView` | 关键词搜索、分页浏览（读 skill JSON 输出） |
-| 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起 |
+| 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起，只展示已通过 `memory_save` 落库的条目 |
 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志 |
 | 状态 | `#status` | `StatusView` | IM 连接状态、IM 日志 |
 | Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行 |
