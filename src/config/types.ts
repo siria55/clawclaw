@@ -22,6 +22,19 @@ export interface IMConfig {
   feishu?: FeishuConfig;
 }
 
+/** One mounted Feishu/Lark doc source configured in WebUI. */
+export interface MountedDocSource {
+  id: string;
+  title: string;
+  url: string;
+  enabled: boolean;
+}
+
+/** Persisted mounted-doc config saved server-side. */
+export interface MountedDocConfig {
+  docs?: MountedDocSource[];
+}
+
 /** Agent persona and system prompt configurable from WebUI. */
 export interface AgentMetaConfig {
   name?: string;

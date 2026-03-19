@@ -22,6 +22,7 @@ src/index.ts（公共入口）
 │   └── context.ts         ← buildIMRunContext() / persistIMRunContext()
 │
 ├── memory/storage.ts      ← MemoryStorage（JSON 持久化）
+├── docs/library.ts        ← MountedDocLibrary（文档同步 / 缓存 / 检索）
 │
 ├── platform/feishu.ts     ← 飞书适配器
 ├── platform/wecom.ts      ← 企业微信适配器
@@ -95,8 +96,13 @@ getContext?: (messages: Message[]) => Message[] | Promise<Message[]>
 
 适用场景：
 - 根据用户消息内容自动检索记忆库，将命中结果注入
+- 根据用户消息内容检索已挂载的飞书文档片段，并把命中片段注入
 - 注入当前 Agent 状态、任务上下文
 - 实现 RAG push（主动推送检索结果），与工具 `memory_search` 的 RAG pull 互补
+
+当前实现里，`app.ts` / `web/dev.ts` 会把记忆命中和文档命中合并为临时上下文消息，典型段落为：
+- `[相关记忆]`
+- `[挂载文档资料]`
 
 ---
 
@@ -205,6 +211,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 - `new ConfigStorage<IMConfig>("./data/im-config.json")` — IM 凭证
 - `new ConfigStorage<LLMConfig>("./data/llm-config.json")` — LLM 配置
 - `new ConfigStorage<AgentMetaConfig>("./data/agent-config.json")` — Agent 名称和系统提示词
+- `new ConfigStorage<MountedDocConfig>("./data/agent/feishu-docs/config.json", { docs: [] })` — 挂载飞书文档配置
 - `new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json")` — DailyDigest 搜索主题
 - `new ConfigStorage<CronJobConfig[]>("./data/cron-config.json", [])` — Cron 任务配置
 
@@ -249,6 +256,8 @@ defineTool({
 | `/api/config/llm` | GET/POST | LLM 配置（读写 `data/llm-config.json`） |
 | `/api/config/agent` | GET/POST | Agent 配置（读写 `data/agent-config.json`） |
 | `/api/config/daily-digest` | GET/POST | DailyDigest 搜索主题（读写 `data/skills/daily-digest/config.json`） |
+| `/api/config/feishu-docs` | GET/POST | 挂载飞书文档配置（读写 `data/agent/feishu-docs/config.json`） |
+| `/api/config/feishu-docs/sync` | POST | 用 Playwright 同步飞书文档正文到本地缓存 |
 | `/api/cron` | GET/POST/DELETE | Cron 任务 CRUD |
 | `/api/cron/:id/run` | POST | 立即执行单条 Cron 任务 |
 | `/api/im-log` | GET | IM 事件日志（query: `since=`） |
@@ -298,11 +307,13 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志 |
 | 状态 | `#status` | `StatusView` | IM 连接状态、IM 日志 |
 | Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行 |
-| 设置 | `#settings` | `SettingsView` | Agent 配置 / DailyDigest 搜索主题 / LLM 配置 / 飞书 IM 配置 |
+| 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / DailyDigest 搜索主题 / LLM 配置 / 飞书 IM 配置 |
 
 URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读 `window.location.hash`，切换 tab 更新 hash，监听 `hashchange` 支持浏览器前进/后退。
 
 `CronView` 通过 `GET /api/cron` 读取配置，`POST /api/cron` 保存，`DELETE /api/cron/:id` 删除，`POST /api/cron/:id/run` 直接触发一次运行；后端再通过 `CronScheduler.runNow()` 复用既有 Skill / IM 投递链路。
+
+`SettingsView` 的飞书文档区块通过 `GET /api/config/feishu-docs` 读取配置和同步状态，`POST /api/config/feishu-docs` 保存来源列表，`POST /api/config/feishu-docs/sync` 调用 `MountedDocLibrary` 用 Playwright 拉取正文并写入本地缓存。
 
 **关键 hooks：**
 - `useChatStream` — SSE 解析、事件状态管理、thinking 块累积

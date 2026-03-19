@@ -132,6 +132,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 45 — Cron 独立 Tab 与手动执行
 `CronView` 从 `StatusView` 拆出为独立 tab；新增 `POST /api/cron/:id/run` 和 `CronScheduler.runNow()`，支持从 WebUI 直接执行单条 Cron 任务。状态页回归为 IM 连接和日志视图。
 
+### Sprint 46 — Agent 挂载飞书文档资料
+新增 `MountedDocLibrary`，支持在设置页挂载飞书文档 URL、用 Playwright 同步正文到 `data/agent/feishu-docs/`，并在 `getContext` 里按用户问题检索命中文档片段，驱动 Agent 做更特异化的回答。
+
 ### Sprint 37 — 清理 src/news/ 死代码目录
 Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
 

@@ -129,6 +129,13 @@ pnpm start
 - 名称（标识用）、系统提示词（System Prompt）
 - 留空则使用默认提示词
 - 保存后下一轮对话即生效，无需重启
+- `allowedPaths` 默认包含 `./data/skills` 和 `./data/agent/feishu-docs`
+
+**飞书文档资料**（保存在 `data/agent/feishu-docs/config.json`）：
+- 维护文档名称和飞书 URL，可按需启用或停用
+- 先保存挂载配置，再点击同步；服务端会抓取正文并缓存到 `data/agent/feishu-docs/{docId}.json`
+- Agent 每轮会按用户问题检索命中的文档片段，并优先据此回答
+- 适合挂载制度、SOP、FAQ、产品说明等内部资料
 
 **DailyDigest 配置**（保存在 `data/skills/daily-digest/config.json`）：
 - 搜索主题（每行一个）
@@ -192,6 +199,8 @@ Agent 是框架的核心单元，负责 LLM 调用与工具执行的编排。
 
 适用场景：根据用户消息内容自动检索记忆、注入状态摘要、实现自动 RAG（检索增强生成）。
 
+当前项目还会用同一机制自动注入命中的挂载飞书文档片段，因此 Agent 回答时会同时参考长期记忆和已同步的文档正文。
+
 ---
 
 ## 内置工具
@@ -208,7 +217,7 @@ Agent 是框架的核心单元，负责 LLM 调用与工具执行的编排。
 
 ### 文件读取工具
 
-通过 `createReadFileTool(getAllowedPaths)` 创建。Agent 可读取 `allowedPaths` 白名单内的文件，默认允许 `./data/skills`，方便 Agent 查阅 Skill 的历史输出。
+通过 `createReadFileTool(getAllowedPaths)` 创建。Agent 可读取 `allowedPaths` 白名单内的文件，默认允许 `./data/skills` 和 `./data/agent/feishu-docs`，方便 Agent 查阅 Skill 输出和已同步的挂载文档缓存。
 
 ---
 

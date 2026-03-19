@@ -6,7 +6,8 @@ import { WebServer } from "../../src/web/server.js";
 import { MemoryStorage } from "../../src/memory/storage.js";
 import { ConfigStorage } from "../../src/config/storage.js";
 import { ConversationStorage } from "../../src/im/conversations.js";
-import type { IMConfig, AgentMetaConfig, DailyDigestConfig } from "../../src/config/types.js";
+import { MountedDocLibrary } from "../../src/docs/library.js";
+import type { IMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "../../src/config/types.js";
 import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";
@@ -536,6 +537,92 @@ describe("WebServer", () => {
 
     await server.stop();
     rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it("GET /api/config/feishu-docs returns mounted docs and synced snapshots", async () => {
+    const agent = makeMockAgent();
+    const docsDir = join(tmpdir(), `clawclaw-docs-get-${Date.now()}`);
+    mkdirSync(docsDir, { recursive: true });
+    const mountedDocConfigStorage = new ConfigStorage<MountedDocConfig>(join(docsDir, "config.json"), { docs: [] });
+    mountedDocConfigStorage.write({
+      docs: [{ id: "leave", title: "请假制度", url: "https://example.com/leave", enabled: true }],
+    });
+    const mountedDocLibrary = new MountedDocLibrary({
+      configStorage: mountedDocConfigStorage,
+      dataDir: docsDir,
+      extractor: async () => ({ title: "请假制度", content: "请假正文" }),
+    });
+    await mountedDocLibrary.syncById("leave");
+
+    const server = new WebServer({ agent, port: 0, staticDir, mountedDocConfigStorage, mountedDocLibrary });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/feishu-docs`);
+    const body = await res.json() as {
+      docs: Array<{ id: string; title: string }>;
+      syncedDocs: Array<{ id: string; excerpt: string }>;
+    };
+    expect(body.docs[0].id).toBe("leave");
+    expect(body.syncedDocs[0].id).toBe("leave");
+    expect(body.syncedDocs[0].excerpt).toContain("请假正文");
+
+    await server.stop();
+    rmSync(docsDir, { recursive: true, force: true });
+  });
+
+  it("POST /api/config/feishu-docs saves mounted doc config", async () => {
+    const agent = makeMockAgent();
+    const docsDir = join(tmpdir(), `clawclaw-docs-post-${Date.now()}`);
+    mkdirSync(docsDir, { recursive: true });
+    const mountedDocConfigStorage = new ConfigStorage<MountedDocConfig>(join(docsDir, "config.json"), { docs: [] });
+    const mountedDocLibrary = new MountedDocLibrary({ configStorage: mountedDocConfigStorage, dataDir: docsDir });
+
+    const server = new WebServer({ agent, port: 0, staticDir, mountedDocConfigStorage, mountedDocLibrary });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/feishu-docs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        docs: [{ id: "sop", title: "客服 SOP", url: "https://example.com/sop", enabled: true }],
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(mountedDocConfigStorage.read().docs?.[0].title).toBe("客服 SOP");
+
+    await server.stop();
+    rmSync(docsDir, { recursive: true, force: true });
+  });
+
+  it("POST /api/config/feishu-docs/sync syncs mounted docs through library", async () => {
+    const agent = makeMockAgent();
+    const docsDir = join(tmpdir(), `clawclaw-docs-sync-${Date.now()}`);
+    mkdirSync(docsDir, { recursive: true });
+    const mountedDocConfigStorage = new ConfigStorage<MountedDocConfig>(join(docsDir, "config.json"), {
+      docs: [{ id: "leave", title: "请假制度", url: "https://example.com/leave", enabled: true }],
+    });
+    const mountedDocLibrary = new MountedDocLibrary({
+      configStorage: mountedDocConfigStorage,
+      dataDir: docsDir,
+      extractor: async () => ({ title: "请假制度", content: "病假需要医院证明。" }),
+    });
+
+    const server = new WebServer({ agent, port: 0, staticDir, mountedDocConfigStorage, mountedDocLibrary });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/feishu-docs/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "leave" }),
+    });
+    const body = await res.json() as { ok: boolean; results: Array<{ id: string; ok: boolean }> };
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.results[0]).toEqual(expect.objectContaining({ id: "leave", ok: true }));
+    expect(mountedDocLibrary.search("病假", 1)).toHaveLength(1);
+
+    await server.stop();
+    rmSync(docsDir, { recursive: true, force: true });
   });
 
   it("GET /api/memory returns empty page when memoryStorage is not provided", async () => {

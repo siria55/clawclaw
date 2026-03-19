@@ -14,10 +14,11 @@ import { buildIMRunContext, persistIMRunContext } from "../im/context.js";
 import type { CronJobConfig } from "../cron/types.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
-import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig } from "../config/types.js";
+import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "../config/types.js";
 import type { SkillRegistry } from "../skills/registry.js";
 import type { SkillResult } from "../skills/types.js";
 import { findLatestSkillPng } from "../skills/loader.js";
+import type { MountedDocLibrary } from "../docs/library.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -81,6 +82,8 @@ export interface WebServerConfig {
   onAgentConfig?: (config: AgentMetaConfig) => void;
   /** DailyDigest runtime config storage for GET/POST /api/config/daily-digest. */
   dailyDigestConfigStorage?: ConfigStorage<DailyDigestConfig>;
+  /** Mounted doc config storage for GET/POST /api/config/feishu-docs. */
+  mountedDocConfigStorage?: ConfigStorage<MountedDocConfig>;
   /** Optional storage for recording incoming IM events (used by GET /api/im-log). */
   imEventStorage?: IMEventStorage;
   /** Optional storage for per-session conversation history (multi-turn memory). */
@@ -93,6 +96,8 @@ export interface WebServerConfig {
   onCronDelete?: (id: string) => void;
   /** Called when POST /api/cron/:id/run is triggered from WebUI. */
   onCronRun?: (config: CronJobConfig) => Promise<void>;
+  /** Mounted doc library for listing snapshots and syncing docs. */
+  mountedDocLibrary?: MountedDocLibrary;
   /** Skill registry for GET /api/skills. */
   skillRegistry?: SkillRegistry;
   /** Called when POST /api/skills/:id/run is triggered from WebUI. */
@@ -118,7 +123,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "skillDataRoot" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "dailyDigestConfigStorage" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "onCronRun" | "skillRegistry" | "onRunSkill">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "skillDataRoot" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "dailyDigestConfigStorage" | "mountedDocConfigStorage" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "onCronRun" | "mountedDocLibrary" | "skillRegistry" | "onRunSkill">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     skillDataRoot: string | undefined;
@@ -130,12 +135,14 @@ export class WebServer {
     agentConfigStorage: ConfigStorage<AgentMetaConfig> | undefined;
     onAgentConfig: ((config: AgentMetaConfig) => void) | undefined;
     dailyDigestConfigStorage: ConfigStorage<DailyDigestConfig> | undefined;
+    mountedDocConfigStorage: ConfigStorage<MountedDocConfig> | undefined;
     imEventStorage: IMEventStorage | undefined;
     conversationStorage: ConversationStorage | undefined;
     cronStorage: ConfigStorage<CronJobConfig[]> | undefined;
     onCronAdd: ((config: CronJobConfig) => void) | undefined;
     onCronDelete: ((id: string) => void) | undefined;
     onCronRun: ((config: CronJobConfig) => Promise<void>) | undefined;
+    mountedDocLibrary: MountedDocLibrary | undefined;
     skillRegistry: SkillRegistry | undefined;
     onRunSkill: ((skillId: string, log: (msg: string) => void) => Promise<SkillResult>) | undefined;
   };
@@ -157,12 +164,14 @@ export class WebServer {
       agentConfigStorage: undefined,
       onAgentConfig: undefined,
       dailyDigestConfigStorage: undefined,
+      mountedDocConfigStorage: undefined,
       imEventStorage: undefined,
       conversationStorage: undefined,
       cronStorage: undefined,
       onCronAdd: undefined,
       onCronDelete: undefined,
       onCronRun: undefined,
+      mountedDocLibrary: undefined,
       skillRegistry: undefined,
       onRunSkill: undefined,
       ...config,
@@ -308,6 +317,21 @@ export class WebServer {
 
     if (req.method === "POST" && path === "/api/config/daily-digest") {
       await this.#handlePostDailyDigestConfig(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/config/feishu-docs") {
+      this.#handleGetMountedDocs(res);
+      return;
+    }
+
+    if (req.method === "POST" && path === "/api/config/feishu-docs") {
+      await this.#handlePostMountedDocs(req, res);
+      return;
+    }
+
+    if (req.method === "POST" && path === "/api/config/feishu-docs/sync") {
+      await this.#handleSyncMountedDocs(req, res);
       return;
     }
 
@@ -645,6 +669,60 @@ export class WebServer {
 
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ ok: true }));
+  }
+
+  #handleGetMountedDocs(res: ServerResponse): void {
+    const docs = this.#config.mountedDocConfigStorage?.read().docs ?? [];
+    const syncedDocs = this.#config.mountedDocLibrary?.listSnapshots().map((doc) => ({
+      id: doc.id,
+      title: doc.title,
+      url: doc.url,
+      excerpt: doc.excerpt,
+      syncedAt: doc.syncedAt,
+    })) ?? [];
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ docs, syncedDocs }));
+  }
+
+  async #handlePostMountedDocs(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const storage = this.#config.mountedDocConfigStorage;
+    const library = this.#config.mountedDocLibrary;
+    if (!storage || !library) {
+      res.writeHead(503).end("Mounted doc storage not configured");
+      return;
+    }
+    const body = await readBody(req);
+    let incoming: MountedDocConfig;
+    try {
+      incoming = JSON.parse(body) as MountedDocConfig;
+    } catch {
+      res.writeHead(400).end("Invalid JSON");
+      return;
+    }
+    const docs = library.saveSources(incoming.docs ?? []);
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ ok: true, docs }));
+  }
+
+  async #handleSyncMountedDocs(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const library = this.#config.mountedDocLibrary;
+    if (!library) {
+      res.writeHead(503).end("Mounted doc library not configured");
+      return;
+    }
+    const body = await readBody(req);
+    let id: string | undefined;
+    if (body.trim()) {
+      try {
+        id = (JSON.parse(body) as { id?: string }).id;
+      } catch {
+        res.writeHead(400).end("Invalid JSON");
+        return;
+      }
+    }
+    const results = id ? [await library.syncById(id)] : await library.syncAll();
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ ok: results.every((item) => item.ok), results }));
   }
 
   async #handleIMRoute(

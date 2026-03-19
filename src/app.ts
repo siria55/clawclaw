@@ -31,13 +31,15 @@ import { createMemoryTools } from "./tools/memory.js";
 import { createReadFileTool } from "./tools/read-file.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { DEFAULT_DAILY_DIGEST_QUERIES, DailyDigestSkill } from "./skills/daily-digest/index.js";
+import { MountedDocLibrary } from "./docs/library.js";
 import type { Message } from "./llm/types.js";
 import type { CronJob, CronJobConfig } from "./cron/types.js";
-import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig } from "./config/types.js";
+import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "./config/types.js";
 
 // ── 存储 ──────────────────────────────────────────────────────────────────────
 
 mkdirSync("./data/agent", { recursive: true });
+mkdirSync("./data/agent/feishu-docs", { recursive: true });
 mkdirSync("./data/im", { recursive: true });
 mkdirSync("./data/cron", { recursive: true });
 mkdirSync("./data/skills", { recursive: true });
@@ -49,12 +51,18 @@ const conversationStorage = new ConversationStorage("./data/im/conversations.jso
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/agent/llm-config.json");
 const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json");
+const mountedDocConfigStorage = new ConfigStorage<MountedDocConfig>("./data/agent/feishu-docs/config.json", { docs: [] });
 const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json", {
   queries: DEFAULT_DAILY_DIGEST_QUERIES,
 });
 const cronStorage = new ConfigStorage<CronJobConfig[]>("./data/cron/cron-config.json", []);
+const mountedDocLibrary = new MountedDocLibrary({
+  configStorage: mountedDocConfigStorage,
+  dataDir: "./data/agent/feishu-docs",
+});
 
 const DEFAULT_SYSTEM = "你是一个高效的 AI 助手，可以搜索和保存新闻、管理长期记忆。";
+const DEFAULT_ALLOWED_PATHS = ["./data/skills", "./data/agent/feishu-docs"];
 
 // ── LLM ───────────────────────────────────────────────────────────────────────
 
@@ -70,32 +78,45 @@ function buildLLM(): AnthropicProvider {
 
 const llm = buildLLM();
 
+function buildSystemPrompt(systemPrompt: string | undefined): string {
+  return [
+    systemPrompt ?? DEFAULT_SYSTEM,
+    "若上下文中提供了挂载文档资料，优先依据文档内容回答；文档未覆盖的细节要明确说明，不要编造。",
+    `当前日期：${new Date().toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })}`,
+  ].join("\n");
+}
+
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
 const agent = new Agent({
   name: "clawclaw",
 
   // 动态 system prompt：每轮调用前注入当前日期 + 用户自定义提示词（若有）
-  system: () => [
-    agentConfigStorage.read().systemPrompt ?? DEFAULT_SYSTEM,
-    `当前日期：${new Date().toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })}`,
-  ].join("\n"),
+  system: () => buildSystemPrompt(agentConfigStorage.read().systemPrompt),
 
   llm,
 
   tools: [
     ...createMemoryTools(memoryStorage),
-    createReadFileTool(() => agentConfigStorage.read().allowedPaths ?? ["./data/skills"]),
+    createReadFileTool(() => agentConfigStorage.read().allowedPaths ?? DEFAULT_ALLOWED_PATHS),
   ],
 
   // getContext：每轮调用前，根据用户最新消息自动检索相关记忆
-  getContext: async (messages: Message[]) => {
+  getContext: (messages: Message[]) => {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (!lastUser || typeof lastUser.content !== "string") return [];
+    const sections: string[] = [];
     const hits = memoryStorage.search({ q: lastUser.content, limit: 3 });
-    if (hits.length === 0) return [];
-    const snippets = hits.map((h) => `- [${h.id}] ${h.snippet}`).join("\n");
-    return [{ role: "user" as const, content: `[相关记忆]\n${snippets}` }];
+    if (hits.length > 0) {
+      const snippets = hits.map((h) => `- [${h.id}] ${h.snippet}`).join("\n");
+      sections.push(`[相关记忆]\n${snippets}`);
+    }
+    const docHits = mountedDocLibrary.search(lastUser.content, 3);
+    if (docHits.length > 0) {
+      const snippets = docHits.map((hit) => `- [${hit.title}] ${hit.snippet}\n  来源: ${hit.url}`).join("\n");
+      sections.push(`[挂载文档资料]\n以下内容来自已同步的飞书文档，仅在相关时使用：\n${snippets}`);
+    }
+    return sections.length > 0 ? [{ role: "user" as const, content: sections.join("\n\n") }] : [];
   },
 
   compressor: undefined,
@@ -180,6 +201,7 @@ const webServer = new WebServer({
   imEventStorage,
   conversationStorage,
   agentConfigStorage,
+  mountedDocConfigStorage,
   dailyDigestConfigStorage,
   onIMConfig: (config: IMConfig) => {
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
@@ -203,10 +225,7 @@ const webServer = new WebServer({
     }));
   },
   onAgentConfig: (config) => {
-    agent.updateSystem(() => [
-      config.systemPrompt ?? DEFAULT_SYSTEM,
-      `当前日期：${new Date().toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })}`,
-    ].join("\n"));
+    agent.updateSystem(() => buildSystemPrompt(config.systemPrompt));
   },
   getStatus: () => ({
     cronJobs: cron.list().map((j) => ({ ...j, timezone: "Asia/Shanghai" })),
@@ -218,6 +237,7 @@ const webServer = new WebServer({
   onCronAdd: (cfg) => registerCronJob(cfg),
   onCronDelete: (id) => cron.remove(id),
   onCronRun: async (cfg) => runCronJob(cfg),
+  mountedDocLibrary,
   skillRegistry,
 });
 

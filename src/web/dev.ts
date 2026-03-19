@@ -18,13 +18,15 @@ import { createMemoryTools } from "../tools/memory.js";
 import { createReadFileTool } from "../tools/read-file.js";
 import { SkillRegistry } from "../skills/registry.js";
 import { DEFAULT_DAILY_DIGEST_QUERIES, DailyDigestSkill } from "../skills/daily-digest/index.js";
+import { MountedDocLibrary } from "../docs/library.js";
 import type { Message } from "../llm/types.js";
-import type { LLMConfig, IMConfig, AgentMetaConfig, DailyDigestConfig } from "../config/types.js";
+import type { LLMConfig, IMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "../config/types.js";
 import { WebServer } from "./server.js";
 import { CronScheduler } from "../cron/scheduler.js";
 import type { CronJob, CronJobConfig } from "../cron/types.js";
 
 mkdirSync("./data/agent", { recursive: true });
+mkdirSync("./data/agent/feishu-docs", { recursive: true });
 mkdirSync("./data/im", { recursive: true });
 mkdirSync("./data/cron", { recursive: true });
 mkdirSync("./data/skills", { recursive: true });
@@ -34,12 +36,18 @@ const memoryStorage = new MemoryStorage("./data/agent/memory.json");
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/agent/llm-config.json");
 const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json");
+const mountedDocConfigStorage = new ConfigStorage<MountedDocConfig>("./data/agent/feishu-docs/config.json", { docs: [] });
 const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json", {
   queries: DEFAULT_DAILY_DIGEST_QUERIES,
 });
 const cronStorage = new ConfigStorage<import("../cron/types.js").CronJobConfig[]>("./data/cron/cron-config.json", []);
+const mountedDocLibrary = new MountedDocLibrary({
+  configStorage: mountedDocConfigStorage,
+  dataDir: "./data/agent/feishu-docs",
+});
 
 const DEFAULT_SYSTEM = "你是一个有帮助的助手，回答简洁清晰。";
+const DEFAULT_ALLOWED_PATHS = ["./data/skills", "./data/agent/feishu-docs"];
 
 function buildLLM(): AnthropicProvider {
   const saved: LLMConfig = llmConfigStorage.read();
@@ -53,21 +61,36 @@ function buildLLM(): AnthropicProvider {
 
 const llm = buildLLM();
 
+function buildSystemPrompt(systemPrompt: string | undefined): string {
+  return [
+    systemPrompt ?? DEFAULT_SYSTEM,
+    "若上下文中提供了挂载文档资料，优先依据文档内容回答；文档未覆盖的细节要明确说明，不要编造。",
+  ].join("\n");
+}
+
 const agentConfig = {
   name: "debug-agent",
-  system: () => agentConfigStorage.read().systemPrompt ?? DEFAULT_SYSTEM,
+  system: (): string => buildSystemPrompt(agentConfigStorage.read().systemPrompt),
   llm,
   tools: [
     ...createMemoryTools(memoryStorage),
-    createReadFileTool(() => agentConfigStorage.read().allowedPaths ?? ["./data/skills"]),
+    createReadFileTool(() => agentConfigStorage.read().allowedPaths ?? DEFAULT_ALLOWED_PATHS),
   ],
-  getContext: async (messages: Message[]) => {
+  getContext: (messages: Message[]) => {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (!lastUser || typeof lastUser.content !== "string") return [];
+    const sections: string[] = [];
     const hits = memoryStorage.search({ q: lastUser.content, limit: 3 });
-    if (hits.length === 0) return [];
-    const snippets = hits.map((h) => `- [${h.id}] ${h.snippet}`).join("\n");
-    return [{ role: "user" as const, content: `[相关记忆]\n${snippets}` }];
+    if (hits.length > 0) {
+      const snippets = hits.map((h) => `- [${h.id}] ${h.snippet}`).join("\n");
+      sections.push(`[相关记忆]\n${snippets}`);
+    }
+    const docHits = mountedDocLibrary.search(lastUser.content, 3);
+    if (docHits.length > 0) {
+      const snippets = docHits.map((hit) => `- [${hit.title}] ${hit.snippet}\n  来源: ${hit.url}`).join("\n");
+      sections.push(`[挂载文档资料]\n以下内容来自已同步的飞书文档，仅在相关时使用：\n${snippets}`);
+    }
+    return sections.length > 0 ? [{ role: "user" as const, content: sections.join("\n\n") }] : [];
   },
   compressor: undefined,
 };
@@ -132,6 +155,7 @@ const server = new WebServer({
   conversationStorage,
   llmConfigStorage,
   agentConfigStorage,
+  mountedDocConfigStorage,
   dailyDigestConfigStorage,
   cronStorage,
   onIMConfig: (config) => {
@@ -154,7 +178,7 @@ const server = new WebServer({
     }));
   },
   onAgentConfig: (config) => {
-    agent.updateSystem(() => config.systemPrompt ?? DEFAULT_SYSTEM);
+    agent.updateSystem(() => buildSystemPrompt(config.systemPrompt));
   },
   getStatus: () => ({
     cronJobs: cron.list().map((j) => ({ ...j, timezone: "Asia/Shanghai" })),
@@ -165,6 +189,7 @@ const server = new WebServer({
   onCronAdd: (cfg: CronJobConfig) => registerCronJob(cfg),
   onCronDelete: (id: string) => cron.remove(id),
   onCronRun: async (cfg: CronJobConfig) => runCronJob(cfg),
+  mountedDocLibrary,
   skillRegistry,
   onRunSkill: async (skillId: string, log: (msg: string) => void) => {
     const skill = skillRegistry.get(skillId);

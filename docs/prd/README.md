@@ -162,6 +162,14 @@ data/skills/{skillId}/
 
 文件持久化的长期记忆。Agent 通过工具主动存取记忆：搜索相关记忆（RAG pull），或通过 `getContext` 钩子自动注入上下文（RAG push）。
 
+### 挂载飞书文档资料
+
+Agent 可挂载一组飞书文档来源（名称 + URL），由服务端使用 Playwright 抓取正文并缓存到本地。每轮对话前，系统会按用户问题检索命中的文档片段，并作为临时上下文注入。
+
+- 文档配置保存在 `data/agent/feishu-docs/config.json`
+- 已同步正文保存在 `data/agent/feishu-docs/{docId}.json`
+- 命中文档时，Agent 优先依据文档内容回答；文档未覆盖的细节需明确说明
+
 ### WebServer
 
 本地调试界面，同时提供 API 给浏览器 UI 消费：
@@ -179,6 +187,8 @@ data/skills/{skillId}/
 | `GET/POST /api/config/llm` | LLM 配置 |
 | `GET/POST /api/config/agent` | Agent 配置 |
 | `GET/POST /api/config/daily-digest` | DailyDigest 搜索主题配置 |
+| `GET/POST /api/config/feishu-docs` | 飞书文档挂载配置 |
+| `POST /api/config/feishu-docs/sync` | 同步飞书文档正文到本地缓存 |
 | `GET/POST /api/cron` | Cron 任务管理 |
 | `POST /api/cron/:id/run` | 立即执行单条 Cron 任务 |
 
@@ -215,6 +225,9 @@ src/
 │   └── read-file.ts    createReadFileTool()（路径白名单）
 ├── memory/
 │   └── storage.ts      MemoryStorage，JSON 文件持久化
+├── docs/
+│   ├── library.ts      MountedDocLibrary，飞书文档同步 / 缓存 / 检索
+│   └── index.ts        文档模块导出
 ├── cron/
 │   ├── types.ts        CronJob / CronJobConfig / CronSchedulerOptions
 │   ├── scheduler.ts    CronScheduler
