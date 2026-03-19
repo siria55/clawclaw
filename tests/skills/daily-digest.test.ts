@@ -3,6 +3,7 @@ import {
   DAILY_DIGEST_SCREENSHOT,
   parseArticlesFromLLMOutput,
   renderDailyDigestHtml,
+  resolveDailyDigestQueries,
   selectDigestArticles,
   type DailyDigestSelection,
   type DigestArticle,
@@ -87,6 +88,16 @@ describe("selectDigestArticles", () => {
     expect(selection.all).toHaveLength(15);
     expect(selection.domestic.every((article) => article.category === "domestic")).toBe(true);
     expect(selection.international.every((article) => article.category === "international")).toBe(true);
+  });
+});
+
+describe("resolveDailyDigestQueries", () => {
+  it("uses configured queries when present", () => {
+    expect(resolveDailyDigestQueries(["  国内AI  ", "国际AI", "国内AI"], ["fallback"])).toEqual(["国内AI", "国际AI"]);
+  });
+
+  it("falls back to defaults when configured queries are empty", () => {
+    expect(resolveDailyDigestQueries(["", "   "], ["fallback-a", "fallback-b"])).toEqual(["fallback-a", "fallback-b"]);
   });
 });
 

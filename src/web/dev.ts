@@ -17,9 +17,9 @@ import { ConversationStorage } from "../im/conversations.js";
 import { createMemoryTools } from "../tools/memory.js";
 import { createReadFileTool } from "../tools/read-file.js";
 import { SkillRegistry } from "../skills/registry.js";
-import { DailyDigestSkill } from "../skills/daily-digest/index.js";
+import { DEFAULT_DAILY_DIGEST_QUERIES, DailyDigestSkill } from "../skills/daily-digest/index.js";
 import type { Message } from "../llm/types.js";
-import type { LLMConfig, IMConfig, AgentMetaConfig } from "../config/types.js";
+import type { LLMConfig, IMConfig, AgentMetaConfig, DailyDigestConfig } from "../config/types.js";
 import { WebServer } from "./server.js";
 import { CronScheduler } from "../cron/scheduler.js";
 import type { CronJobConfig } from "../cron/types.js";
@@ -28,11 +28,15 @@ mkdirSync("./data/agent", { recursive: true });
 mkdirSync("./data/im", { recursive: true });
 mkdirSync("./data/cron", { recursive: true });
 mkdirSync("./data/skills", { recursive: true });
+mkdirSync("./data/skills/daily-digest", { recursive: true });
 
 const memoryStorage = new MemoryStorage("./data/agent/memory.json");
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/agent/llm-config.json");
 const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json");
+const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json", {
+  queries: DEFAULT_DAILY_DIGEST_QUERIES,
+});
 const cronStorage = new ConfigStorage<import("../cron/types.js").CronJobConfig[]>("./data/cron/cron-config.json", []);
 
 const DEFAULT_SYSTEM = "你是一个有帮助的助手，回答简洁清晰。";
@@ -84,7 +88,7 @@ function buildFeishu(): FeishuPlatform | undefined {
 let feishu = buildFeishu();
 
 const skillRegistry = new SkillRegistry();
-skillRegistry.register(new DailyDigestSkill());
+skillRegistry.register(new DailyDigestSkill({ configStorage: dailyDigestConfigStorage }));
 
 const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry, skillDataRoot: "./data/skills" });
 
@@ -106,6 +110,7 @@ const server = new WebServer({
   conversationStorage,
   llmConfigStorage,
   agentConfigStorage,
+  dailyDigestConfigStorage,
   cronStorage,
   onIMConfig: (config) => {
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
@@ -161,4 +166,3 @@ cron.start();
 console.log(`WebUI + IM Webhook → http://localhost:3000`);
 console.log(`飞书  ${feishu ? "✓ 已连接（/feishu）" : "✗ 未配置"}`);
 console.log(`CronScheduler 已启动，${cron.jobIds.length} 个任务`);
-

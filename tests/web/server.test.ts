@@ -6,7 +6,7 @@ import { WebServer } from "../../src/web/server.js";
 import { MemoryStorage } from "../../src/memory/storage.js";
 import { ConfigStorage } from "../../src/config/storage.js";
 import { ConversationStorage } from "../../src/im/conversations.js";
-import type { IMConfig, AgentMetaConfig } from "../../src/config/types.js";
+import type { IMConfig, AgentMetaConfig, DailyDigestConfig } from "../../src/config/types.js";
 import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";
@@ -444,6 +444,48 @@ describe("WebServer", () => {
 
     await server.stop();
     rmSync(agentDir, { recursive: true, force: true });
+  });
+
+  it("GET /api/config/daily-digest returns default queries when storage exists", async () => {
+    const agent = makeMockAgent();
+    const configDir = join(tmpdir(), `clawclaw-daily-digest-get-${Date.now()}`);
+    mkdirSync(configDir, { recursive: true });
+    const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>(join(configDir, "config.json"), {
+      queries: ["国内AI科技", "国际AI科技"],
+    });
+
+    const server = new WebServer({ agent, port: 0, staticDir, dailyDigestConfigStorage });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/daily-digest`);
+    const body = await res.json() as DailyDigestConfig;
+    expect(body.queries).toEqual(["国内AI科技", "国际AI科技"]);
+
+    await server.stop();
+    rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it("POST /api/config/daily-digest saves normalized queries", async () => {
+    const agent = makeMockAgent();
+    const configDir = join(tmpdir(), `clawclaw-daily-digest-post-${Date.now()}`);
+    mkdirSync(configDir, { recursive: true });
+    const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>(join(configDir, "config.json"), {
+      queries: ["默认主题"],
+    });
+
+    const server = new WebServer({ agent, port: 0, staticDir, dailyDigestConfigStorage });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/daily-digest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ queries: ["  国内AI科技  ", "国际AI科技", "", "国际AI科技"] }),
+    });
+    expect(res.status).toBe(200);
+    expect(dailyDigestConfigStorage.read().queries).toEqual(["国内AI科技", "国际AI科技"]);
+
+    await server.stop();
+    rmSync(configDir, { recursive: true, force: true });
   });
 
   it("GET /api/memory returns empty page when memoryStorage is not provided", async () => {

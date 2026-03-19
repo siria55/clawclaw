@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import type { Browser, Page } from "playwright";
 import { chromium } from "playwright";
 import { z } from "zod";
+import type { ConfigStorage } from "../../config/storage.js";
+import type { DailyDigestConfig } from "../../config/types.js";
 import { loadSkillDef } from "../loader.js";
 import type { Skill, SkillContext, SkillResult } from "../types.js";
 
@@ -51,10 +53,12 @@ const ArticleDraftSchema = z.object({
 });
 
 const SKILL_DIR = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_SKILL_DEF = loadSkillDef(SKILL_DIR);
 const LAYOUT_CSS = readFileSync(join(SKILL_DIR, "layout.css"), "utf8");
 const PAGE_TEMPLATE = readFileSync(join(SKILL_DIR, "template.html"), "utf8");
 const SECTION_TEMPLATE = readFileSync(join(SKILL_DIR, "section.html"), "utf8");
 const ITEM_TEMPLATE = readFileSync(join(SKILL_DIR, "item.html"), "utf8");
+export const DEFAULT_DAILY_DIGEST_QUERIES = [...DEFAULT_SKILL_DEF.queries];
 
 const CATEGORY_LABEL: Record<DigestCategory, string> = {
   domestic: "国内",
@@ -118,8 +122,8 @@ async function extractPageLinks(page: Page, hintCategory: DigestCategory): Promi
 }
 
 /**
- * Navigate each search URL with Playwright, collect all links, then make a single
- * LLM call to filter and structure results as DigestArticle[].
+ * Navigate each search URL with Playwright, collect all links, then make
+ * category-targeted LLM calls to filter and structure results as DigestArticle[].
  */
 async function searchNewsWithBrowser(
   browser: Browser,
@@ -240,34 +244,42 @@ async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
 
 /**
  * Daily digest skill — uses Playwright to directly scrape search result links,
- * then makes a single LLM call to filter and structure results.
+ * then makes targeted LLM calls to filter and structure results.
  * Renders a templated HTML digest, screenshots it, and saves all output files.
  *
  * Output files per run: YYYY-MM-DD.{html,md,png,json}
  */
+interface DailyDigestSkillOptions {
+  configStorage?: ConfigStorage<DailyDigestConfig>;
+}
+
 export class DailyDigestSkill implements Skill {
   readonly id: string;
   readonly description: string;
-  readonly #queries: string[];
+  readonly #defaultQueries: string[];
   readonly #maxCandidates: number;
   readonly #quota: DigestQuota;
+  readonly #configStorage: ConfigStorage<DailyDigestConfig> | undefined;
 
-  constructor() {
-    const def = loadSkillDef(SKILL_DIR);
+  constructor(options: DailyDigestSkillOptions = {}) {
+    const def = DEFAULT_SKILL_DEF;
     this.id = def.id;
     this.description = def.description;
-    this.#queries = def.queries;
+    this.#defaultQueries = def.queries;
     this.#maxCandidates = def.maxCandidates;
     this.#quota = {
       domestic: def.domesticArticles,
       international: def.internationalArticles,
     };
+    this.#configStorage = options.configStorage;
   }
 
   async run(ctx: SkillContext): Promise<SkillResult> {
     const browser = await chromium.launch({ headless: true });
     try {
-      const articles = await searchNewsWithBrowser(browser, ctx, this.#queries, this.#maxCandidates, this.#quota);
+      const queries = resolveDailyDigestQueries(this.#configStorage?.read().queries, this.#defaultQueries);
+      ctx.log?.(`🧭 使用 ${queries.length} 个搜索主题`);
+      const articles = await searchNewsWithBrowser(browser, ctx, queries, this.#maxCandidates, this.#quota);
       const selection = selectDigestArticles(articles, this.#quota);
       ctx.log?.(`📊 最终入选 ${selection.all.length} 篇文章（国内 ${selection.domestic.length} / 国际 ${selection.international.length}）`);
       if (selection.domestic.length < this.#quota.domestic || selection.international.length < this.#quota.international) {
@@ -327,6 +339,14 @@ export function selectDigestArticles(
     international,
     all: [...domestic, ...international],
   };
+}
+
+export function resolveDailyDigestQueries(
+  configured: string[] | undefined,
+  fallback: string[] = DEFAULT_DAILY_DIGEST_QUERIES,
+): string[] {
+  const normalized = normalizeQueryList(configured);
+  return normalized.length > 0 ? normalized : normalizeQueryList(fallback);
 }
 
 function classifyQuery(query: string): DigestCategory {
@@ -426,6 +446,18 @@ function getExtractionLimit(
     ? Math.max(target * 2, target + 4)
     : Math.max(target * 3, target + 6);
   return Math.min(maxCandidates, suggested);
+}
+
+function normalizeQueryList(values: string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const value of values ?? []) {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+  return normalized;
 }
 
 function parseArticleDrafts(text: string): ArticleDraft[] | undefined {

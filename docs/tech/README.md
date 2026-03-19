@@ -171,10 +171,11 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 `loadSkillDef(skillDir)` 解析 SKILL.md，返回 `SkillDef`（含 `instructions` 字段为 frontmatter 之后的 markdown body）。
 其中 `max-candidates` 用于抽取阶段的候选上限，`domestic-articles` / `international-articles` 用于最终日报配额。
+`DailyDigestSkill` 运行时还可从 `ConfigStorage<DailyDigestConfig>` 读取覆盖配置，目前支持在 WebUI 动态修改搜索主题。
 
 ### DailyDigestSkill 执行流程
 
-1. 读取 `SKILL.md` 获得搜索词、候选上限和国内/国际配额
+1. 读取 `SKILL.md` 获得默认搜索词、候选上限和国内/国际配额；若 `data/skills/daily-digest/config.json` 中存在自定义主题，则运行时覆盖默认搜索词
 2. 启动 Playwright chromium（headless）
 3. 依次导航各关键词的百度新闻搜索页，用 Playwright locator 提取所有链接（零 LLM 调用），并为链接打上国内/国际查询提示
 4. 跨关键词去重后，按国内 / 国际各调用一次 `ctx.agent.llm.complete()`，筛选为结构化 JSON（`DigestArticle[]`，含 `category`）
@@ -204,6 +205,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 - `new ConfigStorage<IMConfig>("./data/im-config.json")` — IM 凭证
 - `new ConfigStorage<LLMConfig>("./data/llm-config.json")` — LLM 配置
 - `new ConfigStorage<AgentMetaConfig>("./data/agent-config.json")` — Agent 名称和系统提示词
+- `new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json")` — DailyDigest 搜索主题
 - `new ConfigStorage<CronJobConfig[]>("./data/cron-config.json", [])` — Cron 任务配置
 
 ConversationStorage 负责短期 session 历史；MemoryStorage 负责长期共享记忆。三个配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。
@@ -246,6 +248,7 @@ defineTool({
 | `/api/im-config` | GET/POST | 飞书等 IM 凭证（读写 `data/im-config.json`） |
 | `/api/config/llm` | GET/POST | LLM 配置（读写 `data/llm-config.json`） |
 | `/api/config/agent` | GET/POST | Agent 配置（读写 `data/agent-config.json`） |
+| `/api/config/daily-digest` | GET/POST | DailyDigest 搜索主题（读写 `data/skills/daily-digest/config.json`） |
 | `/api/cron` | GET/POST/DELETE | Cron 任务 CRUD |
 | `/api/im-log` | GET | IM 事件日志（query: `since=`） |
 | `*` | GET | 静态文件或 SPA fallback |
@@ -293,7 +296,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起 |
 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志 |
 | 状态 | `#status` | `StatusView` | IM 连接状态、Cron 任务列表、IM 日志 |
-| 设置 | `#settings` | `SettingsView` | Agent 配置 / LLM 配置 / 飞书 IM 配置 / Cron 管理 |
+| 设置 | `#settings` | `SettingsView` | Agent 配置 / DailyDigest 搜索主题 / LLM 配置 / 飞书 IM 配置 / Cron 管理 |
 
 URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读 `window.location.hash`，切换 tab 更新 hash，监听 `hashchange` 支持浏览器前进/后退。
 

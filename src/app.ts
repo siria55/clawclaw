@@ -30,10 +30,10 @@ import { ConfigStorage } from "./config/storage.js";
 import { createMemoryTools } from "./tools/memory.js";
 import { createReadFileTool } from "./tools/read-file.js";
 import { SkillRegistry } from "./skills/registry.js";
-import { DailyDigestSkill } from "./skills/daily-digest/index.js";
+import { DEFAULT_DAILY_DIGEST_QUERIES, DailyDigestSkill } from "./skills/daily-digest/index.js";
 import type { Message } from "./llm/types.js";
 import type { CronJobConfig } from "./cron/types.js";
-import type { IMConfig, LLMConfig, AgentMetaConfig } from "./config/types.js";
+import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig } from "./config/types.js";
 
 // ── 存储 ──────────────────────────────────────────────────────────────────────
 
@@ -41,6 +41,7 @@ mkdirSync("./data/agent", { recursive: true });
 mkdirSync("./data/im", { recursive: true });
 mkdirSync("./data/cron", { recursive: true });
 mkdirSync("./data/skills", { recursive: true });
+mkdirSync("./data/skills/daily-digest", { recursive: true });
 
 const memoryStorage = new MemoryStorage("./data/agent/memory.json");
 const imEventStorage = new IMEventStorage(200, "./data/im/im-events.json");
@@ -48,6 +49,9 @@ const conversationStorage = new ConversationStorage("./data/im/conversations.jso
 const imConfigStorage = new ConfigStorage<IMConfig>("./data/im/im-config.json");
 const llmConfigStorage = new ConfigStorage<LLMConfig>("./data/agent/llm-config.json");
 const agentConfigStorage = new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json");
+const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json", {
+  queries: DEFAULT_DAILY_DIGEST_QUERIES,
+});
 const cronStorage = new ConfigStorage<CronJobConfig[]>("./data/cron/cron-config.json", []);
 
 const DEFAULT_SYSTEM = "你是一个高效的 AI 助手，可以搜索和保存新闻、管理长期记忆。";
@@ -128,7 +132,7 @@ if (feishu) clawServer.setRoute("/feishu", { platform: feishu, agent });
 // ── SkillRegistry ─────────────────────────────────────────────────────────────
 
 const skillRegistry = new SkillRegistry();
-skillRegistry.register(new DailyDigestSkill());
+skillRegistry.register(new DailyDigestSkill({ configStorage: dailyDigestConfigStorage }));
 
 // ── CronScheduler（定时任务）─────────────────────────────────────────────────
 
@@ -154,6 +158,7 @@ const webServer = new WebServer({
   imEventStorage,
   conversationStorage,
   agentConfigStorage,
+  dailyDigestConfigStorage,
   onIMConfig: (config: IMConfig) => {
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
       ? new FeishuPlatform(config.feishu)

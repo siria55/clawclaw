@@ -146,10 +146,12 @@ Agent 指令...
 
 HTML 结构由 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 提供，视觉样式由 `src/skills/daily-digest/layout.css` 提供；Skill 运行时读取这些模板并填入文本内容，保证模板、截图和导出 HTML 使用同一套版式。
 PNG 截图使用 `1080px` 版心和 `4x` 高清输出，适合在 IM 里预览和放大查看。
+搜索主题可在 WebUI 设置页调整，服务端持久化到 `data/skills/daily-digest/config.json`，下一次运行 `daily-digest` 时自动生效。
 
 **数据目录：**
 ```
 data/skills/{skillId}/
+├── config.json        ← Skill 运行时配置（如搜索主题）
 ├── YYYY-MM-DD.html
 ├── YYYY-MM-DD.md
 ├── YYYY-MM-DD.png
@@ -176,6 +178,7 @@ data/skills/{skillId}/
 | `GET/POST /api/im-config` | 飞书等 IM 凭证 |
 | `GET/POST /api/config/llm` | LLM 配置 |
 | `GET/POST /api/config/agent` | Agent 配置 |
+| `GET/POST /api/config/daily-digest` | DailyDigest 搜索主题配置 |
 | `GET/POST /api/cron` | Cron 任务管理 |
 
 所有 POST 配置接口均支持热更新，保存后立即生效，无需重启。

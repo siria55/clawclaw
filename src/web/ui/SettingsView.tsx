@@ -16,6 +16,10 @@ interface FeishuFields {
   chatId: string;
 }
 
+interface DailyDigestFields {
+  queries: string;
+}
+
 /** Full-page settings view. All config is saved server-side. */
 export function SettingsView(): React.JSX.Element {
   return (
@@ -23,6 +27,7 @@ export function SettingsView(): React.JSX.Element {
       <div className={styles.inner}>
         <h2 className={styles.title}>设置</h2>
         <AgentSection />
+        <DailyDigestSection />
         <LLMSection />
         <FeishuSection />
       </div>
@@ -123,6 +128,79 @@ function AgentSection(): React.JSX.Element {
       <div className={styles.saveRow}>
         <button className={styles.saveBtn} onClick={save} disabled={saving}>
           {saving ? "保存中…" : "保存 Agent 配置"}
+        </button>
+        {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
+      </div>
+    </div>
+  );
+}
+
+/** DailyDigest skill config — browser search topics, saved to data/skills/daily-digest/config.json. */
+function DailyDigestSection(): React.JSX.Element {
+  const [fields, setFields] = useState<DailyDigestFields>({ queries: "" });
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/config/daily-digest")
+      .then((r) => r.json() as Promise<{ queries?: string[] }>)
+      .then((data) => {
+        setFields({
+          queries: data.queries?.join("\n") ?? "",
+        });
+      })
+      .catch(() => { /* server may not have config yet */ });
+  }, []);
+
+  const save = (): void => {
+    setSaving(true);
+    fetch("/api/config/daily-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        queries: fields.queries.split("\n").map((query) => query.trim()).filter(Boolean),
+      }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        setStatus({ type: "ok", msg: "已保存，下一次运行 daily-digest 即生效" });
+      })
+      .catch((e: unknown) => {
+        setStatus({ type: "err", msg: e instanceof Error ? e.message : String(e) });
+      })
+      .finally(() => {
+        setSaving(false);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setStatus(null), 4000);
+      });
+  };
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionTitle}>DailyDigest</div>
+      <div className={styles.sectionHint}>
+        配置保存在服务端 `data/skills/daily-digest/config.json`，保存后无需重启，下一次运行 skill 即生效。<br />
+        每行一个搜索主题，建议同时包含国内和国际主题。
+      </div>
+      <div className={styles.fields}>
+        <div className={styles.field}>
+          <label className={styles.fieldLabel}>搜索主题（每行一个）</label>
+          <textarea
+            className={styles.fieldInput}
+            placeholder={"国内AI科技\n中国创业投资\n中国互联网平台\n美国OpenAI\n美国英伟达AI"}
+            value={fields.queries}
+            onChange={(e) => setFields({ queries: e.target.value })}
+            rows={8}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <span className={styles.fieldHint}>skill 会按这些主题逐个搜索，再做国内 / 国际分类筛选。</span>
+        </div>
+      </div>
+      <div className={styles.saveRow}>
+        <button className={styles.saveBtn} onClick={save} disabled={saving}>
+          {saving ? "保存中…" : "保存 DailyDigest 配置"}
         </button>
         {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
       </div>

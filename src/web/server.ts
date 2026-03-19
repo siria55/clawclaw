@@ -14,7 +14,7 @@ import { buildIMRunContext, persistIMRunContext } from "../im/context.js";
 import type { CronJobConfig } from "../cron/types.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
-import type { IMConfig, LLMConfig, AgentMetaConfig } from "../config/types.js";
+import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig } from "../config/types.js";
 import type { SkillRegistry } from "../skills/registry.js";
 import type { SkillResult } from "../skills/types.js";
 import { findLatestSkillPng } from "../skills/loader.js";
@@ -79,6 +79,8 @@ export interface WebServerConfig {
   agentConfigStorage?: ConfigStorage<AgentMetaConfig>;
   /** Called after POST /api/config/agent to hot-reload agent name/system prompt. */
   onAgentConfig?: (config: AgentMetaConfig) => void;
+  /** DailyDigest runtime config storage for GET/POST /api/config/daily-digest. */
+  dailyDigestConfigStorage?: ConfigStorage<DailyDigestConfig>;
   /** Optional storage for recording incoming IM events (used by GET /api/im-log). */
   imEventStorage?: IMEventStorage;
   /** Optional storage for per-session conversation history (multi-turn memory). */
@@ -114,7 +116,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "skillDataRoot" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "skillRegistry" | "onRunSkill">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "skillDataRoot" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "dailyDigestConfigStorage" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "skillRegistry" | "onRunSkill">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     skillDataRoot: string | undefined;
@@ -125,6 +127,7 @@ export class WebServer {
     onLLMConfig: ((config: LLMConfig) => void) | undefined;
     agentConfigStorage: ConfigStorage<AgentMetaConfig> | undefined;
     onAgentConfig: ((config: AgentMetaConfig) => void) | undefined;
+    dailyDigestConfigStorage: ConfigStorage<DailyDigestConfig> | undefined;
     imEventStorage: IMEventStorage | undefined;
     conversationStorage: ConversationStorage | undefined;
     cronStorage: ConfigStorage<CronJobConfig[]> | undefined;
@@ -150,6 +153,7 @@ export class WebServer {
       onLLMConfig: undefined,
       agentConfigStorage: undefined,
       onAgentConfig: undefined,
+      dailyDigestConfigStorage: undefined,
       imEventStorage: undefined,
       conversationStorage: undefined,
       cronStorage: undefined,
@@ -284,6 +288,16 @@ export class WebServer {
 
     if (req.method === "POST" && path === "/api/config/agent") {
       await this.#handlePostAgentConfig(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/config/daily-digest") {
+      this.#handleGetDailyDigestConfig(res);
+      return;
+    }
+
+    if (req.method === "POST" && path === "/api/config/daily-digest") {
+      await this.#handlePostDailyDigestConfig(req, res);
       return;
     }
 
@@ -559,6 +573,37 @@ export class WebServer {
     };
     this.#config.agentConfigStorage.write(merged);
     this.#config.onAgentConfig?.(merged);
+
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify({ ok: true }));
+  }
+
+  #handleGetDailyDigestConfig(res: ServerResponse): void {
+    const storage = this.#config.dailyDigestConfigStorage;
+    const defaults = storage?.defaultValue ?? {};
+    const config = storage ? mergeDailyDigestConfig(defaults, storage.read()) : defaults;
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify(config));
+  }
+
+  async #handlePostDailyDigestConfig(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readBody(req);
+    let incoming: DailyDigestConfig;
+    try {
+      incoming = JSON.parse(body) as DailyDigestConfig;
+    } catch {
+      res.writeHead(400).end("Invalid JSON");
+      return;
+    }
+
+    const storage = this.#config.dailyDigestConfigStorage;
+    if (!storage) {
+      res.writeHead(503).end("DailyDigest config storage not configured");
+      return;
+    }
+
+    const merged = mergeDailyDigestConfig(storage.defaultValue, { ...storage.read(), ...incoming });
+    storage.write(merged);
 
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ ok: true }));
@@ -869,4 +914,32 @@ function mergeIMConfig(existing: IMConfig, incoming: IMConfig): IMConfig {
     };
   }
   return result;
+}
+
+function mergeDailyDigestConfig(
+  defaults: DailyDigestConfig,
+  incoming: DailyDigestConfig,
+): DailyDigestConfig {
+  const baseQueries = normalizeStringList(defaults.queries);
+  const incomingQueries = incoming.queries !== undefined
+    ? normalizeStringList(incoming.queries)
+    : undefined;
+  const queries = incomingQueries !== undefined
+    ? (incomingQueries.length > 0 ? incomingQueries : baseQueries)
+    : normalizeStringList(incoming.queries ?? defaults.queries);
+  return {
+    ...(queries.length > 0 && { queries }),
+  };
+}
+
+function normalizeStringList(values: string[] | undefined): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values ?? []) {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+  return normalized;
 }

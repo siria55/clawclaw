@@ -29,3 +29,9 @@ export interface AgentMetaConfig {
   /** Paths the agent is allowed to read via read_file tool (default: ["./data/skills"]). */
   allowedPaths?: string[];
 }
+
+/** DailyDigest skill runtime settings configurable from WebUI. */
+export interface DailyDigestConfig {
+  /** Search topics used by the skill. One query per search request. */
+  queries?: string[];
+}

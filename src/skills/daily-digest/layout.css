@@ -348,7 +348,7 @@ body {
 
 .item {
   display: grid;
-  grid-template-columns: 66px 1fr;
+  grid-template-columns: 74px 1fr;
   gap: 20px;
   align-items: start;
   padding: 22px 24px;
@@ -369,13 +369,13 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
   background: linear-gradient(135deg, rgba(122, 143, 216, 0.24), rgba(229, 222, 250, 0.8));
   color: var(--ink-strong);
   font-family: "Inter", "Avenir Next", sans-serif;
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 800;
   letter-spacing: 0.08em;
 }

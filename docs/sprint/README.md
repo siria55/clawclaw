@@ -126,6 +126,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 43 — DailyDigest 改为国内 / 国际分栏模板
 `DailyDigestSkill` 抽取结果新增 `category`，按国内 10 / 国际 5 的配额裁成 15 篇，并把渲染层拆为 `template.html` / `section.html` / `item.html` + `layout.css` 模板体系，`index.ts` 只填内容不再硬编码整页 HTML。真实重跑后当天日报已按国内 / 国际分栏输出。
 
+### Sprint 44 — DailyDigest 主题支持 WebUI 配置
+`DailyDigestSkill` 新增运行时配置：WebUI 设置页可直接修改搜索主题，服务端写入 `data/skills/daily-digest/config.json`，skill 下次运行自动读取覆盖 `SKILL.md` 默认主题。同时放大 HTML 日报中的编号数字，提高视觉层级。
+
 ### Sprint 37 — 清理 src/news/ 死代码目录
 Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
 

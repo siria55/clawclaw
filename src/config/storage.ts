@@ -17,6 +17,11 @@ export class ConfigStorage<T extends object> {
     this.#default = defaultValue;
   }
 
+  /** Default value returned when the file does not exist or is invalid. */
+  get defaultValue(): T {
+    return this.#default;
+  }
+
   /** Read current config from disk. Returns defaultValue if file doesn't exist or is invalid. */
   read(): T {
     if (!existsSync(this.#filePath)) return this.#default;
