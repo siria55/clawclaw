@@ -152,7 +152,7 @@ describe("renderDailyDigestHtml", () => {
     expect(html).toContain("<style>");
     expect(html).toContain(".news-section");
     expect(html).toContain("2026.03.19");
-    expect(html).toContain("AI x 教育");
+    expect(html).toContain("AI x 教育日报");
     expect(html).not.toContain("科技新闻");
     expect(html).toContain("真正重要的，不是更快，而是更准。");
     expect(html).toContain("国内主线");

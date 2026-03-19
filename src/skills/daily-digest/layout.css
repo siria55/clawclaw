@@ -178,13 +178,11 @@ body {
 
 .headline {
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  font-size: 128px;
-  line-height: 0.94;
-  letter-spacing: -0.065em;
+  font-size: 102px;
+  line-height: 1;
+  letter-spacing: -0.05em;
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .deck {
