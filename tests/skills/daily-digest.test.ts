@@ -90,6 +90,24 @@ describe("selectDigestArticles", () => {
     expect(selection.domestic.every((article) => article.category === "domestic")).toBe(true);
     expect(selection.international.every((article) => article.category === "international")).toBe(true);
   });
+
+  it("excludes blocked Tonghuashun articles from the final selection", () => {
+    const selection = selectDigestArticles([
+      createArticle("blocked", "domestic", {
+        url: "https://news.10jqka.com.cn/20260319/c675392020.shtml",
+        source: "同花顺",
+      }),
+      createArticle("safe", "domestic"),
+      createArticle("intl", "international"),
+    ], {
+      domestic: 2,
+      international: 1,
+    });
+
+    expect(selection.domestic).toHaveLength(1);
+    expect(selection.domestic[0]?.title).toBe("safe");
+    expect(selection.all.some((article) => article.url.includes("10jqka.com.cn"))).toBe(false);
+  });
 });
 
 describe("resolveDailyDigestQueries", () => {
@@ -134,6 +152,8 @@ describe("renderDailyDigestHtml", () => {
     expect(html).toContain("<style>");
     expect(html).toContain(".news-section");
     expect(html).toContain("2026.03.19");
+    expect(html).toContain("AI x 教育");
+    expect(html).not.toContain("科技新闻");
     expect(html).toContain("真正重要的，不是更快，而是更准。");
     expect(html).toContain("国内主线");
     expect(html).toContain("国内科技");
@@ -145,6 +165,8 @@ describe("renderDailyDigestHtml", () => {
     expect(html).not.toContain("Browser-searched");
     expect(html).not.toContain("LOCAL SIGNAL");
     expect(html).not.toContain("GLOBAL SIGNAL");
+    expect(html).not.toContain("backdrop-filter");
+    expect(html).not.toContain("filter: blur(");
     expect(html).not.toContain("{{");
   });
 });
@@ -159,12 +181,17 @@ describe("DAILY_DIGEST_SCREENSHOT", () => {
   });
 });
 
-function createArticle(seed: string, category: DigestArticle["category"]): DigestArticle {
+function createArticle(
+  seed: string,
+  category: DigestArticle["category"],
+  overrides: Partial<DigestArticle> = {},
+): DigestArticle {
   return {
     title: seed,
     url: `https://example.com/${seed}`,
     summary: `${seed} summary`,
     source: `${seed} source`,
     category,
+    ...overrides,
   };
 }

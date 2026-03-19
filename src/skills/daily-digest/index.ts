@@ -94,6 +94,13 @@ const LOW_PRIORITY_HOSTS = new Set([
   "mbd.baidu.com",
 ]);
 
+const BLOCKED_ARTICLE_HOSTS = new Set([
+  "10jqka.com.cn",
+  "news.10jqka.com.cn",
+  "stock.10jqka.com.cn",
+  "t.10jqka.com.cn",
+]);
+
 const DAILY_DECK_LINES = [
   "先看事实，再下判断。",
   "把噪音滤掉，趋势才会显形。",
@@ -218,7 +225,7 @@ function renderMarkdown(selection: DailyDigestSelection, date: string): string {
   const internationalRows = renderMarkdownSection(selection.international);
   const summary = buildSummaryText(selection);
   return [
-    "# 每日新闻日报",
+    "# AI x 教育日报",
     "",
     `**${date}**`,
     "",
@@ -343,7 +350,7 @@ export function selectDigestArticles(
   articles: DigestArticle[],
   quota: DigestQuota,
 ): DailyDigestSelection {
-  const ranked = rankArticles(articles);
+  const ranked = rankArticles(articles.filter((article) => !isBlockedArticle(article)));
   const domestic = pickArticlesByCategory(ranked, "domestic", quota.domestic);
   const used = new Set(domestic.map((article) => canonicalizeUrl(article.url)));
   const international = ranked
@@ -666,6 +673,16 @@ function rankArticles(articles: DigestArticle[]): DigestArticle[] {
     .map((article, index) => ({ article, index, score: scoreArticle(article) }))
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .map((entry) => entry.article);
+}
+
+function isBlockedArticle(article: DigestArticle): boolean {
+  if (article.source.includes("同花顺")) return true;
+  try {
+    const hostname = new URL(article.url).hostname.toLowerCase();
+    return hostname === "10jqka.com.cn" || hostname.endsWith(".10jqka.com.cn") || BLOCKED_ARTICLE_HOSTS.has(hostname);
+  } catch {
+    return false;
+  }
 }
 
 function scoreArticle(article: DigestArticle): number {

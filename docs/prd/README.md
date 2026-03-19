@@ -168,6 +168,8 @@ Agent 指令...
 HTML 结构由 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 提供，视觉样式由 `src/skills/daily-digest/layout.css` 提供；Skill 运行时读取这些模板并填入文本内容，保证模板、截图和导出 HTML 使用同一套版式。
 PNG 截图使用 `1080px` 版心和 `4x` 高清输出，适合在 IM 里预览和放大查看。
 模板中的“今日摘要”不再展示国内 / 国际 / 总计数量 chips，而是直接输出当日内容概览；新闻列表里的无效英文信号标签也已移除。
+为降低长图在截图和 IM 预览里的断层风险，模板已去掉大面积滤镜叠层，并收紧 section / item 间距。
+同花顺（`10jqka`）来源不会进入 `daily-digest` 最终结果。
 搜索主题可在 WebUI 设置页调整，服务端持久化到 `data/skills/daily-digest/config.json`，下一次运行 `daily-digest` 时自动生效。
 
 **数据目录：**
