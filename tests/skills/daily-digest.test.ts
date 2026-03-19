@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArticlesFromLLMOutput } from "../../src/skills/daily-digest/index.js";
+import { parseArticlesFromLLMOutput, renderDailyDigestHtml } from "../../src/skills/daily-digest/index.js";
 
 describe("parseArticlesFromLLMOutput", () => {
   it("parses anthropic text blocks", () => {
@@ -56,5 +56,20 @@ describe("parseArticlesFromLLMOutput", () => {
 
   it("returns undefined for invalid output", () => {
     expect(parseArticlesFromLLMOutput([{ type: "text", text: "not json" }])).toBeUndefined();
+  });
+});
+
+describe("renderDailyDigestHtml", () => {
+  it("embeds layout.css content and article markup", () => {
+    const html = renderDailyDigestHtml([
+      { title: "A", url: "https://example.com/a", summary: "sa", source: "S1" },
+    ], "2026年3月19日");
+
+    expect(html).toContain("<style>");
+    expect(html).toContain(".page-grid");
+    expect(html).toContain("AI EDUCATION");
+    expect(html).toContain("2026.03.19");
+    expect(html).toContain("OPEN LINK");
+    expect(html).toContain("https://example.com/a");
   });
 });

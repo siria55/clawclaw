@@ -117,6 +117,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 40 — DailyDigestSkill 抽取链路加固
 `DailyDigestSkill` 抽取阶段不再复用聊天 Agent 的 `run()`，改为直接调用 `ctx.agent.llm.complete()` + 专用 `EXTRACTION_SYSTEM`，避免被人设 prompt 干扰。新增 fenced json 提取和 near-JSON 宽松解析兜底，修复“抓到链接但日报为空”的问题；真实重跑后 `2026-03-19.json` 恢复为 12 篇文章。
 
+### Sprint 41 — DailyDigest HTML 改用 layout.css
+`DailyDigestSkill` 的 HTML 样式不再硬编码在 `renderHtml()` 中，改为从 `src/skills/daily-digest/layout.css` 读取并内联。`layout.css` 同步整理为真正可驱动日报结构的样式表，截图宽度切到 1080px，并补渲染测试。
+
 ### Sprint 37 — 清理 src/news/ 死代码目录
 Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
 

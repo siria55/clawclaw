@@ -180,6 +180,8 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 8. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
 9. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
 
+其中 HTML 不再内联硬编码样式，而是运行时读取 `src/skills/daily-digest/layout.css` 注入 `<style>`，这样 `layout.css` 成为截图与导出 HTML 的单一视觉源。
+
 ### 新闻库数据来源
 
 `GET /api/news` 不再依赖 NewsStorage，改为扫描 `data/skills/*/YYYY-MM-DD.json`，合并排序后分页返回。文件名即日期，`savedAt` 由文件名推导。

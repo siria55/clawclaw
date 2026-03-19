@@ -1,0 +1,336 @@
+:root {
+  --page-bg: #f7f8fa;
+  --ink-strong: #2c304f;
+  --ink-body: #4b5563;
+  --ink-muted: #6e6e7a;
+  --line-soft: rgba(149, 161, 218, 0.32);
+  --panel: rgba(255, 255, 255, 0.76);
+  --panel-border: rgba(255, 255, 255, 0.68);
+  --panel-shadow: 0 28px 90px rgba(44, 48, 79, 0.08);
+  --accent-blue: #95a1da;
+  --accent-pink: #f3d2d5;
+  --accent-cyan: #c7ebf6;
+  --accent-lavender: #e3d7f7;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-width: 1080px;
+  background:
+    linear-gradient(90deg, rgba(31, 41, 55, 0.016) 0.09%, rgba(0, 0, 0, 0) 0.09%),
+    linear-gradient(180deg, rgba(31, 41, 55, 0.016) 0.01%, rgba(0, 0, 0, 0) 0.01%),
+    var(--page-bg);
+  color: var(--ink-strong);
+  font-family: "PingFang SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
+}
+
+.page {
+  position: relative;
+  width: 1080px;
+  margin: 0 auto;
+  padding: 80px;
+  overflow: hidden;
+}
+
+.page::before,
+.page::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: 999px;
+  filter: blur(120px);
+  opacity: 0.8;
+}
+
+.page::before {
+  width: 420px;
+  height: 420px;
+  left: -100px;
+  top: 180px;
+  background: var(--accent-cyan);
+}
+
+.page::after {
+  width: 540px;
+  height: 540px;
+  right: -120px;
+  top: 1180px;
+  background: var(--accent-pink);
+}
+
+.orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(130px);
+  pointer-events: none;
+}
+
+.orb-a {
+  width: 420px;
+  height: 420px;
+  right: -90px;
+  top: 260px;
+  background: var(--accent-lavender);
+  opacity: 0.48;
+}
+
+.orb-b {
+  width: 320px;
+  height: 320px;
+  left: -80px;
+  bottom: 120px;
+  background: #fff0d8;
+  opacity: 0.72;
+}
+
+.orb-c {
+  width: 430px;
+  height: 430px;
+  right: 120px;
+  bottom: -60px;
+  background: var(--accent-cyan);
+  opacity: 0.38;
+}
+
+.page-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(44, 48, 79, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(44, 48, 79, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0));
+}
+
+.hero,
+.news-list {
+  position: relative;
+  z-index: 1;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 42px;
+  margin-bottom: 48px;
+}
+
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 32px;
+  padding-bottom: 28px;
+  border-bottom: 2px solid var(--line-soft);
+}
+
+.brand,
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.brand-en,
+.brand-sub,
+.meta-date,
+.meta-vol {
+  font-family: "Inter", "Avenir Next", sans-serif;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.brand-en,
+.meta-date {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+
+.brand-sub,
+.meta-vol {
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--accent-blue);
+}
+
+.meta {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.headline {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+  font-size: 132px;
+  line-height: 0.96;
+  letter-spacing: -0.06em;
+  font-weight: 900;
+  color: var(--ink-strong);
+}
+
+.deck {
+  margin: 0;
+  padding-left: 32px;
+  max-width: 860px;
+  border-left: 6px solid rgba(149, 161, 218, 0.44);
+  font-family: "Baskerville", "Times New Roman", serif;
+  font-size: 32px;
+  line-height: 1.55;
+  font-style: italic;
+  color: var(--ink-muted);
+}
+
+.summary-card {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 42px;
+  padding: 28px 32px 32px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 30px;
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(16px);
+}
+
+.summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 2px solid rgba(149, 161, 218, 0.28);
+}
+
+.summary-title {
+  margin: 0;
+  font-size: 44px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--ink-strong);
+}
+
+.summary-label {
+  font-family: "Inter", "Avenir Next", sans-serif;
+  font-size: 18px;
+  line-height: 1.3;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+}
+
+.summary-text {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.75;
+  font-weight: 500;
+  color: #334155;
+}
+
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  gap: 24px;
+  align-items: start;
+  padding: 28px 30px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 28px;
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(14px);
+}
+
+.num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(149, 161, 218, 0.24), rgba(227, 215, 247, 0.68));
+  color: var(--ink-strong);
+  font-family: "Inter", "Avenir Next", sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.body {
+  min-width: 0;
+}
+
+.title {
+  display: block;
+  margin: 0;
+  color: var(--ink-strong);
+  text-decoration: none;
+  font-size: 36px;
+  line-height: 1.35;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.title:hover {
+  color: #4a5bb8;
+}
+
+.summary {
+  margin: 12px 0 0;
+  color: var(--ink-body);
+  font-size: 22px;
+  line-height: 1.8;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.source {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(149, 161, 218, 0.16);
+  color: #5964a7;
+  font-family: "Inter", "Avenir Next", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.link-mark {
+  color: rgba(89, 100, 167, 0.86);
+  font-family: "Inter", "Avenir Next", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}

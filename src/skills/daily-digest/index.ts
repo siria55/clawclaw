@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { Page, Browser } from "playwright";
 import { chromium } from "playwright";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { loadSkillDef } from "../loader.js";
 import type { Skill, SkillContext, SkillResult } from "../types.js";
 
@@ -27,6 +27,7 @@ interface LinkItem {
 }
 
 const SKILL_DIR = dirname(fileURLToPath(import.meta.url));
+const LAYOUT_CSS = readFileSync(join(SKILL_DIR, "layout.css"), "utf8");
 const EXTRACTION_SYSTEM = [
   "你是一个严谨的新闻链接筛选器。",
   "你的任务是从候选链接中挑出真实新闻文章，并返回严格 JSON。",
@@ -125,7 +126,8 @@ ${linkText}
 }
 
 /** Render articles as a styled HTML news digest page. */
-function renderHtml(articles: RawArticle[], date: string): string {
+export function renderDailyDigestHtml(articles: RawArticle[], date: string): string {
+  const summaryText = buildSummaryText(articles);
   const rows = articles
     .map(
       (a, i) => `
@@ -134,7 +136,10 @@ function renderHtml(articles: RawArticle[], date: string): string {
       <div class="body">
         <a class="title" href="${a.url}">${escapeHtml(a.title)}</a>
         ${a.summary ? `<p class="summary">${escapeHtml(a.summary)}</p>` : ""}
-        <span class="source">${escapeHtml(a.source)}</span>
+        <div class="meta-row">
+          <span class="source">${escapeHtml(a.source)}</span>
+          <span class="link-mark">OPEN LINK</span>
+        </div>
       </div>
     </div>`,
     )
@@ -143,26 +148,42 @@ function renderHtml(articles: RawArticle[], date: string): string {
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "PingFang SC", "Hiragino Sans GB", sans-serif; background: #f5f5f7; padding: 24px; width: 640px; }
-    .header { background: #1a1a2e; color: #fff; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; }
-    .header h1 { font-size: 20px; font-weight: 700; }
-    .header .date { font-size: 13px; color: #aaa; margin-top: 4px; }
-    .item { display: flex; gap: 14px; background: #fff; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; align-items: flex-start; }
-    .num { min-width: 26px; height: 26px; border-radius: 50%; background: #e8f0fe; color: #3a7bd5; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
-    .body { flex: 1; min-width: 0; }
-    .title { font-size: 15px; font-weight: 600; color: #1a1a2e; text-decoration: none; display: block; line-height: 1.5; }
-    .summary { font-size: 13px; color: #666; margin-top: 5px; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .source { display: inline-block; margin-top: 6px; font-size: 11px; color: #888; background: #f0f0f5; padding: 2px 8px; border-radius: 4px; }
-  </style>
+  <style>${LAYOUT_CSS}</style>
 </head>
 <body>
-  <div class="header">
-    <h1>📰 每日新闻日报</h1>
-    <div class="date">${date}</div>
+  <div class="page">
+    <div class="page-grid"></div>
+    <div class="orb orb-a"></div>
+    <div class="orb orb-b"></div>
+    <div class="orb orb-c"></div>
+    <header class="hero">
+      <div class="hero-top">
+        <div class="brand">
+          <div class="brand-en">AI EDUCATION</div>
+          <div class="brand-sub">NEWS BRIEF</div>
+        </div>
+        <div class="meta">
+          <div class="meta-date">${escapeHtml(formatIsoDate(date))}</div>
+          <div class="meta-vol">VOL.${String(Math.max(articles.length, 1)).padStart(2, "0")}</div>
+        </div>
+      </div>
+      <h1 class="headline">
+        <span>科技新闻</span>
+        <span>日报</span>
+      </h1>
+      <p class="deck">Daily digest of AI, venture, and internet signals gathered from browser search and filtered into a readable brief.</p>
+    </header>
+    <section class="summary-card">
+      <div class="summary-header">
+        <h2 class="summary-title">今日摘要</h2>
+        <div class="summary-label">/ SUMMARY</div>
+      </div>
+      <p class="summary-text">${escapeHtml(summaryText)}</p>
+    </section>
+    <section class="news-list">
+      ${rows}
+    </section>
   </div>
-  ${rows}
 </body>
 </html>`;
 }
@@ -183,10 +204,10 @@ function renderMarkdown(articles: RawArticle[], date: string): string {
 async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
   const page = await browser.newPage();
   try {
-    await page.setViewportSize({ width: 640, height: 900 });
+    await page.setViewportSize({ width: 1080, height: 1400 });
     await page.setContent(html, { waitUntil: "networkidle" });
     const height = await page.evaluate(() => (globalThis as unknown as { document: { body: { scrollHeight: number } } }).document.body.scrollHeight);
-    await page.setViewportSize({ width: 640, height: Math.max(900, height + 40) });
+    await page.setViewportSize({ width: 1080, height: Math.max(1400, height + 80) });
     const buffer = await page.screenshot({ fullPage: true });
     return Buffer.from(buffer);
   } finally {
@@ -223,7 +244,7 @@ export class DailyDigestSkill implements Skill {
 
       const dateKey = new Date().toLocaleDateString("sv-SE");
       const dateLabel = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
-      const html = renderHtml(articles, dateLabel);
+      const html = renderDailyDigestHtml(articles, dateLabel);
       const imageBuffer = await screenshotHtml(browser, html);
 
       const dataDirPath = ctx.dataDir ?? "";
@@ -327,4 +348,31 @@ function decodeLooseString(value: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildSummaryText(articles: RawArticle[]): string {
+  if (articles.length === 0) {
+    return "今日检索已完成，但暂未筛出可展示的文章。建议调整关键词或稍后重跑。";
+  }
+  const sources = summarizeSources(articles);
+  return `共筛出 ${articles.length} 篇文章，重点覆盖 AI 科技、创业投资与互联网动态。来源以 ${sources} 为主，以下按筛选后的相关性顺序展开。`;
+}
+
+function summarizeSources(articles: RawArticle[]): string {
+  const counts = new Map<string, number>();
+  for (const article of articles) {
+    counts.set(article.source, (counts.get(article.source) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([source]) => source)
+    .join("、");
+}
+
+function formatIsoDate(date: string): string {
+  const match = date.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
+  if (!match) return date;
+  const [, year, month, day] = match;
+  return `${year}.${month?.padStart(2, "0")}.${day?.padStart(2, "0")}`;
 }

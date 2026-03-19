@@ -140,6 +140,8 @@ Agent 指令...
 6. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
 7. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
 
+HTML 样式由 `src/skills/daily-digest/layout.css` 提供，Skill 运行时读取并内联进输出文件，保证设计稿样式和最终截图使用同一份样式源。
+
 **数据目录：**
 ```
 data/skills/{skillId}/
