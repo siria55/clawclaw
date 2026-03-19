@@ -99,21 +99,20 @@ ${linkText}
 
   const result = await ctx.agent.run(prompt);
   const lastMsg = [...result.messages].reverse().find((m) => m.role === "assistant");
-  const text = typeof lastMsg?.content === "string" ? lastMsg.content : "";
-  const match = text.match(/\[[\s\S]*\]/);
-  if (!match) { log("⚠️ LLM 未返回有效 JSON"); return []; }
-  try {
-    const parsed = JSON.parse(match[0]) as unknown[];
-    const articles = parsed.flatMap((item) => {
-      const r = RawArticleSchema.safeParse(item);
-      return r.success ? [r.data] : [];
-    });
-    log(`✅ 筛选出 ${articles.length} 篇文章`);
-    return articles;
-  } catch {
+  const text = extractText(lastMsg?.content);
+  const jsonText = extractJsonArray(text);
+  if (!jsonText) {
+    log("⚠️ LLM 未返回有效 JSON");
+    if (text) log(`🪵 LLM 原始输出: ${text.slice(0, 200)}`);
+    return [];
+  }
+  const articles = parseArticlesFromLLMOutput(lastMsg?.content);
+  if (!articles) {
     log("⚠️ JSON 解析失败");
     return [];
   }
+  log(`✅ 筛选出 ${articles.length} 篇文章`);
+  return articles;
 }
 
 /** Render articles as a styled HTML news digest page. */
@@ -232,4 +231,44 @@ export class DailyDigestSkill implements Skill {
       await browser.close();
     }
   }
+}
+
+export function parseArticlesFromLLMOutput(content: unknown): RawArticle[] {
+  const text = extractText(content);
+  const jsonText = extractJsonArray(text);
+  if (!jsonText) return [];
+  try {
+    const parsed = JSON.parse(jsonText) as unknown[];
+    return parsed.flatMap((item) => {
+      const result = RawArticleSchema.safeParse(item);
+      return result.success ? [result.data] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function extractJsonArray(text: string): string | undefined {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] ?? text;
+  const start = fenced.indexOf("[");
+  const end = fenced.lastIndexOf("]");
+  if (start === -1 || end === -1 || end < start) return undefined;
+  return fenced.slice(start, end + 1);
+}
+
+function extractText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((block): block is { type: "text"; text: string } => isTextBlock(block))
+    .map((block) => block.text)
+    .join("");
+}
+
+function isTextBlock(value: unknown): value is { type: "text"; text: string } {
+  return typeof value === "object"
+    && value !== null
+    && !Array.isArray(value)
+    && (value as { type?: unknown }).type === "text"
+    && typeof (value as { text?: unknown }).text === "string";
 }
