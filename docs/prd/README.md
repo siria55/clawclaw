@@ -125,7 +125,7 @@ onRunSkill → skill.run(ctx) → SkillResult → 展示日志 + 图片预览
 ---
 id: daily-digest
 description: 浏览器搜索科技新闻，按国内 10 / 国际 5 生成 HTML 日报截图
-queries: 国内AI科技,中国创业投资,中国互联网平台,国际AI科技,海外创业投资,全球互联网动态
+queries: 国内AI科技,中国创业投资,中国互联网平台,美国OpenAI,美国英伟达AI,硅谷创投,海外互联网监管,全球科技公司
 domestic-articles: 10
 international-articles: 5
 max-articles: 15
@@ -137,7 +137,7 @@ Agent 指令...
 **内置 Skill — DailyDigestSkill：**
 1. 启动 Playwright 浏览器，依次搜索多个科技关键词
 2. 直接从搜索结果页提取候选链接并去重，同时为每个链接保留国内/国际查询提示
-3. 调用一次专用 LLM 抽取提示词，将候选链接筛成带 `category` 的结构化文章数组
+3. 按国内 / 国际两路调用专用 LLM 抽取提示词，将候选链接筛成带 `category` 的结构化文章数组
 4. 若 LLM 返回 fenced json 或 near-JSON（如标题引号未转义），解析层会做兜底修复
 5. 依据配额裁成国内 10 篇、国际 5 篇，共 15 篇
 6. 将内容填入 HTML 模板，Playwright 截图为 PNG

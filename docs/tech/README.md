@@ -160,7 +160,7 @@ frontmatter 字段（简化 YAML，无额外依赖）：
 ---
 id: daily-digest
 description: 浏览器搜索科技新闻，按国内 10 / 国际 5 生成 HTML 日报截图
-queries: 国内AI科技,中国创业投资,中国互联网平台,国际AI科技,海外创业投资,全球互联网动态
+queries: 国内AI科技,中国创业投资,中国互联网平台,美国OpenAI,美国英伟达AI,硅谷创投,海外互联网监管,全球科技公司
 domestic-articles: 10
 international-articles: 5
 max-articles: 15
@@ -177,7 +177,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 1. 读取 `SKILL.md` 获得搜索词、候选上限和国内/国际配额
 2. 启动 Playwright chromium（headless）
 3. 依次导航各关键词的百度新闻搜索页，用 Playwright locator 提取所有链接（零 LLM 调用），并为链接打上国内/国际查询提示
-4. 跨关键词去重后，**一次** `ctx.agent.llm.complete()` 调用专用 `EXTRACTION_SYSTEM`，筛选为结构化 JSON（`DigestArticle[]`，含 `category`）
+4. 跨关键词去重后，按国内 / 国际各调用一次 `ctx.agent.llm.complete()`，筛选为结构化 JSON（`DigestArticle[]`，含 `category`）
 5. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
 6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对低质量聚合域名做降权
 7. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML

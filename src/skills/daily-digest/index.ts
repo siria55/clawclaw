@@ -62,6 +62,7 @@ const CATEGORY_LABEL: Record<DigestCategory, string> = {
 };
 
 const QUERY_HINT_PATTERNS: Array<{ pattern: RegExp; category: DigestCategory }> = [
+  { pattern: /openai|google|meta|microsoft|apple|nvidia|amazon|tesla|anthropic|xai/i, category: "international" },
   { pattern: /国际|海外|全球|硅谷|美国|欧洲|日本|韩国|印度/i, category: "international" },
   { pattern: /国内|中国|本土|本地/i, category: "domestic" },
 ];
@@ -125,6 +126,7 @@ async function searchNewsWithBrowser(
   ctx: SkillContext,
   queries: string[],
   maxCandidates: number,
+  quota: DigestQuota,
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   const allLinks: LinkItem[] = [];
@@ -153,49 +155,23 @@ async function searchNewsWithBrowser(
     return [];
   }
 
-  log(`📊 共收集 ${uniqueLinks.length} 个链接，调用 LLM 筛选…`);
-  const linkText = uniqueLinks
-    .slice(0, 260)
-    .map((link) => `[${CATEGORY_LABEL[link.hintCategory]}] ${link.text} | ${link.href}`)
-    .join("\n");
+  const domesticLinks = uniqueLinks.filter((link) => link.hintCategory === "domestic");
+  const internationalLinks = uniqueLinks.filter((link) => link.hintCategory === "international");
 
-  const prompt = `以下是从新闻搜索页面提取的链接列表（格式：[分类提示] 标题 | URL）：
+  const domesticArticles = await extractArticlesFromLinks(
+    ctx,
+    domesticLinks,
+    "domestic",
+    getExtractionLimit("domestic", quota, maxCandidates),
+  );
+  const internationalArticles = await extractArticlesFromLinks(
+    ctx,
+    internationalLinks,
+    "international",
+    getExtractionLimit("international", quota, maxCandidates),
+  );
 
-${linkText}
-
-请从中识别并筛选出真实的科技新闻文章，满足这些要求：
-- 只保留新闻正文页，不要搜索结果、专题页、导航链接、下载页、广告页
-- 尽量覆盖不同主题，避免同题反复
-- 优先原创媒体、主流媒体、公司官网和权威发布
-- category 必须是 domestic 或 international
-- domestic：事件主体和主要影响市场以中国为主
-- international：事件主体和主要影响市场以海外或全球为主
-- 参考每行前面的分类提示，但最终以新闻主体本身判断
-- summary 尽量用一句中文短句概括；如果从标题无法可靠概括，可留空字符串
-
-最多返回 ${maxCandidates} 篇，按质量、相关性和时效性排序。
-
-只返回 JSON 数组，不要其他文字：
-[{"title":"文章标题","url":"文章完整URL","summary":"一句话摘要","source":"来源媒体","category":"domestic"}]`;
-
-  const response = await ctx.agent.llm.complete({
-    system: EXTRACTION_SYSTEM,
-    messages: [{ role: "user", content: prompt }],
-  });
-  const text = extractText(response.message.content);
-  const jsonText = extractJsonArray(text);
-  if (!jsonText) {
-    log("⚠️ LLM 未返回有效 JSON");
-    if (text) log(`🪵 LLM 原始输出: ${text.slice(0, 200)}`);
-    return [];
-  }
-
-  const articles = parseArticlesFromLLMOutput(response.message.content, buildLinkHintMap(uniqueLinks));
-  if (!articles) {
-    log("⚠️ JSON 解析失败");
-    log(`🪵 LLM 原始输出: ${text.slice(0, 200)}`);
-    return [];
-  }
+  const articles = dedupeArticles([...domesticArticles, ...internationalArticles]);
 
   const domesticCount = articles.filter((article) => article.category === "domestic").length;
   const internationalCount = articles.length - domesticCount;
@@ -291,7 +267,7 @@ export class DailyDigestSkill implements Skill {
   async run(ctx: SkillContext): Promise<SkillResult> {
     const browser = await chromium.launch({ headless: true });
     try {
-      const articles = await searchNewsWithBrowser(browser, ctx, this.#queries, this.#maxCandidates);
+      const articles = await searchNewsWithBrowser(browser, ctx, this.#queries, this.#maxCandidates, this.#quota);
       const selection = selectDigestArticles(articles, this.#quota);
       ctx.log?.(`📊 最终入选 ${selection.all.length} 篇文章（国内 ${selection.domestic.length} / 国际 ${selection.international.length}）`);
       if (selection.domestic.length < this.#quota.domestic || selection.international.length < this.#quota.international) {
@@ -358,6 +334,62 @@ function classifyQuery(query: string): DigestCategory {
   return match?.category ?? "domestic";
 }
 
+async function extractArticlesFromLinks(
+  ctx: SkillContext,
+  links: LinkItem[],
+  category: DigestCategory,
+  maxCandidates: number,
+): Promise<DigestArticle[]> {
+  const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
+  if (links.length === 0) {
+    log(`⚠️ ${CATEGORY_LABEL[category]}候选为空`);
+    return [];
+  }
+
+  log(`📊 ${CATEGORY_LABEL[category]}候选 ${links.length} 个链接，调用 LLM 筛选…`);
+  const linkText = links
+    .slice(0, 180)
+    .map((link) => `${link.text} | ${link.href}`)
+    .join("\n");
+
+  const prompt = `以下是${CATEGORY_LABEL[category]}科技新闻候选链接列表（格式：标题 | URL）：
+
+${linkText}
+
+请只筛选出真正属于${CATEGORY_LABEL[category]}科技、创投或互联网动态的新闻正文页，满足这些要求：
+- 只保留新闻正文页，不要搜索结果、专题页、导航链接、下载页、广告页
+- 优先原创媒体、主流媒体、公司官网和权威发布
+- 尽量覆盖不同主题，避免同题反复
+- summary 尽量用一句中文短句概括；如果从标题无法可靠概括，可留空字符串
+- category 固定返回 ${category}
+
+最多返回 ${maxCandidates} 篇，按质量、相关性和时效性排序。
+
+只返回 JSON 数组，不要其他文字：
+[{"title":"文章标题","url":"文章完整URL","summary":"一句话摘要","source":"来源媒体","category":"${category}"}]`;
+
+  const response = await ctx.agent.llm.complete({
+    system: EXTRACTION_SYSTEM,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const text = extractText(response.message.content);
+  const jsonText = extractJsonArray(text);
+  if (!jsonText) {
+    log(`⚠️ ${CATEGORY_LABEL[category]} LLM 未返回有效 JSON`);
+    if (text) log(`🪵 ${CATEGORY_LABEL[category]} LLM 原始输出: ${text.slice(0, 200)}`);
+    return [];
+  }
+
+  const parsed = parseArticlesFromLLMOutput(response.message.content, buildLinkHintMap(links));
+  if (!parsed) {
+    log(`⚠️ ${CATEGORY_LABEL[category]} JSON 解析失败`);
+    log(`🪵 ${CATEGORY_LABEL[category]} LLM 原始输出: ${text.slice(0, 200)}`);
+    return [];
+  }
+
+  return parsed.map((article) => ({ ...article, category }));
+}
+
 function dedupeLinks(links: LinkItem[]): LinkItem[] {
   const byUrl = new Map<string, LinkItem>();
   for (const link of links) {
@@ -382,6 +414,18 @@ function buildLinkHintMap(links: LinkItem[]): ReadonlyMap<string, DigestCategory
     hints.set(canonicalizeUrl(link.href), link.hintCategory);
   }
   return hints;
+}
+
+function getExtractionLimit(
+  category: DigestCategory,
+  quota: DigestQuota,
+  maxCandidates: number,
+): number {
+  const target = category === "domestic" ? quota.domestic : quota.international;
+  const suggested = category === "domestic"
+    ? Math.max(target * 2, target + 4)
+    : Math.max(target * 3, target + 6);
+  return Math.min(maxCandidates, suggested);
 }
 
 function parseArticleDrafts(text: string): ArticleDraft[] | undefined {
