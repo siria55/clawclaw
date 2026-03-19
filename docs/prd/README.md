@@ -92,6 +92,8 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 | `memory_save` | 保存长期记忆（文本 + 标签） |
 | `memory_search` | 关键词检索记忆库，返回摘要列表 |
 | `memory_get` | 按 id 取回完整记忆内容 |
+| `feishu_department_info` | 读取飞书部门信息，返回部门 ID、上级部门、部门人数等 |
+| `feishu_department_users` | 读取飞书部门直属成员列表 |
 | `read_file` | 读取 allowedPaths 白名单内的文件（供 Agent 查阅 Skill 输出） |
 
 ### CronScheduler
@@ -169,6 +171,14 @@ Agent 可挂载一组飞书文档来源（名称 + URL），由服务端使用 P
 - 文档配置保存在 `data/agent/feishu-docs/config.json`
 - 已同步正文保存在 `data/agent/feishu-docs/{docId}.json`
 - 命中文档时，Agent 优先依据文档内容回答；文档未覆盖的细节需明确说明
+
+### 飞书组织读取
+
+当飞书应用已开通通讯录 / 部门读取权限时，Agent 可直接调用飞书工具查询组织信息，覆盖 Web 对话与 IM 对话两种入口。
+
+- 典型问题：部门人数、直属成员、部门 ID、上级部门
+- 运行方式：Agent 在需要时主动调用 `feishu_department_info` / `feishu_department_users`
+- 权限前提：飞书应用需具备 Contact v3 相关读取权限；未开通时工具会返回明确报错，不会让 Agent 猜测组织数据
 
 ### WebServer
 

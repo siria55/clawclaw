@@ -135,6 +135,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 46 — Agent 挂载飞书文档资料
 新增 `MountedDocLibrary`，支持在设置页挂载飞书文档 URL、用 Playwright 同步正文到 `data/agent/feishu-docs/`，并在 `getContext` 里按用户问题检索命中文档片段，驱动 Agent 做更特异化的回答。
 
+### Sprint 47 — Agent 读取飞书通讯录权限数据
+`FeishuPlatform` 新增 Contact v3 读取能力，Agent 可通过 `feishu_department_info` / `feishu_department_users` 查询部门人数、直属成员等组织信息；Web 对话与 IM 对话共用同一套工具和权限模型。
+
 ### Sprint 37 — 清理 src/news/ 死代码目录
 Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
 

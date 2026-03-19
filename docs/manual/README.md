@@ -149,6 +149,7 @@ pnpm start
 **飞书 IM 配置**（保存在 `data/im-config.json`）：
 - App ID / App Secret / Verification Token / Encrypt Key / Chat ID
 - 保存后立即生效，无需重启
+- 若希望 Agent 能读取部门人数、直属成员等组织信息，还需在飞书开放平台为该应用开通通讯录 / 部门读取权限
 
 **飞书会话规则**：
 - 长期记忆仍共用同一个记忆库
@@ -214,10 +215,20 @@ Agent 是框架的核心单元，负责 LLM 调用与工具执行的编排。
 | `memory_save` | 保存文本记忆，支持标签分类 |
 | `memory_search` | 关键词检索，返回 id + 摘要列表 |
 | `memory_get` | 按 id 取回完整记忆内容 |
+| `feishu_department_info` | 查询飞书部门信息，可回答部门人数、上级部门、部门 ID |
+| `feishu_department_users` | 查询飞书部门直属成员列表 |
 
 ### 文件读取工具
 
 通过 `createReadFileTool(getAllowedPaths)` 创建。Agent 可读取 `allowedPaths` 白名单内的文件，默认允许 `./data/skills` 和 `./data/agent/feishu-docs`，方便 Agent 查阅 Skill 输出和已同步的挂载文档缓存。
+
+### 飞书组织工具
+
+通过 `createFeishuOrgTools(getFeishu)` 创建。工具执行时会读取当前运行中的飞书配置，因此 Web 对话和 IM 对话都能使用同一套通讯录查询能力。
+
+- `feishu_department_info`：输入部门名称关键词或 `open_department_id`，返回部门名称、上级部门、部门人数等信息
+- `feishu_department_users`：输入部门名称关键词或 `open_department_id`，返回直属成员列表，可用 `limit` 控制返回人数
+- 若飞书未配置，或应用未开通通讯录读取权限，工具会直接返回错误提示，Agent 不会伪造组织数据
 
 ---
 

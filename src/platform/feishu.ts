@@ -14,6 +14,55 @@ interface FeishuConfig {
   encryptKey: string | undefined;
 }
 
+interface FeishuTenantTokenResponse {
+  code?: number;
+  msg?: string;
+  tenant_access_token?: string;
+}
+
+interface FeishuOpenApiResponse<TData> {
+  code: number;
+  msg?: string;
+  data?: TData;
+}
+
+/** Department record returned by Feishu Contact v3 APIs. */
+export interface FeishuDepartment {
+  name: string;
+  open_department_id: string;
+  department_id?: string;
+  parent_department_id?: string;
+  leader_user_id?: string;
+  member_count?: number;
+  primary_member_count?: number;
+  order?: string;
+}
+
+/** Paginated department list returned by Feishu Contact v3 APIs. */
+export interface FeishuDepartmentPage {
+  items: FeishuDepartment[];
+  pageToken?: string;
+  hasMore: boolean;
+}
+
+/** User record returned by Feishu Contact v3 APIs. */
+export interface FeishuDepartmentUser {
+  name: string;
+  open_id?: string;
+  user_id?: string;
+  union_id?: string;
+  email?: string;
+  mobile?: string;
+  employee_no?: string;
+}
+
+/** Paginated department user list returned by Feishu Contact v3 APIs. */
+export interface FeishuDepartmentUserPage {
+  items: FeishuDepartmentUser[];
+  pageToken?: string;
+  hasMore: boolean;
+}
+
 /** Max age of a Feishu request timestamp before it's considered a replay attack. */
 const MAX_TIMESTAMP_AGE_MS = 5 * 60 * 1000;
 
@@ -158,6 +207,91 @@ export class FeishuPlatform implements IMPlatform {
     }
   }
 
+  /** Fetch one department by `open_department_id`. */
+  async getDepartment(departmentId: string): Promise<FeishuDepartment> {
+    const data = await this.#request<{ department?: FeishuDepartment }>(
+      `/contact/v3/departments/${encodeURIComponent(departmentId)}`,
+      {
+        department_id_type: "open_department_id",
+        user_id_type: "open_id",
+      },
+    );
+    if (!data.department) {
+      throw new Error(`Feishu department ${departmentId} not found`);
+    }
+    return data.department;
+  }
+
+  /**
+   * List child departments under one parent department.
+   *
+   * Set `fetchChild` to `true` to traverse all descendant departments.
+   */
+  async listDepartmentChildren(
+    parentDepartmentId: string,
+    options: { fetchChild?: boolean; pageSize?: number; pageToken?: string } = {},
+  ): Promise<FeishuDepartmentPage> {
+    const pageSize = clampPageSize(options.pageSize);
+    const data = await this.#request<{
+      items?: FeishuDepartment[];
+      page_token?: string;
+      has_more?: boolean;
+    }>(
+      "/contact/v3/departments",
+      {
+        parent_department_id: parentDepartmentId,
+        department_id_type: "open_department_id",
+        page_size: String(pageSize),
+        fetch_child: options.fetchChild ? "true" : "false",
+        user_id_type: "open_id",
+        ...(options.pageToken ? { page_token: options.pageToken } : {}),
+      },
+    );
+    return {
+      items: data.items ?? [],
+      hasMore: data.has_more ?? false,
+      ...(data.page_token ? { pageToken: data.page_token } : {}),
+    };
+  }
+
+  /** Search departments by name with a best-effort fuzzy match. */
+  async findDepartmentsByName(keyword: string): Promise<FeishuDepartment[]> {
+    const normalizedKeyword = normalizeSearchTerm(keyword);
+    if (!normalizedKeyword) return [];
+
+    const departments = await this.#listAllDepartments();
+    return departments
+      .filter((department) => scoreDepartmentMatch(department.name, keyword) > 0)
+      .sort((left, right) => scoreDepartmentMatch(right.name, keyword) - scoreDepartmentMatch(left.name, keyword));
+  }
+
+  /** List direct members under one department. */
+  async listDepartmentUsers(
+    departmentId: string,
+    options: { pageSize?: number; pageToken?: string } = {},
+  ): Promise<FeishuDepartmentUserPage> {
+    const pageSize = clampPageSize(options.pageSize);
+    const data = await this.#request<{
+      items?: FeishuDepartmentUser[];
+      page_token?: string;
+      has_more?: boolean;
+    }>(
+      "/contact/v3/users/find_by_department",
+      {
+        department_id: departmentId,
+        department_id_type: "open_department_id",
+        page_size: String(pageSize),
+        user_id_type: "open_id",
+        ...(options.pageToken ? { page_token: options.pageToken } : {}),
+      },
+    );
+    return {
+      items: data.items ?? [],
+      hasMore: data.has_more ?? false,
+      ...(data.page_token ? { pageToken: data.page_token } : {}),
+    };
+  }
+
   async #uploadImageBuffer(token: string, buffer: Buffer): Promise<string> {
     const form = new FormData();
     form.append("image_type", "message");
@@ -256,8 +390,61 @@ export class FeishuPlatform implements IMPlatform {
         }),
       },
     );
-    const data = (await response.json()) as { tenant_access_token: string };
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Feishu access token failed: ${response.status} ${body}`);
+    }
+    const data = (await response.json()) as FeishuTenantTokenResponse;
+    if (data.code !== undefined && data.code !== 0) {
+      throw new Error(`Feishu access token error: ${data.msg ?? "unknown error"}`);
+    }
+    if (!data.tenant_access_token) {
+      throw new Error("Feishu access token missing from response");
+    }
     return data.tenant_access_token;
+  }
+
+  async #listAllDepartments(): Promise<FeishuDepartment[]> {
+    const departments: FeishuDepartment[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const page = await this.listDepartmentChildren("0", {
+        fetchChild: true,
+        pageSize: 50,
+        ...(pageToken ? { pageToken } : {}),
+      });
+      departments.push(...page.items);
+      pageToken = page.hasMore ? page.pageToken : undefined;
+    } while (pageToken);
+
+    return dedupeDepartments(departments);
+  }
+
+  async #request<TData>(path: string, query: Record<string, string | undefined>): Promise<TData> {
+    const token = await this.#getAccessToken();
+    const url = new URL(`https://open.feishu.cn/open-apis${path}`);
+
+    for (const [key, value] of Object.entries(query)) {
+      if (value) url.searchParams.set(key, value);
+    }
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Feishu request failed: ${response.status} ${body}`);
+    }
+
+    const data = (await response.json()) as FeishuOpenApiResponse<TData>;
+    if (data.code !== 0) {
+      throw new Error(`Feishu API error: ${data.msg ?? "unknown error"}`);
+    }
+    if (data.data === undefined) {
+      throw new Error("Feishu API returned empty data");
+    }
+    return data.data;
   }
 }
 
@@ -320,4 +507,40 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function clampPageSize(value: number | undefined): number {
+  if (!value) return 50;
+  return Math.max(1, Math.min(50, Math.trunc(value)));
+}
+
+function normalizeSearchTerm(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function scoreDepartmentMatch(name: string, keyword: string): number {
+  const normalizedName = normalizeSearchTerm(name);
+  const normalizedKeyword = normalizeSearchTerm(keyword);
+  if (!normalizedKeyword) return 0;
+  if (normalizedName === normalizedKeyword) return 3;
+  if (normalizedName.startsWith(normalizedKeyword)) return 2;
+  if (containsCharsInOrder(normalizedName, normalizedKeyword)) return 1;
+  return normalizedName.includes(normalizedKeyword) ? 1 : 0;
+}
+
+function dedupeDepartments(items: FeishuDepartment[]): FeishuDepartment[] {
+  const map = new Map<string, FeishuDepartment>();
+  for (const item of items) {
+    map.set(item.open_department_id, item);
+  }
+  return [...map.values()];
+}
+
+function containsCharsInOrder(text: string, query: string): boolean {
+  let index = 0;
+  for (const char of text) {
+    if (char === query[index]) index++;
+    if (index === query.length) return true;
+  }
+  return false;
 }

@@ -14,6 +14,7 @@ src/index.ts（公共入口）
 │
 ├── tools/
 │   ├── tools/types.ts     ← Tool 接口 / defineTool()
+│   ├── tools/feishu-org.ts← 飞书部门 / 成员读取工具
 │   ├── tools/memory.ts    ← createMemoryTools()
 │   └── tools/read-file.ts ← createReadFileTool()
 │
@@ -104,6 +105,8 @@ getContext?: (messages: Message[]) => Message[] | Promise<Message[]>
 - `[相关记忆]`
 - `[挂载文档资料]`
 
+与此同时，系统提示词会显式要求 Agent 在回答飞书组织问题时优先调用飞书工具，而不是凭空生成部门人数或成员信息。
+
 ---
 
 ## IM 会话模型
@@ -120,6 +123,25 @@ getContext?: (messages: Message[]) => Message[] | Promise<Message[]>
 - 企业微信：暂时仍按 `chatId` 作为 `sessionId`
 
 `ConversationStorage.loadSession(sessionId, continuityId)` 先读取当前 session 历史；若为空，则回看同 `continuityId` 的最近一个 session，把最后一条用户消息和最后一条助手回复压成一条短参考消息。这样新 session 能自然续上，但不会把旧历史整段搬过去。
+
+---
+
+## 飞书通讯录读取
+
+`FeishuPlatform` 现在同时承担 IM 发送和飞书组织读取两类职责，但实现上仍保持分层：
+
+- `#getAccessToken()` 统一获取 tenant access token
+- `#request()` 统一处理 Contact v3 请求、HTTP 错误和 Feishu `code !== 0` 业务错误
+- `getDepartment(openDepartmentId)` 读取单个部门详情
+- `listDepartmentChildren(parentDepartmentId)` 拉取子部门，可选递归拉全树
+- `findDepartmentsByName(keyword)` 基于部门树做本地名称匹配
+- `listDepartmentUsers(openDepartmentId)` 拉取直属成员
+
+Agent 工具层 `createFeishuOrgTools(() => feishu)` 使用闭包读取当前运行时的 `FeishuPlatform` 实例，因此：
+
+- 主应用 `app.ts` 和开发入口 `web/dev.ts` 共用同一套工具定义
+- WebUI 热更新飞书配置后，无需重建 Agent；工具下一次执行时自动读取新实例
+- Web 对话与 IM 对话会得到相同的飞书组织查询能力
 
 ---
 

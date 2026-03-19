@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FeishuPlatform, FeishuChallenge, computeFeishuSignature } from "../../src/platform/feishu.js";
 
 const BASE_CONFIG = {
@@ -26,6 +26,12 @@ function makeMessageEvent(extraMessage: Record<string, unknown> = {}): string {
     },
   });
 }
+
+const originalFetch = global.fetch;
+
+afterEach(() => {
+  global.fetch = originalFetch;
+});
 
 describe("FeishuPlatform.verify()", () => {
   it("passes when no encryptKey configured (token-only mode)", async () => {
@@ -162,3 +168,98 @@ describe("computeFeishuSignature()", () => {
     expect(computeFeishuSignature("ts", "nonce", "key2", "body")).not.toBe(base);
   });
 });
+
+describe("FeishuPlatform org APIs", () => {
+  it("fetches one department by open_department_id", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
+      .mockResolvedValueOnce(jsonResponse({
+        code: 0,
+        data: {
+          department: {
+            name: "研发部",
+            open_department_id: "od_rnd",
+            parent_department_id: "od_root",
+            member_count: 12,
+          },
+        },
+      }));
+    global.fetch = fetchMock as typeof fetch;
+
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    const department = await platform.getDepartment("od_rnd");
+
+    expect(department).toMatchObject({
+      name: "研发部",
+      open_department_id: "od_rnd",
+      member_count: 12,
+    });
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/contact/v3/departments/od_rnd");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("department_id_type=open_department_id");
+  });
+
+  it("lists users under one department", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
+      .mockResolvedValueOnce(jsonResponse({
+        code: 0,
+        data: {
+          items: [
+            { name: "张三", open_id: "ou_1", email: "zhangsan@example.com" },
+            { name: "李四", open_id: "ou_2" },
+          ],
+          has_more: false,
+        },
+      }));
+    global.fetch = fetchMock as typeof fetch;
+
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    const page = await platform.listDepartmentUsers("od_rnd", { pageSize: 2 });
+
+    expect(page.items).toHaveLength(2);
+    expect(page.items[0]).toMatchObject({ name: "张三", open_id: "ou_1" });
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/contact/v3/users/find_by_department");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("department_id=od_rnd");
+  });
+
+  it("finds departments by name across paginated results", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
+      .mockResolvedValueOnce(jsonResponse({
+        code: 0,
+        data: {
+          items: [
+            { name: "销售部", open_department_id: "od_sales" },
+            { name: "研发平台部", open_department_id: "od_platform" },
+          ],
+          has_more: true,
+          page_token: "next-page",
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
+      .mockResolvedValueOnce(jsonResponse({
+        code: 0,
+        data: {
+          items: [
+            { name: "研发部", open_department_id: "od_rnd" },
+          ],
+          has_more: false,
+        },
+      }));
+    global.fetch = fetchMock as typeof fetch;
+
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    const matches = await platform.findDepartmentsByName("研发部");
+
+    expect(matches.map((item) => item.open_department_id)).toEqual(["od_rnd", "od_platform"]);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("parent_department_id=0");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("fetch_child=true");
+  });
+});
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}

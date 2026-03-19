@@ -27,6 +27,7 @@ import { MemoryStorage } from "./memory/storage.js";
 import { IMEventStorage } from "./im/storage.js";
 import { ConversationStorage } from "./im/conversations.js";
 import { ConfigStorage } from "./config/storage.js";
+import { createFeishuOrgTools } from "./tools/feishu-org.js";
 import { createMemoryTools } from "./tools/memory.js";
 import { createReadFileTool } from "./tools/read-file.js";
 import { SkillRegistry } from "./skills/registry.js";
@@ -82,11 +83,14 @@ function buildSystemPrompt(systemPrompt: string | undefined): string {
   return [
     systemPrompt ?? DEFAULT_SYSTEM,
     "若上下文中提供了挂载文档资料，优先依据文档内容回答；文档未覆盖的细节要明确说明，不要编造。",
+    "如需查询飞书部门、部门人数、直属成员等组织信息，优先调用飞书工具，不要凭空猜测。",
     `当前日期：${new Date().toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })}`,
   ].join("\n");
 }
 
 // ── Agent ─────────────────────────────────────────────────────────────────────
+
+let feishu: FeishuPlatform | undefined;
 
 const agent = new Agent({
   name: "clawclaw",
@@ -98,6 +102,7 @@ const agent = new Agent({
 
   tools: [
     ...createMemoryTools(memoryStorage),
+    ...createFeishuOrgTools(() => feishu),
     createReadFileTool(() => agentConfigStorage.read().allowedPaths ?? DEFAULT_ALLOWED_PATHS),
   ],
 
@@ -139,7 +144,7 @@ function buildFeishu(): FeishuPlatform | undefined {
   return undefined;
 }
 
-let feishu = buildFeishu();
+feishu = buildFeishu();
 
 const clawServer = new ClawServer({
   port: Number(process.env["PORT"] ?? 3000),
