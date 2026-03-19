@@ -1,74 +1,145 @@
-import { z } from "zod";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import type { Page, Browser } from "playwright";
-import { chromium } from "playwright";
 import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { Browser, Page } from "playwright";
+import { chromium } from "playwright";
+import { z } from "zod";
 import { loadSkillDef } from "../loader.js";
 import type { Skill, SkillContext, SkillResult } from "../types.js";
 
-interface RawArticle {
+export type DigestCategory = "domestic" | "international";
+
+interface ArticleDraft {
   title: string;
   url: string;
   summary: string;
   source: string;
+  category?: string | undefined;
 }
 
-const RawArticleSchema = z.object({
-  title: z.string(),
-  url: z.string(),
-  summary: z.string(),
-  source: z.string(),
-});
+export interface DigestArticle {
+  title: string;
+  url: string;
+  summary: string;
+  source: string;
+  category: DigestCategory;
+}
+
+export interface DailyDigestSelection {
+  domestic: DigestArticle[];
+  international: DigestArticle[];
+  all: DigestArticle[];
+}
 
 interface LinkItem {
   text: string;
   href: string;
+  hintCategory: DigestCategory;
 }
+
+interface DigestQuota {
+  domestic: number;
+  international: number;
+}
+
+const ArticleDraftSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+  summary: z.string(),
+  source: z.string(),
+  category: z.string().optional(),
+});
 
 const SKILL_DIR = dirname(fileURLToPath(import.meta.url));
 const LAYOUT_CSS = readFileSync(join(SKILL_DIR, "layout.css"), "utf8");
+const PAGE_TEMPLATE = readFileSync(join(SKILL_DIR, "template.html"), "utf8");
+const SECTION_TEMPLATE = readFileSync(join(SKILL_DIR, "section.html"), "utf8");
+const ITEM_TEMPLATE = readFileSync(join(SKILL_DIR, "item.html"), "utf8");
+
+const CATEGORY_LABEL: Record<DigestCategory, string> = {
+  domestic: "国内",
+  international: "国际",
+};
+
+const QUERY_HINT_PATTERNS: Array<{ pattern: RegExp; category: DigestCategory }> = [
+  { pattern: /国际|海外|全球|硅谷|美国|欧洲|日本|韩国|印度/i, category: "international" },
+  { pattern: /国内|中国|本土|本地/i, category: "domestic" },
+];
+
+const INTERNATIONAL_PATTERNS = [
+  /国际|海外|全球|硅谷|美国|欧洲|欧盟|英国|日本|韩国|印度|中东|东南亚/i,
+  /openai|google|meta|microsoft|apple|nvidia|amazon|tesla|anthropic|xai|softbank|openrouter/i,
+  /techcrunch|the verge|reuters|bloomberg|wsj|financial times|ft|cnbc|bbc|ap news/i,
+];
+
+const DOMESTIC_PATTERNS = [
+  /国内|中国|本土|国产|央行|国务院|工信部|证监会|上交所|深交所|港股|a股/i,
+  /阿里|腾讯|字节|百度|京东|美团|拼多多|华为|小米|蚂蚁|比亚迪|宁德时代|商汤|科大讯飞/i,
+  /36氪|钛媒体|虎嗅|澎湃|界面|第一财经|证券时报|经济观察|人民日报|新华社|央视网|财新|IT之家/i,
+];
+
+const LOW_PRIORITY_HOSTS = new Set([
+  "baijiahao.baidu.com",
+  "mbd.baidu.com",
+]);
+
+export const DAILY_DIGEST_SCREENSHOT = {
+  width: 1080,
+  height: 1400,
+  deviceScaleFactor: 4,
+} as const;
+
 const EXTRACTION_SYSTEM = [
-  "你是一个严谨的新闻链接筛选器。",
-  "你的任务是从候选链接中挑出真实新闻文章，并返回严格 JSON。",
+  "你是一个严谨的科技新闻筛选器。",
+  "你的任务是从候选链接中挑出真实新闻文章，并返回严格 JSON 数组。",
   "不要聊天，不要解释，不要使用 markdown，除了 JSON 数组不要输出任何别的内容。",
+  "只保留新闻文章页，排除搜索页、导航页、专题页、广告页、下载页和纯视频页。",
+  "优先原创媒体、主流媒体、官网和权威发布，尽量减少百家号等聚合自媒体；只有在没有更好候选时才保留。",
+  "category 只允许 domestic 或 international。",
+  "domestic 表示中国公司、政策、市场、机构或中国互联网/创投动态为主。",
+  "international 表示海外公司、政策、市场、机构或全球科技/创投动态为主。",
   "如果字符串里出现双引号，必须转义。",
 ].join("\n");
 
 /** Extract all anchor links from the current page using Playwright locators (zero LLM calls). */
-async function extractPageLinks(page: Page): Promise<LinkItem[]> {
+async function extractPageLinks(page: Page, hintCategory: DigestCategory): Promise<LinkItem[]> {
   const anchors = await page.locator("a[href]").all();
   const items: LinkItem[] = [];
-  for (const a of anchors) {
-    const text = ((await a.textContent().catch(() => "")) ?? "").trim().slice(0, 80);
-    const href = (await a.getAttribute("href").catch(() => "")) ?? "";
+  for (const anchor of anchors) {
+    const text = ((await anchor.textContent().catch(() => "")) ?? "").trim().slice(0, 120);
+    const href = (await anchor.getAttribute("href").catch(() => "")) ?? "";
     const absHref = href.startsWith("http") ? href : "";
-    if (text.length > 3 && absHref) items.push({ text, href: absHref });
+    if (text.length > 3 && absHref) {
+      items.push({ text, href: absHref, hintCategory });
+    }
   }
   return items;
 }
 
 /**
  * Navigate each search URL with Playwright, collect all links, then make a single
- * LLM call to filter and structure results as RawArticle[].
+ * LLM call to filter and structure results as DigestArticle[].
  */
 async function searchNewsWithBrowser(
   browser: Browser,
   ctx: SkillContext,
   queries: string[],
-  maxArticles: number,
-): Promise<RawArticle[]> {
+  maxCandidates: number,
+): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   const allLinks: LinkItem[] = [];
   const page = await browser.newPage();
   try {
     for (const query of queries) {
+      const hintCategory = classifyQuery(query);
       const url = `https://news.baidu.com/ns?word=${encodeURIComponent(query)}&tn=news&cl=2&rn=20&ct=1`;
-      log(`🌐 搜索: ${query}`);
+      log(`🌐 搜索: ${query}（${CATEGORY_LABEL[hintCategory]}）`);
       try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-      } catch { /* timeout — read whatever rendered */ }
-      const links = await extractPageLinks(page);
+      } catch {
+        // timeout: continue with whatever content has rendered
+      }
+      const links = await extractPageLinks(page, hintCategory);
       log(`🔗 获取 ${links.length} 个链接`);
       allLinks.push(...links);
     }
@@ -76,13 +147,7 @@ async function searchNewsWithBrowser(
     await page.close();
   }
 
-  const seen = new Set<string>();
-  const uniqueLinks = allLinks.filter((l) => {
-    if (seen.has(l.href)) return false;
-    seen.add(l.href);
-    return true;
-  });
-
+  const uniqueLinks = dedupeLinks(allLinks);
   if (uniqueLinks.length === 0) {
     log("⚠️ 未获取到任何链接");
     return [];
@@ -90,19 +155,28 @@ async function searchNewsWithBrowser(
 
   log(`📊 共收集 ${uniqueLinks.length} 个链接，调用 LLM 筛选…`);
   const linkText = uniqueLinks
-    .slice(0, 200)
-    .map((l) => `${l.text} | ${l.href}`)
+    .slice(0, 260)
+    .map((link) => `[${CATEGORY_LABEL[link.hintCategory]}] ${link.text} | ${link.href}`)
     .join("\n");
 
-  const prompt = `以下是从新闻搜索页面提取的链接列表（格式：标题 | URL）：
+  const prompt = `以下是从新闻搜索页面提取的链接列表（格式：[分类提示] 标题 | URL）：
 
 ${linkText}
 
-请从中识别并筛选出真实的新闻文章（标题有实际内容、URL 指向新闻页面，排除导航链接、广告等）。
-最多返回 ${maxArticles} 篇，按相关性和时效性排序。
+请从中识别并筛选出真实的科技新闻文章，满足这些要求：
+- 只保留新闻正文页，不要搜索结果、专题页、导航链接、下载页、广告页
+- 尽量覆盖不同主题，避免同题反复
+- 优先原创媒体、主流媒体、公司官网和权威发布
+- category 必须是 domestic 或 international
+- domestic：事件主体和主要影响市场以中国为主
+- international：事件主体和主要影响市场以海外或全球为主
+- 参考每行前面的分类提示，但最终以新闻主体本身判断
+- summary 尽量用一句中文短句概括；如果从标题无法可靠概括，可留空字符串
+
+最多返回 ${maxCandidates} 篇，按质量、相关性和时效性排序。
 
 只返回 JSON 数组，不要其他文字：
-[{"title":"文章标题","url":"文章完整URL","summary":"摘要（无则空字符串）","source":"来源媒体"}]`;
+[{"title":"文章标题","url":"文章完整URL","summary":"一句话摘要","source":"来源媒体","category":"domestic"}]`;
 
   const response = await ctx.agent.llm.complete({
     system: EXTRACTION_SYSTEM,
@@ -115,110 +189,83 @@ ${linkText}
     if (text) log(`🪵 LLM 原始输出: ${text.slice(0, 200)}`);
     return [];
   }
-  const articles = parseArticlesFromLLMOutput(response.message.content);
+
+  const articles = parseArticlesFromLLMOutput(response.message.content, buildLinkHintMap(uniqueLinks));
   if (!articles) {
     log("⚠️ JSON 解析失败");
     log(`🪵 LLM 原始输出: ${text.slice(0, 200)}`);
     return [];
   }
-  log(`✅ 筛选出 ${articles.length} 篇文章`);
+
+  const domesticCount = articles.filter((article) => article.category === "domestic").length;
+  const internationalCount = articles.length - domesticCount;
+  log(`✅ 筛选出 ${articles.length} 篇文章（国内 ${domesticCount} / 国际 ${internationalCount}）`);
   return articles;
 }
 
 /** Render articles as a styled HTML news digest page. */
-export function renderDailyDigestHtml(articles: RawArticle[], date: string): string {
-  const summaryText = buildSummaryText(articles);
-  const rows = articles
-    .map(
-      (a, i) => `
-    <div class="item">
-      <span class="num">${i + 1}</span>
-      <div class="body">
-        <a class="title" href="${a.url}">${escapeHtml(a.title)}</a>
-        ${a.summary ? `<p class="summary">${escapeHtml(a.summary)}</p>` : ""}
-        <div class="meta-row">
-          <span class="source">${escapeHtml(a.source)}</span>
-          <span class="link-mark">OPEN LINK</span>
-        </div>
-      </div>
-    </div>`,
-    )
-    .join("\n");
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <style>${LAYOUT_CSS}</style>
-</head>
-<body>
-  <div class="page">
-    <div class="page-grid"></div>
-    <div class="orb orb-a"></div>
-    <div class="orb orb-b"></div>
-    <div class="orb orb-c"></div>
-    <header class="hero">
-      <div class="hero-top">
-        <div class="brand">
-          <div class="brand-en">AI EDUCATION</div>
-          <div class="brand-sub">NEWS BRIEF</div>
-        </div>
-        <div class="meta">
-          <div class="meta-date">${escapeHtml(formatIsoDate(date))}</div>
-          <div class="meta-vol">VOL.${String(Math.max(articles.length, 1)).padStart(2, "0")}</div>
-        </div>
-      </div>
-      <h1 class="headline">
-        <span>科技新闻</span>
-        <span>日报</span>
-      </h1>
-      <p class="deck">Daily digest of AI, venture, and internet signals gathered from browser search and filtered into a readable brief.</p>
-    </header>
-    <section class="summary-card">
-      <div class="summary-header">
-        <h2 class="summary-title">今日摘要</h2>
-        <div class="summary-label">/ SUMMARY</div>
-      </div>
-      <p class="summary-text">${escapeHtml(summaryText)}</p>
-    </section>
-    <section class="news-list">
-      ${rows}
-    </section>
-  </div>
-</body>
-</html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+export function renderDailyDigestHtml(selection: DailyDigestSelection, date: string): string {
+  return fillTemplate(PAGE_TEMPLATE, {
+    LAYOUT_CSS,
+    DATE_LABEL: escapeHtml(formatIsoDate(date)),
+    VOL_LABEL: String(Math.max(selection.all.length, 1)).padStart(2, "0"),
+    SUMMARY_TEXT: escapeHtml(buildSummaryText(selection)),
+    DOMESTIC_COUNT: String(selection.domestic.length).padStart(2, "0"),
+    INTERNATIONAL_COUNT: String(selection.international.length).padStart(2, "0"),
+    TOTAL_COUNT: String(selection.all.length).padStart(2, "0"),
+    DOMESTIC_SECTION: renderSection("domestic", selection.domestic),
+    INTERNATIONAL_SECTION: renderSection("international", selection.international),
+  });
 }
 
 /** Render articles as a Markdown digest. */
-function renderMarkdown(articles: RawArticle[], date: string): string {
-  const rows = articles
-    .map((a, i) => `${i + 1}. **[${a.title}](${a.url})**${a.summary ? `\n   ${a.summary}` : ""}\n   _${a.source}_`)
-    .join("\n\n");
-  return `# 每日新闻日报\n\n**${date}**\n\n${rows}\n`;
+function renderMarkdown(selection: DailyDigestSelection, date: string): string {
+  const domesticRows = renderMarkdownSection(selection.domestic);
+  const internationalRows = renderMarkdownSection(selection.international);
+  return [
+    "# 每日新闻日报",
+    "",
+    `**${date}**`,
+    "",
+    `## 国内（${selection.domestic.length}）`,
+    "",
+    domesticRows,
+    "",
+    `## 国际（${selection.international.length}）`,
+    "",
+    internationalRows,
+    "",
+  ].join("\n");
 }
 
 /** Take a screenshot of HTML content. Returns a PNG buffer. */
 async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
-  const page = await browser.newPage();
+  const context = await browser.newContext({
+    viewport: {
+      width: DAILY_DIGEST_SCREENSHOT.width,
+      height: DAILY_DIGEST_SCREENSHOT.height,
+    },
+    deviceScaleFactor: DAILY_DIGEST_SCREENSHOT.deviceScaleFactor,
+  });
+  const page = await context.newPage();
   try {
-    await page.setViewportSize({ width: 1080, height: 1400 });
     await page.setContent(html, { waitUntil: "networkidle" });
     const height = await page.evaluate(() => (globalThis as unknown as { document: { body: { scrollHeight: number } } }).document.body.scrollHeight);
-    await page.setViewportSize({ width: 1080, height: Math.max(1400, height + 80) });
-    const buffer = await page.screenshot({ fullPage: true });
+    await page.setViewportSize({
+      width: DAILY_DIGEST_SCREENSHOT.width,
+      height: Math.max(DAILY_DIGEST_SCREENSHOT.height, height + 80),
+    });
+    const buffer = await page.screenshot({ fullPage: true, scale: "device" });
     return Buffer.from(buffer);
   } finally {
-    await page.close();
+    await context.close();
   }
 }
 
 /**
  * Daily digest skill — uses Playwright to directly scrape search result links,
  * then makes a single LLM call to filter and structure results.
- * Renders a styled HTML digest, screenshots it, and saves all output files.
+ * Renders a templated HTML digest, screenshots it, and saves all output files.
  *
  * Output files per run: YYYY-MM-DD.{html,md,png,json}
  */
@@ -226,33 +273,42 @@ export class DailyDigestSkill implements Skill {
   readonly id: string;
   readonly description: string;
   readonly #queries: string[];
-  readonly #maxArticles: number;
+  readonly #maxCandidates: number;
+  readonly #quota: DigestQuota;
 
   constructor() {
     const def = loadSkillDef(SKILL_DIR);
     this.id = def.id;
     this.description = def.description;
     this.#queries = def.queries;
-    this.#maxArticles = def.maxArticles;
+    this.#maxCandidates = def.maxCandidates;
+    this.#quota = {
+      domestic: def.domesticArticles,
+      international: def.internationalArticles,
+    };
   }
 
   async run(ctx: SkillContext): Promise<SkillResult> {
     const browser = await chromium.launch({ headless: true });
     try {
-      const articles = await searchNewsWithBrowser(browser, ctx, this.#queries, this.#maxArticles);
-      ctx.log?.(`📊 获取 ${articles.length} 篇文章`);
+      const articles = await searchNewsWithBrowser(browser, ctx, this.#queries, this.#maxCandidates);
+      const selection = selectDigestArticles(articles, this.#quota);
+      ctx.log?.(`📊 最终入选 ${selection.all.length} 篇文章（国内 ${selection.domestic.length} / 国际 ${selection.international.length}）`);
+      if (selection.domestic.length < this.#quota.domestic || selection.international.length < this.#quota.international) {
+        ctx.log?.(`⚠️ 分类配额未完全满足，目标为国内 ${this.#quota.domestic} / 国际 ${this.#quota.international}`);
+      }
 
       const dateKey = new Date().toLocaleDateString("sv-SE");
       const dateLabel = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
-      const html = renderDailyDigestHtml(articles, dateLabel);
+      const html = renderDailyDigestHtml(selection, dateLabel);
       const imageBuffer = await screenshotHtml(browser, html);
 
       const dataDirPath = ctx.dataDir ?? "";
       if (dataDirPath) {
         writeFileSync(join(dataDirPath, `${dateKey}.html`), html, "utf8");
-        writeFileSync(join(dataDirPath, `${dateKey}.md`), renderMarkdown(articles, dateLabel), "utf8");
+        writeFileSync(join(dataDirPath, `${dateKey}.md`), renderMarkdown(selection, dateLabel), "utf8");
         writeFileSync(join(dataDirPath, `${dateKey}.png`), imageBuffer);
-        writeFileSync(join(dataDirPath, `${dateKey}.json`), JSON.stringify(articles, null, 2), "utf8");
+        writeFileSync(join(dataDirPath, `${dateKey}.json`), JSON.stringify(selection.all, null, 2), "utf8");
         ctx.log?.(`💾 文件已保存到 ${dataDirPath}`);
         return { outputPath: join(dataDirPath, `${dateKey}.png`) };
       }
@@ -263,15 +319,76 @@ export class DailyDigestSkill implements Skill {
   }
 }
 
-export function parseArticlesFromLLMOutput(content: unknown): RawArticle[] | undefined {
+export function parseArticlesFromLLMOutput(
+  content: unknown,
+  urlHints: ReadonlyMap<string, DigestCategory> = new Map(),
+): DigestArticle[] | undefined {
   const text = extractText(content);
   const jsonText = extractJsonArray(text);
   if (!jsonText) return undefined;
+
+  const drafts = parseArticleDrafts(jsonText);
+  if (!drafts) return undefined;
+
+  const articles = validateArticles(drafts, urlHints);
+  return articles.length > 0 ? dedupeArticles(articles) : undefined;
+}
+
+export function selectDigestArticles(
+  articles: DigestArticle[],
+  quota: DigestQuota,
+): DailyDigestSelection {
+  const ranked = rankArticles(articles);
+  const domestic = pickArticlesByCategory(ranked, "domestic", quota.domestic);
+  const used = new Set(domestic.map((article) => canonicalizeUrl(article.url)));
+  const international = ranked
+    .filter((article) => article.category === "international")
+    .filter((article) => !used.has(canonicalizeUrl(article.url)))
+    .slice(0, quota.international);
+
+  return {
+    domestic,
+    international,
+    all: [...domestic, ...international],
+  };
+}
+
+function classifyQuery(query: string): DigestCategory {
+  const match = QUERY_HINT_PATTERNS.find((item) => item.pattern.test(query));
+  return match?.category ?? "domestic";
+}
+
+function dedupeLinks(links: LinkItem[]): LinkItem[] {
+  const byUrl = new Map<string, LinkItem>();
+  for (const link of links) {
+    const key = canonicalizeUrl(link.href);
+    if (!byUrl.has(key)) {
+      byUrl.set(key, link);
+      continue;
+    }
+    const previous = byUrl.get(key);
+    if (!previous) continue;
+    if (previous.hintCategory === "domestic" && link.hintCategory === "international") {
+      byUrl.set(key, link);
+    }
+  }
+  return [...byUrl.values()];
+}
+
+function buildLinkHintMap(links: LinkItem[]): ReadonlyMap<string, DigestCategory> {
+  const hints = new Map<string, DigestCategory>();
+  for (const link of links) {
+    hints.set(link.href, link.hintCategory);
+    hints.set(canonicalizeUrl(link.href), link.hintCategory);
+  }
+  return hints;
+}
+
+function parseArticleDrafts(text: string): ArticleDraft[] | undefined {
   try {
-    const parsed = JSON.parse(jsonText) as unknown[];
-    return validateArticles(parsed);
+    return JSON.parse(text) as ArticleDraft[];
   } catch {
-    const repaired = parseArticlesLoosely(jsonText);
+    const repaired = parseArticleDraftsLoosely(text);
     return repaired.length > 0 ? repaired : undefined;
   }
 }
@@ -301,26 +418,83 @@ function isTextBlock(value: unknown): value is { type: "text"; text: string } {
     && typeof (value as { text?: unknown }).text === "string";
 }
 
-function validateArticles(items: unknown[]): RawArticle[] {
+function validateArticles(
+  items: ArticleDraft[],
+  urlHints: ReadonlyMap<string, DigestCategory>,
+): DigestArticle[] {
   return items.flatMap((item) => {
-    const result = RawArticleSchema.safeParse(item);
-    return result.success ? [result.data] : [];
+    const result = ArticleDraftSchema.safeParse(item);
+    if (!result.success) return [];
+    return [normalizeArticle(result.data, urlHints)];
   });
 }
 
-function parseArticlesLoosely(text: string): RawArticle[] {
+function normalizeArticle(
+  article: ArticleDraft,
+  urlHints: ReadonlyMap<string, DigestCategory>,
+): DigestArticle {
+  return {
+    title: article.title.trim(),
+    url: article.url.trim(),
+    summary: article.summary.trim(),
+    source: article.source.trim(),
+    category: normalizeCategory(article, urlHints),
+  };
+}
+
+function normalizeCategory(
+  article: ArticleDraft,
+  urlHints: ReadonlyMap<string, DigestCategory>,
+): DigestCategory {
+  const normalized = normalizeCategoryValue(article.category);
+  if (normalized) return normalized;
+
+  const inferred = inferCategoryFromArticle(article);
+  if (inferred) return inferred;
+
+  const hint = urlHints.get(article.url) ?? urlHints.get(canonicalizeUrl(article.url));
+  if (hint) return hint;
+
+  return "domestic";
+}
+
+function normalizeCategoryValue(value: string | undefined): DigestCategory | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized === "domestic" || normalized === "国内") return "domestic";
+  if (normalized === "international" || normalized === "国际") return "international";
+  return undefined;
+}
+
+function inferCategoryFromArticle(article: ArticleDraft): DigestCategory | undefined {
+  const haystack = `${article.title} ${article.source} ${article.url}`.toLowerCase();
+  if (INTERNATIONAL_PATTERNS.some((pattern) => pattern.test(haystack))) {
+    return "international";
+  }
+  if (DOMESTIC_PATTERNS.some((pattern) => pattern.test(haystack))) {
+    return "domestic";
+  }
+  try {
+    const hostname = new URL(article.url).hostname.toLowerCase();
+    if (hostname.endsWith(".cn")) return "domestic";
+    if (!/baidu\.com$/i.test(hostname)) return "international";
+  } catch {
+    // fall through
+  }
+  return undefined;
+}
+
+function parseArticleDraftsLoosely(text: string): ArticleDraft[] {
   const objects = text.match(/\{[\s\S]*?\}/g) ?? [];
   return objects.flatMap((objectText) => {
-    const title = extractLooseField(objectText, "title", "url");
-    const url = extractLooseField(objectText, "url", "summary");
-    const summary = extractLooseField(objectText, "summary", "source");
-    const source = extractLooseLastField(objectText, "source");
-    const result = RawArticleSchema.safeParse({
-      title,
-      url,
-      summary,
-      source,
-    });
+    const draft: ArticleDraft = {
+      title: extractLooseField(objectText, "title", "url"),
+      url: extractLooseField(objectText, "url", "summary"),
+      summary: extractLooseField(objectText, "summary", "source"),
+      source: extractLooseField(objectText, "source", "category"),
+      category: extractLooseLastField(objectText, "category"),
+    };
+    const result = ArticleDraftSchema.safeParse(draft);
     return result.success ? [result.data] : [];
   });
 }
@@ -350,15 +524,102 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function buildSummaryText(articles: RawArticle[]): string {
-  if (articles.length === 0) {
-    return "今日检索已完成，但暂未筛出可展示的文章。建议调整关键词或稍后重跑。";
-  }
-  const sources = summarizeSources(articles);
-  return `共筛出 ${articles.length} 篇文章，重点覆盖 AI 科技、创业投资与互联网动态。来源以 ${sources} 为主，以下按筛选后的相关性顺序展开。`;
+function dedupeArticles(articles: DigestArticle[]): DigestArticle[] {
+  const seen = new Set<string>();
+  return articles.filter((article) => {
+    const key = canonicalizeUrl(article.url);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-function summarizeSources(articles: RawArticle[]): string {
+function rankArticles(articles: DigestArticle[]): DigestArticle[] {
+  return articles
+    .map((article, index) => ({ article, index, score: scoreArticle(article) }))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map((entry) => entry.article);
+}
+
+function scoreArticle(article: DigestArticle): number {
+  let score = 0;
+  if (article.summary.trim()) score += 1;
+  if (article.source.trim()) score += 1;
+  try {
+    const hostname = new URL(article.url).hostname.toLowerCase();
+    if (!LOW_PRIORITY_HOSTS.has(hostname)) score += 2;
+    if (hostname.endsWith(".cn")) score += article.category === "domestic" ? 1 : 0;
+    if (!hostname.endsWith(".cn")) score += article.category === "international" ? 1 : 0;
+  } catch {
+    // ignore URL parse failures
+  }
+  if (article.source.includes("百家号")) score -= 2;
+  return score;
+}
+
+function pickArticlesByCategory(
+  articles: DigestArticle[],
+  category: DigestCategory,
+  limit: number,
+): DigestArticle[] {
+  return articles.filter((article) => article.category === category).slice(0, limit);
+}
+
+function renderSection(category: DigestCategory, articles: DigestArticle[]): string {
+  const items = articles.length > 0
+    ? articles.map((article, index) => renderItem(article, index + 1)).join("\n")
+    : `<div class="empty-state">暂无符合条件的${CATEGORY_LABEL[category]}内容</div>`;
+
+  return fillTemplate(SECTION_TEMPLATE, {
+    SECTION_KEY: category,
+    SECTION_EYEBROW: category === "domestic" ? "CHINA TRACK" : "GLOBAL TRACK",
+    SECTION_TITLE: category === "domestic" ? "国内科技" : "国际科技",
+    SECTION_COUNT: String(articles.length).padStart(2, "0"),
+    SECTION_ITEMS: items,
+  });
+}
+
+function renderItem(article: DigestArticle, index: number): string {
+  const summaryBlock = article.summary
+    ? `<p class="summary">${escapeHtml(article.summary)}</p>`
+    : "";
+
+  return fillTemplate(ITEM_TEMPLATE, {
+    INDEX: String(index).padStart(2, "0"),
+    URL: escapeHtml(article.url),
+    TITLE: escapeHtml(article.title),
+    SUMMARY_BLOCK: summaryBlock,
+    SOURCE: escapeHtml(article.source || "未知来源"),
+    CATEGORY_LABEL: article.category === "domestic" ? "LOCAL SIGNAL" : "GLOBAL SIGNAL",
+  });
+}
+
+function renderMarkdownSection(articles: DigestArticle[]): string {
+  if (articles.length === 0) return "_暂无符合条件的内容_";
+  return articles
+    .map((article, index) => {
+      const lines = [
+        `${index + 1}. **[${article.title}](${article.url})**`,
+        article.summary ? `   ${article.summary}` : "",
+        `   _${article.source}_`,
+      ].filter(Boolean);
+      return lines.join("\n");
+    })
+    .join("\n\n");
+}
+
+function buildSummaryText(selection: DailyDigestSelection): string {
+  if (selection.all.length === 0) {
+    return "今日检索已完成，但暂未筛出可展示的文章。建议调整关键词或稍后重跑。";
+  }
+
+  const domesticSources = summarizeSources(selection.domestic);
+  const internationalSources = summarizeSources(selection.international);
+  return `本期共入选 ${selection.all.length} 篇文章，按国内 ${selection.domestic.length} / 国际 ${selection.international.length} 分栏。国内重点来自 ${domesticSources}；国际重点来自 ${internationalSources}。`;
+}
+
+function summarizeSources(articles: DigestArticle[]): string {
+  if (articles.length === 0) return "暂无明确来源";
   const counts = new Map<string, number>();
   for (const article of articles) {
     counts.set(article.source, (counts.get(article.source) ?? 0) + 1);
@@ -368,6 +629,31 @@ function summarizeSources(articles: RawArticle[]): string {
     .slice(0, 3)
     .map(([source]) => source)
     .join("、");
+}
+
+function fillTemplate(template: string, values: Record<string, string>): string {
+  return template.replace(/\{\{([A-Z_]+)\}\}/g, (_, key: string) => values[key] ?? "");
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function canonicalizeUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    for (const param of ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "spm", "wfr", "for"]) {
+      url.searchParams.delete(param);
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
 }
 
 function formatIsoDate(date: string): string {

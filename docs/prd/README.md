@@ -124,23 +124,28 @@ onRunSkill → skill.run(ctx) → SkillResult → 展示日志 + 图片预览
 ```
 ---
 id: daily-digest
-description: 浏览器搜索科技新闻，生成 HTML 日报截图
-queries: AI科技,创业投资,互联网动态
-max-articles: 12
+description: 浏览器搜索科技新闻，按国内 10 / 国际 5 生成 HTML 日报截图
+queries: 国内AI科技,中国创业投资,中国互联网平台,国际AI科技,海外创业投资,全球互联网动态
+domestic-articles: 10
+international-articles: 5
+max-articles: 15
+max-candidates: 36
 ---
 Agent 指令...
 ```
 
 **内置 Skill — DailyDigestSkill：**
 1. 启动 Playwright 浏览器，依次搜索多个科技关键词
-2. 直接从搜索结果页提取候选链接并去重
-3. 调用一次专用 LLM 抽取提示词，将候选链接筛成结构化文章数组
+2. 直接从搜索结果页提取候选链接并去重，同时为每个链接保留国内/国际查询提示
+3. 调用一次专用 LLM 抽取提示词，将候选链接筛成带 `category` 的结构化文章数组
 4. 若 LLM 返回 fenced json 或 near-JSON（如标题引号未转义），解析层会做兜底修复
-5. 渲染 HTML 日报，Playwright 截图为 PNG
-6. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
-7. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
+5. 依据配额裁成国内 10 篇、国际 5 篇，共 15 篇
+6. 将内容填入 HTML 模板，Playwright 截图为 PNG
+7. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
+8. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
 
-HTML 样式由 `src/skills/daily-digest/layout.css` 提供，Skill 运行时读取并内联进输出文件，保证设计稿样式和最终截图使用同一份样式源。
+HTML 结构由 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 提供，视觉样式由 `src/skills/daily-digest/layout.css` 提供；Skill 运行时读取这些模板并填入文本内容，保证模板、截图和导出 HTML 使用同一套版式。
+PNG 截图使用 `1080px` 版心和 `4x` 高清输出，适合在 IM 里预览和放大查看。
 
 **数据目录：**
 ```
@@ -148,7 +153,7 @@ data/skills/{skillId}/
 ├── YYYY-MM-DD.html
 ├── YYYY-MM-DD.md
 ├── YYYY-MM-DD.png
-└── YYYY-MM-DD.json   ← 原始文章数组，供新闻库展示
+└── YYYY-MM-DD.json   ← 原始文章数组（含 category），供新闻库展示
 ```
 
 ### MemoryStorage（记忆库）
@@ -216,7 +221,11 @@ src/
 │   ├── loader.ts       loadSkillDef() — 解析 SKILL.md frontmatter
 │   └── daily-digest/
 │       ├── SKILL.md    Skill 定义（元数据 + Agent 指令）
-│       └── index.ts    DailyDigestSkill 实现
+│       ├── template.html 页面模板
+│       ├── section.html 分类区块模板
+│       ├── item.html    新闻条目模板
+│       ├── layout.css   日报样式模板
+│       └── index.ts     DailyDigestSkill 实现
 └── web/
     ├── server.ts       WebServer，调试 API + 静态文件服务
     └── ui/             React + Vite 前端（六标签页）

@@ -120,6 +120,12 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 41 — DailyDigest HTML 改用 layout.css
 `DailyDigestSkill` 的 HTML 样式不再硬编码在 `renderHtml()` 中，改为从 `src/skills/daily-digest/layout.css` 读取并内联。`layout.css` 同步整理为真正可驱动日报结构的样式表，截图宽度切到 1080px，并补渲染测试。
 
+### Sprint 42 — DailyDigest 截图升级为 4x 高清
+`DailyDigestSkill` 截图上下文改为 `1080px + deviceScaleFactor: 4`，并显式使用 `scale: "device"` 输出 PNG。这样版面尺寸不变，但导出的日报图分辨率提升到 4x 高清，适合飞书预览和放大查看。
+
+### Sprint 43 — DailyDigest 改为国内 / 国际分栏模板
+`DailyDigestSkill` 抽取结果新增 `category`，按国内 10 / 国际 5 的配额裁成 15 篇，并把渲染层拆为 `template.html` / `section.html` / `item.html` + `layout.css` 模板体系，`index.ts` 只填内容不再硬编码整页 HTML。真实重跑后当天日报已按国内 / 国际分栏输出。
+
 ### Sprint 37 — 清理 src/news/ 死代码目录
 Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
 

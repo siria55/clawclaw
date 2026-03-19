@@ -159,28 +159,34 @@ frontmatter 字段（简化 YAML，无额外依赖）：
 ```
 ---
 id: daily-digest
-description: 浏览器搜索科技新闻，生成 HTML 日报截图
-queries: AI科技,创业投资,互联网动态   # 逗号分隔数组
-max-articles: 12
+description: 浏览器搜索科技新闻，按国内 10 / 国际 5 生成 HTML 日报截图
+queries: 国内AI科技,中国创业投资,中国互联网平台,国际AI科技,海外创业投资,全球互联网动态
+domestic-articles: 10
+international-articles: 5
+max-articles: 15
+max-candidates: 36
 ---
 Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 ```
 
 `loadSkillDef(skillDir)` 解析 SKILL.md，返回 `SkillDef`（含 `instructions` 字段为 frontmatter 之后的 markdown body）。
+其中 `max-candidates` 用于抽取阶段的候选上限，`domestic-articles` / `international-articles` 用于最终日报配额。
 
 ### DailyDigestSkill 执行流程
 
-1. 读取 `SKILL.md` 获得搜索词和最大文章数
+1. 读取 `SKILL.md` 获得搜索词、候选上限和国内/国际配额
 2. 启动 Playwright chromium（headless）
-3. 依次导航各关键词的百度新闻搜索页，用 Playwright locator 提取所有链接（零 LLM 调用）
-4. 跨关键词去重后，**一次** `ctx.agent.llm.complete()` 调用专用 `EXTRACTION_SYSTEM`，筛选为结构化 JSON（`RawArticle[]`）
+3. 依次导航各关键词的百度新闻搜索页，用 Playwright locator 提取所有链接（零 LLM 调用），并为链接打上国内/国际查询提示
+4. 跨关键词去重后，**一次** `ctx.agent.llm.complete()` 调用专用 `EXTRACTION_SYSTEM`，筛选为结构化 JSON（`DigestArticle[]`，含 `category`）
 5. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
-6. 渲染 HTML，Playwright 截图为 PNG
-7. 写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
-8. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
-9. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
+6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对低质量聚合域名做降权
+7. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML
+8. Playwright 截图为 PNG，写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
+9. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
+10. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
 
-其中 HTML 不再内联硬编码样式，而是运行时读取 `src/skills/daily-digest/layout.css` 注入 `<style>`，这样 `layout.css` 成为截图与导出 HTML 的单一视觉源。
+其中 HTML 不再由 `index.ts` 直接拼整页结构，而是运行时读取 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 和 `layout.css` 进行模板替换；这样 HTML 模板和 CSS 模板共同成为截图与导出文件的单一版式源。
+截图阶段使用 `browser.newContext({ viewport: { width: 1080, height: 1400 }, deviceScaleFactor: 4 })`，并以 `scale: "device"` 输出 PNG，在不改变版心尺寸的前提下提升清晰度。
 
 ### 新闻库数据来源
 

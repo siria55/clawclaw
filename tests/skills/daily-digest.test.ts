@@ -1,22 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { parseArticlesFromLLMOutput, renderDailyDigestHtml } from "../../src/skills/daily-digest/index.js";
+import {
+  DAILY_DIGEST_SCREENSHOT,
+  parseArticlesFromLLMOutput,
+  renderDailyDigestHtml,
+  selectDigestArticles,
+  type DailyDigestSelection,
+  type DigestArticle,
+} from "../../src/skills/daily-digest/index.js";
 
 describe("parseArticlesFromLLMOutput", () => {
-  it("parses anthropic text blocks", () => {
+  it("parses anthropic text blocks and normalizes category values", () => {
     const articles = parseArticlesFromLLMOutput([
       {
         type: "text",
         text: `Here is the result:
 [
-  {"title":"A","url":"https://example.com/a","summary":"sa","source":"S1"},
-  {"title":"B","url":"https://example.com/b","summary":"","source":"S2"}
+  {"title":"A","url":"https://example.cn/a","summary":"sa","source":"S1","category":"国内"},
+  {"title":"B","url":"https://example.com/b","summary":"","source":"S2","category":"international"}
 ]`,
       },
     ]);
 
     expect(articles).toEqual([
-      { title: "A", url: "https://example.com/a", summary: "sa", source: "S1" },
-      { title: "B", url: "https://example.com/b", summary: "", source: "S2" },
+      { title: "A", url: "https://example.cn/a", summary: "sa", source: "S1", category: "domestic" },
+      { title: "B", url: "https://example.com/b", summary: "", source: "S2", category: "international" },
     ]);
   });
 
@@ -26,14 +33,14 @@ describe("parseArticlesFromLLMOutput", () => {
         type: "text",
         text: `\`\`\`json
 [
-  {"title":"A","url":"https://example.com/a","summary":"","source":"S1"}
+  {"title":"A","url":"https://example.com/a","summary":"","source":"S1","category":"domestic"}
 ]
 \`\`\``,
       },
     ]);
 
     expect(articles).toEqual([
-      { title: "A", url: "https://example.com/a", summary: "", source: "S1" },
+      { title: "A", url: "https://example.com/a", summary: "", source: "S1", category: "domestic" },
     ]);
   });
 
@@ -43,14 +50,20 @@ describe("parseArticlesFromLLMOutput", () => {
         type: "text",
         text: `\`\`\`json
 [
-  {"title":"AWE会场"含科量"高 AI重构未来科技生活新范式","url":"https://example.com/a","summary":"","source":"S1"}
+  {"title":"AWE会场"含科量"高 AI重构未来科技生活新范式","url":"https://example.com/a","summary":"","source":"S1","category":"international"}
 ]
 \`\`\``,
       },
     ]);
 
     expect(articles).toEqual([
-      { title: 'AWE会场"含科量"高 AI重构未来科技生活新范式', url: "https://example.com/a", summary: "", source: "S1" },
+      {
+        title: 'AWE会场"含科量"高 AI重构未来科技生活新范式',
+        url: "https://example.com/a",
+        summary: "",
+        source: "S1",
+        category: "international",
+      },
     ]);
   });
 
@@ -59,17 +72,62 @@ describe("parseArticlesFromLLMOutput", () => {
   });
 });
 
-describe("renderDailyDigestHtml", () => {
-  it("embeds layout.css content and article markup", () => {
-    const html = renderDailyDigestHtml([
-      { title: "A", url: "https://example.com/a", summary: "sa", source: "S1" },
-    ], "2026年3月19日");
+describe("selectDigestArticles", () => {
+  it("enforces domestic 10 and international 5 quotas", () => {
+    const domestic = Array.from({ length: 12 }, (_, index) => createArticle(`D${index}`, "domestic"));
+    const international = Array.from({ length: 7 }, (_, index) => createArticle(`I${index}`, "international"));
 
-    expect(html).toContain("<style>");
-    expect(html).toContain(".page-grid");
-    expect(html).toContain("AI EDUCATION");
-    expect(html).toContain("2026.03.19");
-    expect(html).toContain("OPEN LINK");
-    expect(html).toContain("https://example.com/a");
+    const selection = selectDigestArticles([...domestic, ...international], {
+      domestic: 10,
+      international: 5,
+    });
+
+    expect(selection.domestic).toHaveLength(10);
+    expect(selection.international).toHaveLength(5);
+    expect(selection.all).toHaveLength(15);
+    expect(selection.domestic.every((article) => article.category === "domestic")).toBe(true);
+    expect(selection.international.every((article) => article.category === "international")).toBe(true);
   });
 });
+
+describe("renderDailyDigestHtml", () => {
+  it("fills html templates with grouped article markup", () => {
+    const selection: DailyDigestSelection = {
+      domestic: [createArticle("A", "domestic")],
+      international: [createArticle("B", "international")],
+      all: [createArticle("A", "domestic"), createArticle("B", "international")],
+    };
+
+    const html = renderDailyDigestHtml(selection, "2026年3月19日");
+
+    expect(html).toContain("<style>");
+    expect(html).toContain(".news-section");
+    expect(html).toContain("2026.03.19");
+    expect(html).toContain("国内科技");
+    expect(html).toContain("国际科技");
+    expect(html).toContain("Browser-searched");
+    expect(html).toContain("https://example.com/A");
+    expect(html).toContain("https://example.com/B");
+    expect(html).not.toContain("{{");
+  });
+});
+
+describe("DAILY_DIGEST_SCREENSHOT", () => {
+  it("uses 4x device scale for high-resolution screenshots", () => {
+    expect(DAILY_DIGEST_SCREENSHOT).toEqual({
+      width: 1080,
+      height: 1400,
+      deviceScaleFactor: 4,
+    });
+  });
+});
+
+function createArticle(seed: string, category: DigestArticle["category"]): DigestArticle {
+  return {
+    title: seed,
+    url: `https://example.com/${seed}`,
+    summary: `${seed} summary`,
+    source: `${seed} source`,
+    category,
+  };
+}

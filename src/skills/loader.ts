@@ -9,6 +9,12 @@ export interface SkillDef {
   queries: string[];
   /** Max articles to collect and render. */
   maxArticles: number;
+  /** Candidate articles requested from the extraction pass before quota trimming. */
+  maxCandidates: number;
+  /** Final domestic article quota. */
+  domesticArticles: number;
+  /** Final international article quota. */
+  internationalArticles: number;
   /** Agent instructions (SKILL.md body after frontmatter). */
   instructions: string;
 }
@@ -47,11 +53,28 @@ export function parseSkillMd(content: string): SkillDef {
     if (colon === -1) continue;
     meta[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
   }
+  const legacyMaxArticles = parsePositiveInt(meta["max-articles"], 12);
+  const hasQuotaFields = meta["domestic-articles"] !== undefined || meta["international-articles"] !== undefined;
+  const domesticArticles = parsePositiveInt(meta["domestic-articles"], hasQuotaFields ? legacyMaxArticles : legacyMaxArticles);
+  const internationalArticles = parsePositiveInt(meta["international-articles"], hasQuotaFields ? 0 : 0);
+  const maxArticles = hasQuotaFields ? domesticArticles + internationalArticles : legacyMaxArticles;
+  const maxCandidates = Math.max(
+    parsePositiveInt(meta["max-candidates"], Math.max(maxArticles * 3, maxArticles)),
+    maxArticles,
+  );
   return {
     id: meta["id"] ?? "",
     description: meta["description"] ?? "",
     queries: (meta["queries"] ?? "").split(",").map((q) => q.trim()).filter(Boolean),
-    maxArticles: parseInt(meta["max-articles"] ?? "12", 10),
+    maxArticles,
+    maxCandidates,
+    domesticArticles: hasQuotaFields ? domesticArticles : maxArticles,
+    internationalArticles: hasQuotaFields ? internationalArticles : 0,
     instructions: match[2].trim(),
   };
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }

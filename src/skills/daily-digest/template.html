@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <style>{{LAYOUT_CSS}}</style>
+</head>
+<body>
+  <div class="page">
+    <div class="page-grid"></div>
+    <div class="orb orb-a"></div>
+    <div class="orb orb-b"></div>
+    <div class="orb orb-c"></div>
+    <header class="hero">
+      <div class="hero-top">
+        <div class="brand">
+          <div class="brand-en">AI EDUCATION</div>
+          <div class="brand-sub">NEWS BRIEF</div>
+        </div>
+        <div class="meta">
+          <div class="meta-date">{{DATE_LABEL}}</div>
+          <div class="meta-vol">VOL.{{VOL_LABEL}}</div>
+        </div>
+      </div>
+      <h1 class="headline">
+        <span>科技新闻</span>
+        <span>日报</span>
+      </h1>
+      <p class="deck">Domestic 10 / International 5. Browser-searched, LLM-filtered, and filled into a stable HTML/CSS template.</p>
+    </header>
+    <section class="summary-card">
+      <div class="summary-header">
+        <h2 class="summary-title">今日摘要</h2>
+        <div class="summary-label">/ SUMMARY</div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-chip">
+          <span class="stat-label">国内</span>
+          <span class="stat-value">{{DOMESTIC_COUNT}}</span>
+        </div>
+        <div class="stat-chip">
+          <span class="stat-label">国际</span>
+          <span class="stat-value">{{INTERNATIONAL_COUNT}}</span>
+        </div>
+        <div class="stat-chip">
+          <span class="stat-label">总计</span>
+          <span class="stat-value">{{TOTAL_COUNT}}</span>
+        </div>
+      </div>
+      <p class="summary-text">{{SUMMARY_TEXT}}</p>
+    </section>
+    <div class="news-sections">
+      {{DOMESTIC_SECTION}}
+      {{INTERNATIONAL_SECTION}}
+    </div>
+  </div>
+</body>
+</html>
