@@ -63,6 +63,11 @@ export class MountedDocLibrary {
     mkdirSync(this.#dataDir, { recursive: true });
   }
 
+  /** Directory where synced doc snapshots are stored. */
+  get dataDir(): string {
+    return this.#dataDir;
+  }
+
   /** Return normalized mounted doc sources from config. */
   listSources(): MountedDocSource[] {
     return normalizeMountedDocs(this.#configStorage.read().docs);

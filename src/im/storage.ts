@@ -60,6 +60,16 @@ export class IMEventStorage {
     return this.#counter;
   }
 
+  /** Number of events currently retained in the ring buffer. */
+  get count(): number {
+    return this.#events.length;
+  }
+
+  /** Backing JSON file path on disk when persistence is enabled. */
+  get filePath(): string | undefined {
+    return this.#filePath;
+  }
+
   #load(filePath: string): void {
     if (!existsSync(filePath)) return;
     try {

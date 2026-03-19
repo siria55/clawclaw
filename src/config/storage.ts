@@ -22,6 +22,11 @@ export class ConfigStorage<T extends object> {
     return this.#default;
   }
 
+  /** Backing JSON file path on disk. */
+  get filePath(): string {
+    return this.#filePath;
+  }
+
   /** Read current config from disk. Returns defaultValue if file doesn't exist or is invalid. */
   read(): T {
     if (!existsSync(this.#filePath)) return this.#default;

@@ -16,6 +16,11 @@ export class MemoryStorage {
     this.#filePath = filePath;
   }
 
+  /** Backing JSON file path on disk. */
+  get filePath(): string {
+    return this.#filePath;
+  }
+
   /**
    * Save a new memory entry. Auto-assigns `id` and `createdAt`.
    */

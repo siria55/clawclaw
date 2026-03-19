@@ -110,6 +110,9 @@ pnpm start
 
 查看运行时状态：
 - IM 平台连接状态（飞书 / 企业微信）
+- 飞书运行摘要（配置来源、Webhook、App ID / Chat ID、加密校验配置是否存在）
+- 配置文件状态（如 `data/im/im-config.json`、`data/agent/llm-config.json`、`data/cron/cron-config.json` 等）
+- 关键指标（长期记忆条数、IM 事件数、会话数、挂载文档同步数、Cron 启用数）
 - IM 事件日志（按群聊/直发分类，实时轮询）
 - 点击刷新实时更新
 
@@ -150,6 +153,7 @@ pnpm start
 - App ID / App Secret / Verification Token / Encrypt Key / Chat ID
 - 保存后立即生效，无需重启
 - 若希望 Agent 能读取部门人数、直属成员等组织信息，还需在飞书开放平台为该应用开通通讯录 / 部门读取权限
+- 表单上方会展示当前飞书运行摘要，方便确认当前实例到底是读取了已保存配置还是环境变量
 
 **飞书会话规则**：
 - 长期记忆仍共用同一个记忆库

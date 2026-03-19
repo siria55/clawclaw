@@ -78,6 +78,7 @@ function buildLLM(): AnthropicProvider {
 }
 
 const llm = buildLLM();
+type FeishuRuntimeSource = "storage" | "env" | "none";
 
 function buildSystemPrompt(systemPrompt: string | undefined): string {
   return [
@@ -144,7 +145,16 @@ function buildFeishu(): FeishuPlatform | undefined {
   return undefined;
 }
 
+function resolveFeishuSource(config: IMConfig): FeishuRuntimeSource {
+  if (config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken) return "storage";
+  if (process.env["FEISHU_APP_ID"] && process.env["FEISHU_APP_SECRET"] && process.env["FEISHU_VERIFICATION_TOKEN"]) {
+    return "env";
+  }
+  return "none";
+}
+
 feishu = buildFeishu();
+let feishuSource: FeishuRuntimeSource = resolveFeishuSource(imConfigStorage.read());
 
 const clawServer = new ClawServer({
   port: Number(process.env["PORT"] ?? 3000),
@@ -209,8 +219,11 @@ const webServer = new WebServer({
   mountedDocConfigStorage,
   dailyDigestConfigStorage,
   onIMConfig: (config: IMConfig) => {
+    feishuSource = resolveFeishuSource(config);
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
       ? new FeishuPlatform(config.feishu)
+      : feishuSource === "env"
+      ? new FeishuPlatform()
       : undefined;
     feishu = newFeishu;
     if (newFeishu) {
@@ -237,6 +250,14 @@ const webServer = new WebServer({
     connections: [
       { platform: "feishu", label: "飞书 Bot", connected: !!feishu },
     ],
+    runtime: {
+      feishu: {
+        configured: feishuSource !== "none",
+        active: !!feishu,
+        source: feishuSource,
+        webhookPath: "/feishu",
+      },
+    },
   }),
   cronStorage,
   onCronAdd: (cfg) => registerCronJob(cfg),

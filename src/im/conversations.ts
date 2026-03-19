@@ -54,6 +54,16 @@ export class ConversationStorage {
     this.#persist();
   }
 
+  /** Number of persisted sessions currently stored. */
+  get sessionCount(): number {
+    return Object.keys(this.#data).length;
+  }
+
+  /** Backing JSON file path on disk. */
+  get filePath(): string {
+    return this.#filePath;
+  }
+
   #load(): Record<string, ConversationRecord> {
     try {
       const parsed = JSON.parse(readFileSync(this.#filePath, "utf8")) as unknown;

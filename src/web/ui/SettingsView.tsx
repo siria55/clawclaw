@@ -29,6 +29,21 @@ interface MountedDocFields {
   excerpt?: string;
 }
 
+interface FeishuStatusSnapshot {
+  runtime: {
+    configured: boolean;
+    active: boolean;
+    source: "storage" | "env" | "none";
+    webhookPath: string;
+  };
+  appId?: string;
+  chatId?: string;
+  hasAppSecret: boolean;
+  hasVerificationToken: boolean;
+  hasEncryptKey: boolean;
+  permissionsHint: string;
+}
+
 /** Full-page settings view. All config is saved server-side. */
 export function SettingsView(): React.JSX.Element {
   return (
@@ -456,6 +471,7 @@ function FeishuSection(): React.JSX.Element {
   });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
+  const [snapshot, setSnapshot] = useState<FeishuStatusSnapshot | null>(null);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -473,6 +489,11 @@ function FeishuSection(): React.JSX.Element {
         }
       })
       .catch(() => { /* server may not have im-config yet */ });
+
+    fetch("/api/status")
+      .then((r) => r.json() as Promise<{ overview?: { feishu?: FeishuStatusSnapshot } }>)
+      .then((data) => setSnapshot(data.overview?.feishu ?? null))
+      .catch(() => { /* ignore status load failure */ });
   }, []);
 
   const setField = (key: keyof FeishuFields, value: string): void => {
@@ -517,6 +538,26 @@ function FeishuSection(): React.JSX.Element {
         配置保存在服务端 data/im-config.json，保存后立即生效，无需重启。<br />
         已保存的敏感字段显示为脱敏值（如 cli_****），修改后重新保存即可更新。
       </div>
+      {snapshot && (
+        <div className={styles.runtimeCard}>
+          <div className={styles.runtimeHeader}>
+            <strong className={styles.runtimeTitle}>当前飞书运行摘要</strong>
+            <span className={`${styles.runtimeBadge} ${snapshot.runtime.active ? styles.runtimeOn : styles.runtimeOff}`}>
+              {snapshot.runtime.active ? "运行中" : "未运行"}
+            </span>
+          </div>
+          <div className={styles.runtimeGrid}>
+            <RuntimeItem label="配置来源" value={snapshot.runtime.source === "storage" ? "已保存配置" : snapshot.runtime.source === "env" ? "环境变量" : "未启用"} />
+            <RuntimeItem label="Webhook" value={snapshot.runtime.webhookPath} mono />
+            <RuntimeItem label="App ID" value={snapshot.appId ?? "-"} mono />
+            <RuntimeItem label="Chat ID" value={snapshot.chatId ?? "-"} mono />
+            <RuntimeItem label="App Secret" value={snapshot.hasAppSecret ? "已配置" : "未配置"} />
+            <RuntimeItem label="Verification Token" value={snapshot.hasVerificationToken ? "已配置" : "未配置"} />
+            <RuntimeItem label="Encrypt Key" value={snapshot.hasEncryptKey ? "已配置" : "未配置"} />
+          </div>
+          <div className={styles.runtimeHint}>{snapshot.permissionsHint}</div>
+        </div>
+      )}
       <div className={styles.fields}>
         <Field
           label="App ID"
@@ -562,6 +603,15 @@ function FeishuSection(): React.JSX.Element {
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+function RuntimeItem(props: { label: string; value: string; mono?: boolean }): React.JSX.Element {
+  return (
+    <div className={styles.runtimeItem}>
+      <span className={styles.runtimeLabel}>{props.label}</span>
+      <span className={`${styles.runtimeValue} ${props.mono ? styles.runtimeMono : ""}`}>{props.value}</span>
     </div>
   );
 }

@@ -206,6 +206,83 @@ describe("WebServer", () => {
     await server.stop();
   });
 
+  it("GET /api/status returns visual overview for configs and Feishu runtime", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claw-status-overview-"));
+    try {
+      const agent = makeMockAgent();
+      const memoryStorage = new MemoryStorage(join(dir, "memory.json"));
+      memoryStorage.save({ content: "记住今天要同步飞书配置", tags: ["ops"] });
+      const imConfigStorage = new ConfigStorage<IMConfig>(join(dir, "im-config.json"));
+      imConfigStorage.write({
+        feishu: {
+          appId: "cli_demo",
+          appSecret: "secret",
+          verificationToken: "token",
+          chatId: "oc_demo",
+        },
+      });
+      const agentConfigStorage = new ConfigStorage<AgentMetaConfig>(join(dir, "agent-config.json"));
+      agentConfigStorage.write({ name: "bot", allowedPaths: ["./data/skills"] });
+      const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>(join(dir, "daily-digest.json"), { queries: [] });
+      dailyDigestConfigStorage.write({ queries: ["国内AI", "国际AI"] });
+      const cronStorage = new ConfigStorage<CronJobConfig[]>(join(dir, "cron.json"), []);
+      cronStorage.write([{
+        id: "daily",
+        schedule: "0 9 * * *",
+        message: "日报",
+        chatId: "oc_demo",
+        platform: "feishu",
+        enabled: true,
+      }]);
+
+      const server = new WebServer({
+        agent,
+        port: 0,
+        staticDir,
+        memoryStorage,
+        imConfigStorage,
+        agentConfigStorage,
+        dailyDigestConfigStorage,
+        cronStorage,
+        getStatus: () => ({
+          cronJobs: [],
+          connections: [{ platform: "feishu", label: "飞书 Bot", connected: true }],
+          runtime: {
+            feishu: {
+              configured: true,
+              active: true,
+              source: "storage",
+              webhookPath: "/feishu",
+            },
+          },
+        }),
+      });
+      await server.start();
+
+      const res = await fetch(`http://localhost:${server.port}/api/status`);
+      const body = await res.json() as {
+        overview: {
+          feishu: { runtime: { source: string; active: boolean }; appId?: string; chatId?: string };
+          metrics: Array<{ key: string; value: string }>;
+          configFiles: Array<{ key: string; exists: boolean; summary: string }>;
+        };
+      };
+
+      expect(res.status).toBe(200);
+      expect(body.overview.feishu.runtime.source).toBe("storage");
+      expect(body.overview.feishu.runtime.active).toBe(true);
+      expect(body.overview.feishu.appId).toBe("cli_demo");
+      expect(body.overview.feishu.chatId).toBe("oc_demo");
+      expect(body.overview.metrics.find((item) => item.key === "memory")?.value).toBe("1");
+      expect(body.overview.configFiles.find((item) => item.key === "im_config")?.exists).toBe(true);
+      expect(body.overview.configFiles.find((item) => item.key === "cron_config")?.summary).toContain("任务 1 条");
+
+      await server.stop();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("POST /api/cron/:id/run calls onCronRun with stored config", async () => {
     const dir = mkdtempSync(join(tmpdir(), "claw-cron-run-"));
     try {

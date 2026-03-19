@@ -61,6 +61,7 @@ function buildLLM(): AnthropicProvider {
 }
 
 const llm = buildLLM();
+type FeishuRuntimeSource = "storage" | "none";
 
 function buildSystemPrompt(systemPrompt: string | undefined): string {
   return [
@@ -113,7 +114,14 @@ function buildFeishu(): FeishuPlatform | undefined {
   return undefined;
 }
 
+function resolveFeishuSource(config: IMConfig): FeishuRuntimeSource {
+  return config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
+    ? "storage"
+    : "none";
+}
+
 feishu = buildFeishu();
+let feishuSource: FeishuRuntimeSource = resolveFeishuSource(imConfigStorage.read());
 
 const skillRegistry = new SkillRegistry();
 skillRegistry.register(new DailyDigestSkill({ configStorage: dailyDigestConfigStorage }));
@@ -164,6 +172,7 @@ const server = new WebServer({
   dailyDigestConfigStorage,
   cronStorage,
   onIMConfig: (config) => {
+    feishuSource = resolveFeishuSource(config);
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
       ? new FeishuPlatform(config.feishu)
       : undefined;
@@ -190,6 +199,14 @@ const server = new WebServer({
     connections: [
       { platform: "feishu", label: "飞书 Bot", connected: !!feishu },
     ],
+    runtime: {
+      feishu: {
+        configured: feishuSource !== "none",
+        active: !!feishu,
+        source: feishuSource,
+        webhookPath: "/feishu",
+      },
+    },
   }),
   onCronAdd: (cfg: CronJobConfig) => registerCronJob(cfg),
   onCronDelete: (id: string) => cron.remove(id),

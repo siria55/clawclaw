@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFileSync, existsSync, readdirSync, createReadStream } from "node:fs";
+import { readFileSync, existsSync, readdirSync, createReadStream, statSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "../core/agent.js";
@@ -39,10 +39,64 @@ export interface ConnectionStatus {
   connected: boolean;
 }
 
+export interface RuntimeFeishuStatus {
+  configured: boolean;
+  active: boolean;
+  source: "storage" | "env" | "none";
+  webhookPath: string;
+}
+
+export interface RuntimeStatus {
+  feishu?: RuntimeFeishuStatus;
+}
+
+export interface StatusMetric {
+  key: string;
+  label: string;
+  value: string;
+  hint?: string;
+}
+
+export interface StatusFile {
+  key: string;
+  label: string;
+  path: string;
+  exists: boolean;
+  summary: string;
+  updatedAt?: string;
+  sizeBytes?: number;
+}
+
+export interface LastIMEventSummary {
+  platform: string;
+  chatId: string;
+  userId: string;
+  timestamp: string;
+  textPreview: string;
+}
+
+export interface StatusOverview {
+  feishu: {
+    runtime: RuntimeFeishuStatus;
+    configuredInStorage: boolean;
+    appId?: string;
+    chatId?: string;
+    hasAppSecret: boolean;
+    hasVerificationToken: boolean;
+    hasEncryptKey: boolean;
+    permissionsHint: string;
+  };
+  metrics: StatusMetric[];
+  configFiles: StatusFile[];
+  lastIMEvent?: LastIMEventSummary;
+}
+
 /** Payload returned by GET /api/status */
 export interface SystemStatus {
   cronJobs: CronJobStatus[];
   connections: ConnectionStatus[];
+  runtime?: RuntimeStatus;
+  overview?: StatusOverview;
 }
 
 export interface WebServerConfig {
@@ -379,8 +433,168 @@ export class WebServer {
     const status: SystemStatus = this.#config.getStatus
       ? this.#config.getStatus()
       : { cronJobs: [], connections: [] };
+    const overview = this.#buildOverview(status.runtime);
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
-    res.end(JSON.stringify(status));
+    res.end(JSON.stringify({ ...status, overview }));
+  }
+
+  #buildOverview(runtime: RuntimeStatus | undefined): StatusOverview {
+    const imConfig = this.#config.imConfigStorage?.read();
+    const storedFeishu = imConfig?.feishu;
+    const runtimeFeishu = runtime?.feishu ?? {
+      configured: !!storedFeishu,
+      active: false,
+      source: storedFeishu ? "storage" as const : "none" as const,
+      webhookPath: "/feishu",
+    };
+    const sources = this.#config.mountedDocLibrary?.listSources() ?? [];
+    const snapshots = this.#config.mountedDocLibrary?.listSnapshots() ?? [];
+    const cronJobs = this.#config.cronStorage?.read() ?? [];
+    const imStorage = this.#config.imEventStorage;
+    const lastEvent = imStorage?.since(undefined).slice(-1)[0];
+
+    return {
+      feishu: {
+        runtime: runtimeFeishu,
+        configuredInStorage: !!storedFeishu,
+        ...(storedFeishu?.appId ? { appId: storedFeishu.appId } : {}),
+        ...(storedFeishu?.chatId ? { chatId: storedFeishu.chatId } : {}),
+        hasAppSecret: !!storedFeishu?.appSecret,
+        hasVerificationToken: !!storedFeishu?.verificationToken,
+        hasEncryptKey: !!storedFeishu?.encryptKey,
+        permissionsHint: "若要让 Agent 读取部门人数、直属成员等组织信息，飞书应用需额外开通通讯录 / 部门读取权限。",
+      },
+      metrics: [
+        {
+          key: "memory",
+          label: "长期记忆",
+          value: String(this.#config.memoryStorage?.all().length ?? 0),
+          hint: "memory.json",
+        },
+        {
+          key: "im_events",
+          label: "IM 事件",
+          value: imStorage ? `${imStorage.count} / ${imStorage.total}` : "0",
+          hint: "保留数 / 累计数",
+        },
+        {
+          key: "sessions",
+          label: "会话数",
+          value: String(this.#config.conversationStorage?.sessionCount ?? 0),
+          hint: "ConversationStorage",
+        },
+        {
+          key: "docs",
+          label: "飞书文档",
+          value: `${snapshots.length} / ${sources.filter((item) => item.enabled).length}`,
+          hint: "已同步 / 已启用",
+        },
+        {
+          key: "cron",
+          label: "Cron",
+          value: `${cronJobs.filter((job) => job.enabled).length} / ${cronJobs.length}`,
+          hint: "启用 / 总数",
+        },
+      ],
+      configFiles: this.#buildStatusFiles(),
+      ...(lastEvent ? {
+        lastIMEvent: {
+          platform: lastEvent.platform,
+          chatId: lastEvent.chatId,
+          userId: lastEvent.userId,
+          timestamp: lastEvent.timestamp,
+          textPreview: limitStatusText(lastEvent.text, 96),
+        },
+      } : {}),
+    };
+  }
+
+  #buildStatusFiles(): StatusFile[] {
+    const files: StatusFile[] = [];
+    const imConfig = this.#config.imConfigStorage?.read();
+    const agentConfig = this.#config.agentConfigStorage?.read();
+    const llmConfig = this.#config.llmConfigStorage?.read();
+    const dailyDigest = this.#config.dailyDigestConfigStorage?.read();
+    const mountedDocs = this.#config.mountedDocConfigStorage?.read();
+    const cron = this.#config.cronStorage?.read();
+
+    if (this.#config.imConfigStorage) {
+      files.push(buildStatusFile(
+        "im_config",
+        "IM 配置",
+        this.#config.imConfigStorage.filePath,
+        imConfig?.feishu
+          ? `飞书已配置；App ID ${imConfig.feishu.appId || "-"}；${imConfig.feishu.chatId ? "已设置 Chat ID" : "未设置 Chat ID"}`
+          : "尚未配置飞书凭证",
+      ));
+    }
+    if (this.#config.llmConfigStorage) {
+      files.push(buildStatusFile(
+        "llm_config",
+        "LLM 配置",
+        this.#config.llmConfigStorage.filePath,
+        `模型 ${llmConfig?.model || "默认"}；${llmConfig?.baseURL ? "已设置 Base URL" : "默认 API 地址"}；${llmConfig?.httpsProxy ? "已设置代理" : "无代理"}`,
+      ));
+    }
+    if (this.#config.agentConfigStorage) {
+      files.push(buildStatusFile(
+        "agent_config",
+        "Agent 配置",
+        this.#config.agentConfigStorage.filePath,
+        `名称 ${agentConfig?.name || "默认"}；${agentConfig?.systemPrompt ? "已自定义 system prompt" : "默认 system prompt"}；allowedPaths ${agentConfig?.allowedPaths?.length ?? 0} 条`,
+      ));
+    }
+    if (this.#config.dailyDigestConfigStorage) {
+      files.push(buildStatusFile(
+        "daily_digest_config",
+        "DailyDigest 配置",
+        this.#config.dailyDigestConfigStorage.filePath,
+        `搜索主题 ${dailyDigest?.queries?.length ?? 0} 条`,
+      ));
+    }
+    if (this.#config.mountedDocConfigStorage) {
+      const docs = mountedDocs?.docs ?? [];
+      files.push(buildStatusFile(
+        "mounted_docs_config",
+        "飞书文档挂载配置",
+        this.#config.mountedDocConfigStorage.filePath,
+        `文档 ${docs.length} 篇；启用 ${docs.filter((doc) => doc.enabled).length} 篇`,
+      ));
+    }
+    if (this.#config.cronStorage) {
+      files.push(buildStatusFile(
+        "cron_config",
+        "Cron 配置",
+        this.#config.cronStorage.filePath,
+        `任务 ${cron?.length ?? 0} 条；启用 ${cron?.filter((job) => job.enabled).length ?? 0} 条`,
+      ));
+    }
+    if (this.#config.memoryStorage) {
+      files.push(buildStatusFile(
+        "memory_store",
+        "记忆库文件",
+        this.#config.memoryStorage.filePath,
+        `记忆 ${this.#config.memoryStorage.all().length} 条`,
+      ));
+    }
+    if (this.#config.imEventStorage?.filePath) {
+      files.push(buildStatusFile(
+        "im_events",
+        "IM 事件日志",
+        this.#config.imEventStorage.filePath,
+        `当前保留 ${this.#config.imEventStorage.count} 条；累计 ${this.#config.imEventStorage.total} 条`,
+      ));
+    }
+    if (this.#config.conversationStorage) {
+      files.push(buildStatusFile(
+        "conversations",
+        "会话历史",
+        this.#config.conversationStorage.filePath,
+        `会话 ${this.#config.conversationStorage.sessionCount} 个`,
+      ));
+    }
+
+    return files;
   }
 
   #handleNews(req: IncomingMessage, res: ServerResponse): void {
@@ -962,6 +1176,27 @@ function extractThinking(content: unknown): string[] {
   return content
     .filter((b): b is { type: "thinking"; thinking: string } => (b as { type: string }).type === "thinking")
     .map((b) => b.thinking);
+}
+
+function buildStatusFile(key: string, label: string, path: string, summary: string): StatusFile {
+  const exists = existsSync(path);
+  if (!exists) {
+    return { key, label, path, exists, summary };
+  }
+  const stat = statSync(path);
+  return {
+    key,
+    label,
+    path,
+    exists,
+    summary,
+    updatedAt: stat.mtime.toISOString(),
+    sizeBytes: stat.size,
+  };
+}
+
+function limitStatusText(text: string, limit: number): string {
+  return text.length > limit ? `${text.slice(0, limit)}...` : text;
 }
 
 /** Mask sensitive string: show first 4 chars + "****". */

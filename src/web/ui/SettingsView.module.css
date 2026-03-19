@@ -260,3 +260,79 @@
 .docExcerpt {
   line-height: 1.5;
 }
+
+.runtimeCard {
+  margin-bottom: 20px;
+  padding: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.runtimeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.runtimeTitle {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.runtimeBadge {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.runtimeOn {
+  color: var(--tool-result-accent);
+  background: color-mix(in srgb, var(--tool-result-accent) 15%, transparent);
+}
+
+.runtimeOff {
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+}
+
+.runtimeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 14px;
+}
+
+.runtimeItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.runtimeLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.runtimeValue {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.runtimeMono {
+  font-family: "SF Mono", "Fira Code", monospace;
+  word-break: break-all;
+}
+
+.runtimeHint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
