@@ -5,13 +5,14 @@ import { WecomEcho } from "../platform/wecom.js";
 import type { IMPlatform } from "../platform/types.js";
 import type { IMEventStorage } from "../im/storage.js";
 import type { ConversationStorage } from "../im/conversations.js";
+import { buildIMRunContext, persistIMRunContext } from "../im/context.js";
 
 export interface ClawServerConfig {
   port?: number;
   routes: Record<string, { platform: IMPlatform; agent: Agent }>;
   /** Optional storage for recording incoming IM events. */
   imEventStorage?: IMEventStorage;
-  /** Optional storage for per-chatId conversation history (multi-turn memory). */
+  /** Optional storage for per-session conversation history (multi-turn memory). */
   conversationStorage?: ConversationStorage;
 }
 
@@ -154,18 +155,17 @@ export class ClawServer {
       replyText: undefined,
     });
 
-    const contextPrefix = `[消息来源: ${message.platform} | chatId: ${message.chatId} | userId: ${message.userId}]\n`;
-    const history = this.#config.conversationStorage?.get(message.chatId) ?? [];
+    const runContext = buildIMRunContext(message, this.#config.conversationStorage);
 
     this.#activeRequests++;
     route.agent
-      .run(contextPrefix + message.text, { history })
+      .run(runContext.input, { history: runContext.history })
       .then(async (result) => {
         const lastMsg = result.messages.findLast(
           (m: import("../llm/types.js").Message) => m.role === "assistant",
         );
         const reply = extractText(lastMsg?.content);
-        this.#config.conversationStorage?.set(message.chatId, result.messages);
+        persistIMRunContext(this.#config.conversationStorage, message, result.messages);
         if (eventId !== undefined) this.#config.imEventStorage?.setReply(eventId, reply);
         if (reply) await route.platform.send(message.chatId, reply);
       })

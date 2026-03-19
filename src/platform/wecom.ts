@@ -70,10 +70,13 @@ export class WecomPlatform implements IMPlatform {
     const toUser = extractXmlTag(plain.message, "ToUserName");
 
     if (!fromUser || msgType !== "text" || !content) return null;
+    const chatId = toUser ?? fromUser;
 
     return {
       platform: this.name,
-      chatId: toUser ?? fromUser,
+      chatId,
+      sessionId: chatId,
+      continuityId: buildContinuityId(this.name, chatId, fromUser),
       userId: fromUser,
       text: content.trim(),
       raw: plain.message,
@@ -209,4 +212,8 @@ function requireEnv(key: string): string {
   const value = process.env[key];
   if (!value) throw new Error(`Missing required environment variable: ${key}`);
   return value;
+}
+
+function buildContinuityId(platform: string, chatId: string, userId: string): string {
+  return `${platform}:${chatId}:${userId || "anonymous"}`;
 }

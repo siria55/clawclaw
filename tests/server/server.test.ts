@@ -1,9 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ClawServer } from "../../src/server/index.js";
 import type { IMPlatform } from "../../src/platform/types.js";
 import type { Agent } from "../../src/core/agent.js";
 import { FeishuChallenge } from "../../src/platform/feishu.js";
 import { WecomEcho } from "../../src/platform/wecom.js";
+import { ConversationStorage } from "../../src/im/conversations.js";
+import type { ConversationStorage } from "../../src/im/conversations.js";
 
 function makeMockPlatform(overrides: Partial<IMPlatform> = {}): IMPlatform {
   return {
@@ -86,7 +91,15 @@ describe("ClawServer", () => {
   it("returns 200 and dispatches message to agent", async () => {
     const agent = makeMockAgent("hello back");
     const platform = makeMockPlatform({
-      parse: vi.fn(async () => ({ platform: "mock", chatId: "chat1", userId: "user1", text: "ping", raw: {} })),
+      parse: vi.fn(async () => ({
+        platform: "mock",
+        chatId: "chat1",
+        sessionId: "chat1",
+        continuityId: "mock:chat1:user1",
+        userId: "user1",
+        text: "ping",
+        raw: {},
+      })),
     });
     const { server, url } = await startServer({ "/hook": { platform, agent } });
     const res = await fetch(`${url}/hook`, { method: "POST", body: "{}" });
@@ -97,6 +110,62 @@ describe("ClawServer", () => {
       expect.objectContaining({ history: expect.any(Array) }),
     );
     await server.stop();
+  });
+
+  it("loads bridged history when a new session arrives", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claw-server-"));
+    try {
+      const conversationStorage = new ConversationStorage(join(dir, "conversations.json"));
+      conversationStorage.set(
+        "chat1",
+        [
+          { role: "user", content: "昨天先聊到日报" },
+          { role: "assistant", content: [{ type: "text", text: "好的，我记住了。" }] },
+        ],
+        "mock:chat1:user1",
+      );
+
+      const agent = makeMockAgent("继续");
+      const platform = makeMockPlatform({
+        parse: vi.fn(async () => ({
+          platform: "mock",
+          chatId: "chat1",
+          sessionId: "chat1#thread:root1",
+          continuityId: "mock:chat1:user1",
+          userId: "user1",
+          text: "今天继续",
+          raw: {},
+        })),
+      });
+
+      const server = new ClawServer({
+        port: 0,
+        routes: { "/hook": { platform, agent } },
+        conversationStorage,
+      });
+      await server.start();
+      const url = `http://localhost:${server.port}`;
+
+      const res = await fetch(`${url}/hook`, { method: "POST", body: "{}" });
+      expect(res.status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(vi.mocked(agent.run)).toHaveBeenCalledWith(
+        expect.stringContaining("今天继续"),
+        expect.objectContaining({
+          history: [
+            expect.objectContaining({
+              role: "user",
+              content: expect.stringContaining("会话切换参考"),
+            }),
+          ],
+        }),
+      );
+
+      await server.stop();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("returns 200 ok and skips agent when parse returns null", async () => {

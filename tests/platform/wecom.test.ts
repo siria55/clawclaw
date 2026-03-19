@@ -141,7 +141,14 @@ describe("WecomPlatform.parse()", () => {
     const body = makeXmlBody(wecomAesEncrypt(innerXml, TEST_CORP_ID, TEST_KEY));
 
     const msg = await platform.parse(body);
-    expect(msg).toMatchObject({ platform: "wecom", userId: "user_open_id", text: "hi there" });
+    expect(msg).toMatchObject({
+      platform: "wecom",
+      chatId: "bot_id",
+      sessionId: "bot_id",
+      continuityId: "wecom:bot_id:user_open_id",
+      userId: "user_open_id",
+      text: "hi there",
+    });
   });
 
   it("returns null when corp ID does not match", async () => {

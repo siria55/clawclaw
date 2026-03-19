@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebServer } from "../../src/web/server.js";
 import { MemoryStorage } from "../../src/memory/storage.js";
 import { ConfigStorage } from "../../src/config/storage.js";
+import { ConversationStorage } from "../../src/im/conversations.js";
 import type { IMConfig, AgentMetaConfig } from "../../src/config/types.js";
 import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
@@ -236,6 +237,67 @@ describe("WebServer", () => {
     expect(body).toContain("let me think...");
     expect(body).toContain("event: message");
     await server.stop();
+  });
+
+  it("uses bridged session history for IM webhook routes", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claw-webhook-"));
+    try {
+      const conversationStorage = new ConversationStorage(join(dir, "conversations.json"));
+      conversationStorage.set(
+        "chat1",
+        [
+          { role: "user", content: "昨天先聊到日报" },
+          { role: "assistant", content: [{ type: "text", text: "好的，我记住了。" }] },
+        ],
+        "mock:chat1:user1",
+      );
+
+      const agent = makeMockAgent("继续");
+      const platform = {
+        name: "mock",
+        verify: vi.fn(async () => {}),
+        parse: vi.fn(async () => ({
+          platform: "mock",
+          chatId: "chat1",
+          sessionId: "chat1#thread:root1",
+          continuityId: "mock:chat1:user1",
+          userId: "user1",
+          text: "今天继续",
+          raw: {},
+        })),
+        send: vi.fn(async () => {}),
+      };
+
+      const server = new WebServer({
+        agent,
+        port: 0,
+        staticDir,
+        routes: { "/hook": { platform, agent } },
+        conversationStorage,
+      });
+      await server.start();
+      const url = `http://localhost:${server.port}`;
+
+      const res = await fetch(`${url}/hook`, { method: "POST", body: "{}" });
+      expect(res.status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(vi.mocked(agent.run)).toHaveBeenCalledWith(
+        expect.stringContaining("今天继续"),
+        expect.objectContaining({
+          history: [
+            expect.objectContaining({
+              role: "user",
+              content: expect.stringContaining("会话切换参考"),
+            }),
+          ],
+        }),
+      );
+
+      await server.stop();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("GET /api/news returns empty page when no skillDataRoot", async () => {

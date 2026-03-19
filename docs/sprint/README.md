@@ -111,6 +111,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 38 — DailyDigestSkill 改用 Playwright 直接搜索
 原 sub-agent 方案（12 turns × N 关键词）触发 API rate limit。改为 Playwright 直接导航搜索页、locator 提取所有链接（零 LLM 调用），完成后**一次** `ctx.agent.run()` 筛选为结构化 JSON。移除 `createBrowserTools` / `defineTool` / `Agent` 导入，新增 `extractPageLinks()` + `searchNewsWithBrowser()`。typecheck 通过。
 
+### Sprint 39 — 飞书 Session 拆分 + 会话桥接
+`IMMessage` 新增 `sessionId` / `continuityId`。飞书普通消息沿用 `chatId`，线程消息改用 `chatId#thread:<rootId|threadId|parentId>`，避免不同来源串 session。`ConversationStorage` 改为按 `sessionId` 持久化，并在同 `chatId + userId` 的新 session 首轮注入一条短桥接消息；长期记忆仍由全局 `MemoryStorage` 共用。143 tests 通过。
+
 ### Sprint 37 — 清理 src/news/ 死代码目录
 Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
 

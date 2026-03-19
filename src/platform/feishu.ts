@@ -101,11 +101,16 @@ export class FeishuPlatform implements IMPlatform {
     if ((sender["sender_type"] as string) === "app") return null;
 
     const content = JSON.parse(message["content"] as string) as { text?: string };
+    const senderId = asRecord(sender["sender_id"]);
+    const chatId = asString(message["chat_id"]);
+    const userId = asString(senderId?.["open_id"]);
 
     return {
       platform: this.name,
-      chatId: message["chat_id"] as string,
-      userId: (sender["sender_id"] as Record<string, string>)["open_id"] ?? "",
+      chatId,
+      sessionId: buildFeishuSessionId(message, chatId),
+      continuityId: buildContinuityId(this.name, chatId, userId),
+      userId,
       text: content.text?.trim() ?? "",
       raw: event,
     };
@@ -297,4 +302,22 @@ function requireEnv(key: string): string {
   const value = process.env[key];
   if (!value) throw new Error(`Missing required environment variable: ${key}`);
   return value;
+}
+
+function buildFeishuSessionId(message: Record<string, unknown>, chatId: string): string {
+  const anchorId = asString(message["root_id"]) || asString(message["thread_id"]) || asString(message["parent_id"]);
+  return anchorId ? `${chatId}#thread:${anchorId}` : chatId;
+}
+
+function buildContinuityId(platform: string, chatId: string, userId: string): string {
+  return `${platform}:${chatId}:${userId || "anonymous"}`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }

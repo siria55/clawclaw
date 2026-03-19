@@ -17,6 +17,10 @@ src/index.ts（公共入口）
 │   ├── tools/memory.ts    ← createMemoryTools()
 │   └── tools/read-file.ts ← createReadFileTool()
 │
+├── im/
+│   ├── conversations.ts   ← ConversationStorage（session 历史 + bridge）
+│   └── context.ts         ← buildIMRunContext() / persistIMRunContext()
+│
 ├── memory/storage.ts      ← MemoryStorage（JSON 持久化）
 │
 ├── platform/feishu.ts     ← 飞书适配器
@@ -96,6 +100,23 @@ getContext?: (messages: Message[]) => Message[] | Promise<Message[]>
 
 ---
 
+## IM 会话模型
+
+`chatId` 和 `sessionId` 在 IM 场景里职责不同：
+
+- `chatId`：平台真实回包目标，`platform.send(chatId, text)` 仍只认这个值
+- `sessionId`：ConversationStorage 的短期历史键
+- `continuityId`：同一发言人在同一来源里的会话桥接键
+
+当前规则：
+- 飞书普通消息：`sessionId = chatId`
+- 飞书线程消息：`sessionId = ${chatId}#thread:<rootId|threadId|parentId>`
+- 企业微信：暂时仍按 `chatId` 作为 `sessionId`
+
+`ConversationStorage.loadSession(sessionId, continuityId)` 先读取当前 session 历史；若为空，则回看同 `continuityId` 的最近一个 session，把最后一条用户消息和最后一条助手回复压成一条短参考消息。这样新 session 能自然续上，但不会把旧历史整段搬过去。
+
+---
+
 ## Skills 系统
 
 ### 架构设计
@@ -168,14 +189,15 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 `NewsStorage` 已移除（Sprint 36）。新闻数据来自 `DailyDigestSkill` 每次运行保存的 `YYYY-MM-DD.json`，`GET /api/news` 直接扫描这些文件。
 
-### MemoryStorage / ConfigStorage
+### MemoryStorage / ConversationStorage / ConfigStorage
 
+- `new ConversationStorage("./data/im/conversations.json")` — IM session 历史
 - `new ConfigStorage<IMConfig>("./data/im-config.json")` — IM 凭证
 - `new ConfigStorage<LLMConfig>("./data/llm-config.json")` — LLM 配置
 - `new ConfigStorage<AgentMetaConfig>("./data/agent-config.json")` — Agent 名称和系统提示词
 - `new ConfigStorage<CronJobConfig[]>("./data/cron-config.json", [])` — Cron 任务配置
 
-三个配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。
+ConversationStorage 负责短期 session 历史；MemoryStorage 负责长期共享记忆。三个配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。
 
 ---
 

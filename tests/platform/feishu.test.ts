@@ -12,13 +12,17 @@ function nowTs(): string {
   return String(Math.floor(Date.now() / 1000));
 }
 
-function makeMessageEvent(): string {
+function makeMessageEvent(extraMessage: Record<string, unknown> = {}): string {
   return JSON.stringify({
     schema: "2.0",
     header: { event_type: "im.message.receive_v1" },
     event: {
       sender: { sender_id: { open_id: "ou_user123" }, sender_type: "user" },
-      message: { chat_id: "oc_chat456", content: JSON.stringify({ text: "hello" }) },
+      message: {
+        chat_id: "oc_chat456",
+        content: JSON.stringify({ text: "hello" }),
+        ...extraMessage,
+      },
     },
   });
 }
@@ -90,8 +94,20 @@ describe("FeishuPlatform.parse()", () => {
     expect(msg).toMatchObject({
       platform: "feishu",
       chatId: "oc_chat456",
+      sessionId: "oc_chat456",
+      continuityId: "feishu:oc_chat456:ou_user123",
       userId: "ou_user123",
       text: "hello",
+    });
+  });
+
+  it("uses thread root as the session id when the message belongs to a thread", async () => {
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    const msg = await platform.parse(makeMessageEvent({ root_id: "om_root789", thread_id: "omt_thread456" }));
+    expect(msg).toMatchObject({
+      chatId: "oc_chat456",
+      sessionId: "oc_chat456#thread:om_root789",
+      continuityId: "feishu:oc_chat456:ou_user123",
     });
   });
 

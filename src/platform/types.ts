@@ -4,6 +4,10 @@ export interface IMMessage {
   platform: string;
   /** Conversation ID (group chat or direct message) */
   chatId: string;
+  /** Session ID used for multi-turn history isolation */
+  sessionId: string;
+  /** Scope ID used to bridge adjacent sessions from the same sender */
+  continuityId: string;
   /** ID of the user who sent the message */
   userId: string;
   /** Plain text content */
