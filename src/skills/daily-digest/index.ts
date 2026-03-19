@@ -88,6 +88,15 @@ const LOW_PRIORITY_HOSTS = new Set([
   "mbd.baidu.com",
 ]);
 
+const DAILY_DECK_LINES = [
+  "先看事实，再下判断。",
+  "把噪音滤掉，趋势才会显形。",
+  "信息越多，越要保持克制。",
+  "读新闻不是囤信息，而是训练判断。",
+  "在变化里找脉络，在细节里看方向。",
+  "真正重要的，不是更快，而是更准。",
+] as const;
+
 export const DAILY_DIGEST_SCREENSHOT = {
   width: 1080,
   height: 1400,
@@ -189,10 +198,8 @@ export function renderDailyDigestHtml(selection: DailyDigestSelection, date: str
     LAYOUT_CSS,
     DATE_LABEL: escapeHtml(formatIsoDate(date)),
     VOL_LABEL: String(Math.max(selection.all.length, 1)).padStart(2, "0"),
+    DECK_TEXT: escapeHtml(pickDeckText(date)),
     SUMMARY_TEXT: escapeHtml(buildSummaryText(selection)),
-    DOMESTIC_COUNT: String(selection.domestic.length).padStart(2, "0"),
-    INTERNATIONAL_COUNT: String(selection.international.length).padStart(2, "0"),
-    TOTAL_COUNT: String(selection.all.length).padStart(2, "0"),
     DOMESTIC_SECTION: renderSection("domestic", selection.domestic),
     INTERNATIONAL_SECTION: renderSection("international", selection.international),
   });
@@ -202,10 +209,13 @@ export function renderDailyDigestHtml(selection: DailyDigestSelection, date: str
 function renderMarkdown(selection: DailyDigestSelection, date: string): string {
   const domesticRows = renderMarkdownSection(selection.domestic);
   const internationalRows = renderMarkdownSection(selection.international);
+  const summary = buildSummaryText(selection);
   return [
     "# 每日新闻日报",
     "",
     `**${date}**`,
+    "",
+    `> ${summary}`,
     "",
     `## 国内（${selection.domestic.length}）`,
     "",
@@ -648,7 +658,7 @@ function renderSection(category: DigestCategory, articles: DigestArticle[]): str
 
   return fillTemplate(SECTION_TEMPLATE, {
     SECTION_KEY: category,
-    SECTION_EYEBROW: category === "domestic" ? "CHINA TRACK" : "GLOBAL TRACK",
+    SECTION_EYEBROW: category === "domestic" ? "国内主线" : "国际主线",
     SECTION_TITLE: category === "domestic" ? "国内科技" : "国际科技",
     SECTION_COUNT: String(articles.length).padStart(2, "0"),
     SECTION_ITEMS: items,
@@ -666,7 +676,6 @@ function renderItem(article: DigestArticle, index: number): string {
     TITLE: escapeHtml(article.title),
     SUMMARY_BLOCK: summaryBlock,
     SOURCE: escapeHtml(article.source || "未知来源"),
-    CATEGORY_LABEL: article.category === "domestic" ? "LOCAL SIGNAL" : "GLOBAL SIGNAL",
   });
 }
 
@@ -689,22 +698,52 @@ function buildSummaryText(selection: DailyDigestSelection): string {
     return "今日检索已完成，但暂未筛出可展示的文章。建议调整关键词或稍后重跑。";
   }
 
-  const domesticSources = summarizeSources(selection.domestic);
-  const internationalSources = summarizeSources(selection.international);
-  return `本期共入选 ${selection.all.length} 篇文章，按国内 ${selection.domestic.length} / 国际 ${selection.international.length} 分栏。国内重点来自 ${domesticSources}；国际重点来自 ${internationalSources}。`;
+  const parts = [
+    buildCategorySummary("国内焦点集中在", selection.domestic),
+    buildCategorySummary("国际方面重点关注", selection.international),
+  ].filter(Boolean);
+  return parts.join(" ");
 }
 
-function summarizeSources(articles: DigestArticle[]): string {
-  if (articles.length === 0) return "暂无明确来源";
-  const counts = new Map<string, number>();
+function buildCategorySummary(prefix: string, articles: DigestArticle[]): string {
+  const highlights = pickHighlights(articles, 2);
+  if (highlights.length === 0) return "";
+  return `${prefix}${highlights.join("；")}。`;
+}
+
+function pickHighlights(articles: DigestArticle[], limit: number): string[] {
+  const seen = new Set<string>();
+  const highlights: string[] = [];
   for (const article of articles) {
-    counts.set(article.source, (counts.get(article.source) ?? 0) + 1);
+    const snippet = buildHighlightSnippet(article);
+    if (!snippet || seen.has(snippet)) continue;
+    highlights.push(snippet);
+    seen.add(snippet);
+    if (highlights.length >= limit) break;
   }
-  return [...counts.entries()]
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 3)
-    .map(([source]) => source)
-    .join("、");
+  return highlights;
+}
+
+function buildHighlightSnippet(article: DigestArticle): string {
+  return normalizeHighlight(article.summary) || normalizeHighlight(article.title);
+}
+
+function normalizeHighlight(text: string): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+  const sentence = compact.split(/[。！？!?]/)[0]?.trim() ?? compact;
+  return truncateText(sentence.replace(/^[，、；：:]+|[，、；：:]+$/g, ""), 34);
+}
+
+function truncateText(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  return `${text.slice(0, Math.max(limit - 1, 1)).trimEnd()}…`;
+}
+
+function pickDeckText(date: string): string {
+  const seed = [...date.replace(/\D/g, "")]
+    .reduce((total, digit) => total + Number(digit), 0);
+  return DAILY_DECK_LINES[seed % DAILY_DECK_LINES.length] ?? DAILY_DECK_LINES[0];
 }
 
 function fillTemplate(template: string, values: Record<string, string>): string {

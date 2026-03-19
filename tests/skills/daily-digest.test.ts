@@ -114,11 +114,17 @@ describe("renderDailyDigestHtml", () => {
     expect(html).toContain("<style>");
     expect(html).toContain(".news-section");
     expect(html).toContain("2026.03.19");
+    expect(html).toContain("真正重要的，不是更快，而是更准。");
+    expect(html).toContain("国内主线");
     expect(html).toContain("国内科技");
     expect(html).toContain("国际科技");
-    expect(html).toContain("Browser-searched");
+    expect(html).toContain("国内焦点集中在A summary。");
+    expect(html).toContain("国际方面重点关注B summary。");
     expect(html).toContain("https://example.com/A");
     expect(html).toContain("https://example.com/B");
+    expect(html).not.toContain("Browser-searched");
+    expect(html).not.toContain("LOCAL SIGNAL");
+    expect(html).not.toContain("GLOBAL SIGNAL");
     expect(html).not.toContain("{{");
   });
 });

@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`。
 
 ---
 
@@ -73,6 +73,13 @@
 - Agent 模式、直发模式和 `sendSkillOutput` 都支持多目标广播
 - WebUI Cron 表单改成多行发送目标，服务端保存时自动做去重和兼容归一化
 
+## 第十一阶段：日报模板内容化（Sprint 53）
+
+- `daily-digest` 封面副标题改为每日轮换的中文短句，不再写死英文说明
+- “今日摘要” 改成基于已选新闻内容生成的概览，不再展示纯数量 chips
+- 新闻条目里的 `LOCAL SIGNAL` / `GLOBAL SIGNAL` 被移除，区块眉标题改成中文
+- 飞书 Cron 多目标投递继续兼容个人 `ou_` 和群 `oc_` 两类 chat ID
+
 ---
 
 ## 当前落点
@@ -85,3 +92,4 @@
 - 飞书回复已支持 Markdown 渲染，Cron 直发可选 `text` / `markdown` / `image`
 - 飞书里问“给我今天的新闻”会优先收到今日日报图片；文本版可显式索取
 - 飞书 Cron 已支持同一任务同时投递到多个 chat / 群
+- 今日日报封面会轮换一句中文短句，“今日摘要”展示内容概览而不是数量统计

@@ -116,6 +116,9 @@ Cron 投递目标支持两种配置：
 - 多目标：`chatIds`
 
 当 `chatIds` 存在时，同一条 Cron 会把同一份内容广播到全部目标，可同时覆盖飞书私聊和群聊。
+飞书里常见的目标 ID 形式为：
+- `ou_...`：用户 / 私聊目标
+- `oc_...`：群聊 chat ID
 
 除 Cron 外，飞书 IM 入口也有一条面向日报的快捷处理：
 - 当用户直接在飞书里问“给我今天的新闻”这类短请求时，服务端优先返回 `daily-digest` 的今日结果
@@ -158,12 +161,13 @@ Agent 指令...
 3. 按国内 / 国际两路调用专用 LLM 抽取提示词，将候选链接筛成带 `category` 的结构化文章数组
 4. 若 LLM 返回 fenced json 或 near-JSON（如标题引号未转义），解析层会做兜底修复
 5. 依据配额裁成国内 10 篇、国际 5 篇，共 15 篇
-6. 将内容填入 HTML 模板，Playwright 截图为 PNG
+6. 将内容填入 HTML 模板，封面 `deck` 使用每日轮换短句，“今日摘要”按新闻内容生成概览
 7. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
 8. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
 
 HTML 结构由 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 提供，视觉样式由 `src/skills/daily-digest/layout.css` 提供；Skill 运行时读取这些模板并填入文本内容，保证模板、截图和导出 HTML 使用同一套版式。
 PNG 截图使用 `1080px` 版心和 `4x` 高清输出，适合在 IM 里预览和放大查看。
+模板中的“今日摘要”不再展示国内 / 国际 / 总计数量 chips，而是直接输出当日内容概览；新闻列表里的无效英文信号标签也已移除。
 搜索主题可在 WebUI 设置页调整，服务端持久化到 `data/skills/daily-digest/config.json`，下一次运行 `daily-digest` 时自动生效。
 
 **数据目录：**

@@ -153,10 +153,7 @@ body {
 .meta-vol,
 .summary-label,
 .section-eyebrow,
-.source,
-.link-mark,
-.stat-label,
-.stat-value {
+.source {
   font-family: "Inter", "Avenir Next", sans-serif;
   text-transform: uppercase;
 }
@@ -247,36 +244,6 @@ body {
   font-weight: 700;
   letter-spacing: 0.18em;
   color: var(--accent-blue);
-}
-
-.stats-row {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-bottom: 18px;
-}
-
-.stat-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: rgba(122, 143, 216, 0.12);
-}
-
-.stat-label {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: #6878b5;
-}
-
-.stat-value {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  color: var(--ink-strong);
 }
 
 .summary-text {
@@ -423,13 +390,6 @@ body {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.12em;
-}
-
-.link-mark {
-  color: rgba(89, 100, 167, 0.86);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
 }
 
 .empty-state {

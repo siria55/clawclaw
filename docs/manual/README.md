@@ -126,6 +126,7 @@ pnpm start
 管理所有定时任务：
 - 新增、编辑、删除定时任务
 - 发送目标支持多行输入，每行一个 chatId，可同时发给个人和群
+- 飞书常见目标 ID：`ou_...` 为用户 / 私聊，`oc_...` 为群聊
 - 支持绑定 Skill（`skillId`）或发送最新 Skill 图片（`sendSkillOutput`）
 - 支持直发文本、Markdown 或图片（`direct: true`）
 - 支持点击「运行」立即执行单条任务，便于调试和校验
@@ -153,6 +154,8 @@ pnpm start
 - 搜索主题（每行一个）
 - 建议同时填写国内和国际主题
 - 保存后下一次运行 `daily-digest` 即生效，无需重启
+- 今日日报封面会自动轮换一句中文短句
+- “今日摘要”会概括当天入选新闻的内容，不再只显示数量统计
 
 **模型（LLM）配置**（保存在 `data/agent/llm-config.json`）：
 - API Key / Base URL / HTTPS Proxy / 模型名称
