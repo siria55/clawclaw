@@ -12,7 +12,7 @@ export interface CronJob {
   /** When true, send message directly without running through agent */
   direct: boolean;
   /** Message type for direct mode. Defaults to "text". */
-  msgType: "text" | "image";
+  msgType: "text" | "image" | "markdown";
   /** Skill id to execute (generate content, no IM delivery). */
   skillId?: string;
   /**
@@ -39,8 +39,8 @@ export interface CronJobConfig {
   message: string;
   /** When true, send message directly without running through agent */
   direct?: boolean;
-  /** Message type for direct mode: "text" (default) or "image" (message = URL or local path) */
-  msgType?: "text" | "image";
+  /** Message type for direct mode: "text" (default), "markdown" or "image" (message = URL or local path) */
+  msgType?: "text" | "image" | "markdown";
   /** Skill id to execute (generate content, no IM delivery). */
   skillId?: string;
   /** Skill id whose latest PNG output should be sent to IM. */

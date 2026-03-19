@@ -9,7 +9,15 @@
 
 .inner {
   width: 100%;
-  max-width: 920px;
+  max-width: 1140px;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.main {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -58,6 +66,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  scroll-margin-top: 18px;
 }
 
 .section:last-child {
@@ -409,6 +418,7 @@
 
   .inner {
     max-width: 100%;
+    grid-template-columns: 1fr;
   }
 
   .platformGrid {

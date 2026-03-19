@@ -68,4 +68,14 @@ describe("CronView", () => {
     });
     expect(fetchMock).toHaveBeenCalledWith("/api/cron/daily-digest/run", { method: "POST" });
   });
+
+  it("shows markdown as a direct message type option", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => makeResponse({ jobs: [] })));
+
+    render(React.createElement(CronView));
+    fireEvent.click(screen.getAllByText("+ 新增")[0]!);
+    fireEvent.click(screen.getAllByRole("checkbox")[0]!);
+
+    expect(await screen.findByRole("option", { name: "Markdown（飞书渲染）" })).toBeDefined();
+  });
 });

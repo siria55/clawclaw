@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`。
 
 ---
 
@@ -53,11 +53,20 @@
 - WebUI 状态页增强为运行概览，可直接查看飞书配置来源、配置文件状态、关键指标
 - 状态页新增飞书群聊摘要，可看到机器人已加入的群、群名、最近事件和时间
 
+## 第八阶段：页内导航与飞书 Markdown 交付（Sprint 50）
+
+- `状态` / `设置` 长页新增页内 TOC，可在 tab 内跳到对应区块
+- 飞书支持 `post + md` 格式发送 Markdown，标题、列表、引用、代码块和链接可直接渲染
+- Agent 回复命中明显 Markdown 结构时自动升级为飞书 Markdown 发送
+- Cron 直发支持 `markdown` 类型，补齐文本 / Markdown / 图片三种直发方式
+
 ---
 
 ## 当前落点
 
 - WebUI 为 7 个标签页：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#cron` / `#settings`
+- `#status` / `#settings` 内部提供页内 TOC，不改变 tab 自身 hash
 - 新闻库来自 `data/skills/*/YYYY-MM-DD.json`
 - 长期记忆来自 `data/agent/memory.json`，仅保存 `memory_save` 显式写入的内容
 - 飞书文档挂载、飞书组织读取、Cron 立即执行、飞书群聊可视化均已可用
+- 飞书回复已支持 Markdown 渲染，Cron 直发可选 `text` / `markdown` / `image`

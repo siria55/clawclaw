@@ -69,6 +69,13 @@ export interface FeishuChat {
   description?: string;
 }
 
+interface FeishuPostContent {
+  zh_cn: {
+    title?: string;
+    content: Array<Array<{ tag: "md"; text: string }>>;
+  };
+}
+
 /** Max age of a Feishu request timestamp before it's considered a replay attack. */
 const MAX_TIMESTAMP_AGE_MS = 5 * 60 * 1000;
 
@@ -187,19 +194,7 @@ export class FeishuPlatform implements IMPlatform {
   async sendImage(chatId: string, source: string): Promise<void> {
     const token = await this.#getAccessToken();
     const imageKey = await this.#uploadImage(token, source);
-    const receiveIdType = chatId.startsWith("ou_") ? "open_id" : "chat_id";
-    const response = await fetch(
-      `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ receive_id: chatId, msg_type: "image", content: JSON.stringify({ image_key: imageKey }) }),
-      },
-    );
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(`Feishu sendImage failed: ${response.status} ${body}`);
-    }
+    await this.#sendMessage(token, chatId, "image", { image_key: imageKey });
   }
 
   /**
@@ -208,19 +203,7 @@ export class FeishuPlatform implements IMPlatform {
   async sendImageBuffer(chatId: string, buffer: Buffer): Promise<void> {
     const token = await this.#getAccessToken();
     const imageKey = await this.#uploadImageBuffer(token, buffer);
-    const receiveIdType = chatId.startsWith("ou_") ? "open_id" : "chat_id";
-    const response = await fetch(
-      `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ receive_id: chatId, msg_type: "image", content: JSON.stringify({ image_key: imageKey }) }),
-      },
-    );
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(`Feishu sendImageBuffer failed: ${response.status} ${body}`);
-    }
+    await this.#sendMessage(token, chatId, "image", { image_key: imageKey });
   }
 
   /** Fetch one department by `open_department_id`. */
@@ -371,23 +354,43 @@ export class FeishuPlatform implements IMPlatform {
   }
 
   async send(chatId: string, text: string): Promise<void> {
+    if (shouldUseMarkdownPost(text)) {
+      await this.sendMarkdown(chatId, text);
+      return;
+    }
+    await this.#sendText(chatId, text);
+  }
+
+  /** Send markdown content via Feishu `post` message with a single `md` node. */
+  async sendMarkdown(chatId: string, markdown: string): Promise<void> {
     const token = await this.#getAccessToken();
+    await this.#sendMessage(token, chatId, "post", buildMarkdownPostContent(markdown));
+  }
+
+  async #sendText(chatId: string, text: string): Promise<void> {
+    const token = await this.#getAccessToken();
+    await this.#sendMessage(token, chatId, "text", { text });
+  }
+
+  async #sendMessage(
+    token: string,
+    chatId: string,
+    msgType: "text" | "image" | "post",
+    content: unknown,
+  ): Promise<void> {
     const receiveIdType = chatId.startsWith("ou_") ? "open_id" : "chat_id";
-    const response = await fetch(
-      `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          receive_id: chatId,
-          msg_type: "text",
-          content: JSON.stringify({ text }),
-        }),
+    const response = await fetch(`https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({
+        receive_id: chatId,
+        msg_type: msgType,
+        content: JSON.stringify(content),
+      }),
+    });
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       throw new Error(`Feishu send failed: ${response.status} ${body}`);
@@ -627,3 +630,45 @@ function containsCharsInOrder(text: string, query: string): boolean {
   }
   return false;
 }
+
+function shouldUseMarkdownPost(text: string): boolean {
+  if (!text.trim()) return false;
+  return MARKDOWN_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function buildMarkdownPostContent(markdown: string): FeishuPostContent {
+  const normalized = markdown.trim();
+  const title = extractMarkdownTitle(normalized);
+  const body = title ? normalized.replace(/^#{1,6}\s+.+?(?:\r?\n|$)/, "").trim() : normalized;
+  const text = body || normalized;
+  return {
+    zh_cn: {
+      ...(title ? { title } : {}),
+      content: [[{ tag: "md", text }]],
+    },
+  };
+}
+
+function extractMarkdownTitle(markdown: string): string | undefined {
+  const match = markdown.match(/^#{1,6}\s+(.+?)(?:\r?\n|$)/);
+  if (!match) return undefined;
+  const value = match[1];
+  if (!value) return undefined;
+  const title = value
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_`~]/g, "")
+    .trim();
+  return title || undefined;
+}
+
+const MARKDOWN_PATTERNS = [
+  /```/,
+  /^\s{0,3}#{1,6}\s/m,
+  /^\s*[-*+]\s/m,
+  /^\s*\d+\.\s/m,
+  /^\s*>\s/m,
+  /\[[^\]]+\]\([^)]+\)/,
+  /\*\*[^*]+\*\*/,
+  /~~[^~]+~~/,
+  /^\s*---+\s*$/m,
+];

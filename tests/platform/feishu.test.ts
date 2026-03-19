@@ -281,6 +281,56 @@ describe("FeishuPlatform org APIs", () => {
   });
 });
 
+describe("FeishuPlatform sending", () => {
+  it("sends plain text as text message", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
+      .mockResolvedValueOnce(jsonResponse({ code: 0, data: {} }));
+    global.fetch = fetchMock as typeof fetch;
+
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    await platform.send("oc_chat456", "hello world");
+
+    const request = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    const payload = JSON.parse(String(request.body)) as { msg_type: string; content: string };
+    expect(payload.msg_type).toBe("text");
+    expect(JSON.parse(payload.content)).toEqual({ text: "hello world" });
+  });
+
+  it("sends markdown content as post message", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
+      .mockResolvedValueOnce(jsonResponse({ code: 0, data: {} }));
+    global.fetch = fetchMock as typeof fetch;
+
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    await platform.sendMarkdown("oc_chat456", "# 日报\n\n- 第一条\n- 第二条");
+
+    const request = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    const payload = JSON.parse(String(request.body)) as { msg_type: string; content: string };
+    const content = JSON.parse(payload.content) as {
+      zh_cn: { title?: string; content: Array<Array<{ tag: string; text: string }>> };
+    };
+    expect(payload.msg_type).toBe("post");
+    expect(content.zh_cn.title).toBe("日报");
+    expect(content.zh_cn.content[0]?.[0]).toEqual({ tag: "md", text: "- 第一条\n- 第二条" });
+  });
+
+  it("auto-switches to markdown post when text contains markdown structure", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
+      .mockResolvedValueOnce(jsonResponse({ code: 0, data: {} }));
+    global.fetch = fetchMock as typeof fetch;
+
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    await platform.send("oc_chat456", "## 更新\n\n1. 第一项\n2. 第二项");
+
+    const request = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    const payload = JSON.parse(String(request.body)) as { msg_type: string };
+    expect(payload.msg_type).toBe("post");
+  });
+});
+
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status: 200,

@@ -9,7 +9,7 @@ interface CronJobConfig {
   platform: string;
   enabled: boolean;
   direct: boolean;
-  msgType: "text" | "image";
+  msgType: "text" | "image" | "markdown";
   skillId?: string;
   sendSkillOutput?: string;
 }
@@ -199,7 +199,7 @@ export function CronView(): React.JSX.Element {
                   <span className={styles.cronMeta}>{job.platform} · {job.chatId || "—"}{job.chatId ? ` ${getChatHint(job.chatId)}` : ""}</span>
                   {job.skillId && <span className={styles.cronMeta}>skillId: {job.skillId}</span>}
                   {job.sendSkillOutput && <span className={styles.cronMeta}>sendSkillOutput: {job.sendSkillOutput}</span>}
-                  {job.direct && <span className={styles.cronMeta}>直发 {job.msgType === "image" ? "图片" : "文本"}</span>}
+                  {job.direct && <span className={styles.cronMeta}>直发 {describeMsgType(job.msgType)}</span>}
                 </div>
                 <div className={styles.cronFooter}>
                   <div className={styles.inlineNotice}>
@@ -251,8 +251,9 @@ export function CronView(): React.JSX.Element {
               {form.direct && (
                 <div className={styles.formRow}>
                   <label className={styles.formLabel}>类型</label>
-                  <select className={styles.formInput} value={form.msgType} onChange={(e) => setForm((value) => ({ ...value, msgType: e.target.value as "text" | "image" }))}>
+                  <select className={styles.formInput} value={form.msgType} onChange={(e) => setForm((value) => ({ ...value, msgType: e.target.value as "text" | "image" | "markdown" }))}>
                     <option value="text">文本</option>
+                    <option value="markdown">Markdown（飞书渲染）</option>
                     <option value="image">图片</option>
                   </select>
                 </div>
@@ -279,4 +280,10 @@ export function CronView(): React.JSX.Element {
       </div>
     </div>
   );
+}
+
+function describeMsgType(msgType: CronJobConfig["msgType"]): string {
+  if (msgType === "image") return "图片";
+  if (msgType === "markdown") return "Markdown";
+  return "文本";
 }

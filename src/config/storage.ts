@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
  * Generic JSON file storage. Reads and writes a typed object to disk.
  *
  * @example
- * const store = new ConfigStorage<IMConfig>("./data/im-config.json");
+ * const store = new ConfigStorage<IMConfig>("./data/im/im-config.json");
  * const config = store.read(); // returns IMConfig (or {} if file missing)
  * store.write({ feishu: { ... } });
  */

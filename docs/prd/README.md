@@ -49,9 +49,13 @@ WebServer                 ← 本地调试 + 新闻库查阅界面
 所有 IM 平台适配器实现的接口，职责：
 - 解析平台推送的 Webhook 事件，转换为统一的 `IMMessage`
 - 提供签名验证，防止伪造请求
-- 实现 `send()` 方法，将文本回复发送到对应会话
+- 实现 `send()` 方法，将回复发送到对应会话；支持的平台可额外提供 `sendMarkdown()`
 
 内置适配器：飞书（Feishu/Lark）、企业微信（WeCom）。
+
+飞书当前支持两条发送路径：
+- 普通文本走 `text` 消息
+- 命中明显 Markdown 结构的内容可升级为飞书 `post` Markdown 渲染
 
 `IMMessage` 同时携带两个标识：
 - `chatId`：IM 平台真实回包目标
@@ -102,7 +106,7 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 
 触发模式：
 - **Agent 模式**：调用 Agent.run()，将 LLM 回复发送到 IM
-- **直发模式**（`direct: true`）：直接发送预设文本或图片
+- **直发模式**（`direct: true`）：直接发送预设文本、Markdown 或图片
 - **Skill 生成**（`skillId`）：执行指定 Skill，生成并保存文件，不发 IM
 - **Skill 投递**（`sendSkillOutput`）：找指定 Skill 最新 PNG，发送到 IM
 
@@ -219,8 +223,13 @@ Agent 可挂载一组飞书文档来源（名称 + URL），由服务端使用 P
 - 飞书群聊列表：机器人已加入过的群、群名、最近事件和最近时间
 - 配置文件状态：各 JSON 配置文件 / 存储文件的路径、是否已落盘、更新时间、体积和摘要
 - 运行指标：长期记忆条数、IM 事件数、会话数、挂载文档同步数、Cron 启用数
+- `状态` / `设置` 两个长页面 tab 内置页内 TOC，可直接跳到对应区块
 
 Web UI 七个标签页各对应独立 URL（hash 路由）：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#cron` / `#settings`，支持直接访问和浏览器前进/后退。
+
+其中：
+- `#status` 和 `#settings` 内部支持页内 TOC 跳转，不影响原有 tab hash 路由
+- `#cron` 的直发模式支持 `text` / `markdown` / `image`
 
 ---
 

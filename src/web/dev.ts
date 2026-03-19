@@ -2,7 +2,7 @@
  * Dev entrypoint for the Web UI debug console.
  * Usage: npm run dev:web
  *
- * LLM config is read from data/im-config.json (set via WebUI settings).
+ * LLM config is read from data/agent/llm-config.json (set via WebUI settings).
  * Falls back to ANTHROPIC_API_KEY env var if not configured.
  */
 import { mkdirSync } from "node:fs";

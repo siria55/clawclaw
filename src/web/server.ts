@@ -135,11 +135,11 @@ export interface WebServerConfig {
   imConfigStorage?: ConfigStorage<IMConfig>;
   /** Called after POST /api/im-config to hot-reload IM platform routes. */
   onIMConfig?: (config: IMConfig) => void;
-  /** LLM config storage for GET/POST /api/config/llm (data/llm-config.json). */
+  /** LLM config storage for GET/POST /api/config/llm (data/agent/llm-config.json). */
   llmConfigStorage?: ConfigStorage<LLMConfig>;
   /** Called after POST /api/config/llm to hot-reload the LLM provider. */
   onLLMConfig?: (config: LLMConfig) => void;
-  /** Agent meta config storage for GET/POST /api/config/agent (data/agent-config.json). */
+  /** Agent meta config storage for GET/POST /api/config/agent (data/agent/agent-config.json). */
   agentConfigStorage?: ConfigStorage<AgentMetaConfig>;
   /** Called after POST /api/config/agent to hot-reload agent name/system prompt. */
   onAgentConfig?: (config: AgentMetaConfig) => void;

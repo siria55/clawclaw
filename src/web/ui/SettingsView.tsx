@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { SectionToc } from "./SectionToc";
 import styles from "./SettingsView.module.css";
 
 interface LLMFields {
@@ -46,15 +47,26 @@ interface FeishuStatusSnapshot {
 
 /** Full-page settings view. All config is saved server-side. */
 export function SettingsView(): React.JSX.Element {
+  const tocItems = [
+    { id: "settings-agent", label: "Agent", hint: "名称、提示词、allowedPaths" },
+    { id: "settings-docs", label: "飞书文档", hint: "挂载、同步、缓存" },
+    { id: "settings-digest", label: "DailyDigest", hint: "搜索主题配置" },
+    { id: "settings-llm", label: "模型", hint: "API Key、代理、模型名" },
+    { id: "settings-feishu", label: "飞书 IM", hint: "凭证、Webhook、Chat ID" },
+  ];
+
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
-        <h2 className={styles.title}>设置</h2>
-        <AgentSection />
-        <MountedDocsSection />
-        <DailyDigestSection />
-        <LLMSection />
-        <FeishuSection />
+        <SectionToc items={tocItems} />
+        <div className={styles.main}>
+          <h2 className={styles.title}>设置</h2>
+          <AgentSection />
+          <MountedDocsSection />
+          <DailyDigestSection />
+          <LLMSection />
+          <FeishuSection />
+        </div>
       </div>
     </div>
   );
@@ -68,7 +80,7 @@ interface AgentFields {
 
 const DEFAULT_ALLOWED_PATHS = "./data/skills\n./data/agent/feishu-docs";
 
-/** Agent meta config — name and system prompt, saved to data/agent-config.json. */
+/** Agent meta config — name and system prompt, saved to data/agent/agent-config.json. */
 function AgentSection(): React.JSX.Element {
   const [fields, setFields] = useState<AgentFields>({ name: "", systemPrompt: "", allowedPaths: DEFAULT_ALLOWED_PATHS });
   const [saving, setSaving] = useState(false);
@@ -118,10 +130,10 @@ function AgentSection(): React.JSX.Element {
   };
 
   return (
-    <div className={styles.section}>
+    <section id="settings-agent" className={styles.section}>
       <div className={styles.sectionTitle}>Agent</div>
       <div className={styles.sectionHint}>
-        配置保存在服务端 data/agent-config.json，保存后下一轮对话即生效，无需重启。<br />
+        配置保存在服务端 `data/agent/agent-config.json`，保存后下一轮对话即生效，无需重启。<br />
         留空则使用默认系统提示词。
       </div>
       <div className={styles.fields}>
@@ -158,7 +170,7 @@ function AgentSection(): React.JSX.Element {
         </button>
         {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -266,7 +278,7 @@ function MountedDocsSection(): React.JSX.Element {
   };
 
   return (
-    <div className={styles.section}>
+    <section id="settings-docs" className={styles.section}>
       <div className={styles.sectionTitle}>飞书文档资料</div>
       <div className={styles.sectionHint}>
         挂载公开可访问的飞书文档链接。服务端会用 Playwright 打开页面并提取正文，Agent 会按问题检索命中文档片段后再回答。<br />
@@ -310,7 +322,7 @@ function MountedDocsSection(): React.JSX.Element {
         </button>
         {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -356,7 +368,7 @@ function DailyDigestSection(): React.JSX.Element {
   };
 
   return (
-    <div className={styles.section}>
+    <section id="settings-digest" className={styles.section}>
       <div className={styles.sectionTitle}>DailyDigest</div>
       <div className={styles.sectionHint}>
         配置保存在服务端 `data/skills/daily-digest/config.json`，保存后无需重启，下一次运行 skill 即生效。<br />
@@ -383,11 +395,11 @@ function DailyDigestSection(): React.JSX.Element {
         </button>
         {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
       </div>
-    </div>
+    </section>
   );
 }
 
-/** LLM provider configuration — saved server-side to data/im-config.json. */
+/** LLM provider configuration — saved server-side to data/agent/llm-config.json. */
 function LLMSection(): React.JSX.Element {
   const [fields, setFields] = useState<LLMFields>({ apiKey: "", baseURL: "", httpsProxy: "", model: "" });
   const [saving, setSaving] = useState(false);
@@ -439,10 +451,10 @@ function LLMSection(): React.JSX.Element {
   };
 
   return (
-    <div className={styles.section}>
+    <section id="settings-llm" className={styles.section}>
       <div className={styles.sectionTitle}>模型（LLM）</div>
       <div className={styles.sectionHint}>
-        配置保存在服务端 data/llm-config.json，保存后立即生效，无需重启。<br />
+        配置保存在服务端 `data/agent/llm-config.json`，保存后立即生效，无需重启。<br />
       </div>
       <div className={styles.fields}>
         <Field label="API Key" type="password" placeholder="sk-ant-..." value={fields.apiKey} onChange={(v) => setField("apiKey", v)} />
@@ -456,11 +468,11 @@ function LLMSection(): React.JSX.Element {
         </button>
         {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
       </div>
-    </div>
+    </section>
   );
 }
 
-/** Feishu IM configuration section — saved server-side to data/im-config.json. */
+/** Feishu IM configuration section — saved server-side to data/im/im-config.json. */
 function FeishuSection(): React.JSX.Element {
   const [fields, setFields] = useState<FeishuFields>({
     appId: "",
@@ -532,10 +544,10 @@ function FeishuSection(): React.JSX.Element {
   const canSave = !saving && !!(fields.appId && fields.appSecret && fields.verificationToken);
 
   return (
-    <div className={styles.section}>
+    <section id="settings-feishu" className={styles.section}>
       <div className={styles.sectionTitle}>飞书（Feishu）</div>
       <div className={styles.sectionHint}>
-        配置保存在服务端 data/im-config.json，保存后立即生效，无需重启。<br />
+        配置保存在服务端 `data/im/im-config.json`，保存后立即生效，无需重启。<br />
         已保存的敏感字段显示为脱敏值（如 cli_****），修改后重新保存即可更新。
       </div>
       {snapshot && (
@@ -603,7 +615,7 @@ function FeishuSection(): React.JSX.Element {
           </span>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 

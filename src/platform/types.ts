@@ -57,4 +57,10 @@ export interface IMPlatform {
    * Send a text reply to a conversation.
    */
   send(chatId: string, text: string): Promise<void>;
+
+  /**
+   * Send a markdown-formatted reply when the platform supports it.
+   * Platforms that do not implement this may fall back to `send()`.
+   */
+  sendMarkdown?(chatId: string, markdown: string): Promise<void>;
 }

@@ -156,6 +156,11 @@ export class CronScheduler {
           if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, "[图片]");
           return;
         }
+        if (job.msgType === "markdown" && job.delivery.platform.sendMarkdown) {
+          await job.delivery.platform.sendMarkdown(job.delivery.chatId, job.message);
+          if (eventId !== undefined) this.#imEventStorage?.setReply(eventId, job.message);
+          return;
+        }
         reply = job.message;
       } else {
         const result = await job.agent.run(job.message);

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { SectionToc } from "./SectionToc";
 import styles from "./StatusView.module.css";
 
 interface ConnectionStatus {
@@ -151,18 +152,26 @@ export function StatusView(): React.JSX.Element {
 
   const overview = status?.overview;
   const feishu = overview?.feishu;
+  const tocItems = [
+    { id: "status-overview", label: "运行概览", hint: "指标、最近 IM 活动" },
+    { id: "status-feishu", label: "飞书概览", hint: "连接、群聊、权限提示" },
+    { id: "status-files", label: "配置文件", hint: "落盘状态、体积、摘要" },
+    { id: "status-im-log", label: "IM 消息日志", hint: "群聊 / 直发筛选" },
+  ];
 
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
-        <div className={styles.header}>
-          <h2 className={styles.title}>系统状态</h2>
-          <button className={styles.refreshBtn} onClick={load} aria-label="刷新" disabled={loading}>
-            {loading ? "…" : "↺"}
-          </button>
-        </div>
+        <SectionToc items={tocItems} />
+        <div className={styles.main}>
+          <div className={styles.header}>
+            <h2 className={styles.title}>系统状态</h2>
+            <button className={styles.refreshBtn} onClick={load} aria-label="刷新" disabled={loading}>
+              {loading ? "…" : "↺"}
+            </button>
+          </div>
 
-        <section className={styles.section}>
+        <section id="status-overview" className={styles.section}>
           <h3 className={styles.sectionTitle}>运行概览</h3>
           <div className={styles.metricGrid}>
             {(overview?.metrics ?? []).map((metric) => (
@@ -190,7 +199,7 @@ export function StatusView(): React.JSX.Element {
           )}
         </section>
 
-        <section className={styles.section}>
+        <section id="status-feishu" className={styles.section}>
           <h3 className={styles.sectionTitle}>飞书概览</h3>
           {status?.connections.length === 0 && <p className={styles.empty}>未配置 IM 平台</p>}
           {status?.connections.map((c) => (
@@ -244,7 +253,7 @@ export function StatusView(): React.JSX.Element {
           {!status && !loading && <p className={styles.empty}>—</p>}
         </section>
 
-        <section className={styles.section}>
+        <section id="status-files" className={styles.section}>
           <h3 className={styles.sectionTitle}>配置文件</h3>
           <div className={styles.fileList}>
             {(overview?.configFiles ?? []).map((file) => (
@@ -267,7 +276,7 @@ export function StatusView(): React.JSX.Element {
           </div>
         </section>
 
-        <section className={styles.section}>
+        <section id="status-im-log" className={styles.section}>
           <div className={styles.sectionHeader}>
             <h3 className={styles.sectionTitle}>IM 消息日志</h3>
             <div className={styles.imTabs}>
@@ -303,6 +312,7 @@ export function StatusView(): React.JSX.Element {
             ));
           })()}
         </section>
+        </div>
       </div>
     </div>
   );

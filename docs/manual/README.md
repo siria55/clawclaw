@@ -112,6 +112,7 @@ pnpm start
 ### 状态 — `/#status`
 
 查看运行时状态：
+- 页内导航：可直接跳到运行概览、飞书概览、配置文件、IM 消息日志
 - IM 平台连接状态（飞书 / 企业微信）
 - 飞书运行摘要（配置来源、Webhook、App ID / Chat ID、加密校验配置是否存在）
 - 飞书群聊列表（机器人已加入的群、群名、最近事件、最近时间）
@@ -125,12 +126,14 @@ pnpm start
 管理所有定时任务：
 - 新增、编辑、删除定时任务
 - 支持绑定 Skill（`skillId`）或发送最新 Skill 图片（`sendSkillOutput`）
-- 支持直发文本或图片（`direct: true`）
+- 支持直发文本、Markdown 或图片（`direct: true`）
 - 支持点击「运行」立即执行单条任务，便于调试和校验
 
 ### 设置 — `/#settings`
 
 所有配置均保存在服务端，重启后自动恢复，无需重新输入：
+
+- 页内导航：可直接跳到 Agent、飞书文档、DailyDigest、模型、飞书 IM
 
 **Agent 配置**（保存在 `data/agent/agent-config.json`）：
 - 名称（标识用）、系统提示词（System Prompt）
@@ -159,6 +162,8 @@ pnpm start
 - 保存后立即生效，无需重启
 - 若希望 Agent 能读取部门人数、直属成员等组织信息，还需在飞书开放平台为该应用开通通讯录 / 部门读取权限
 - 表单上方会展示当前飞书运行摘要，方便确认当前实例到底是读取了已保存配置还是环境变量
+- Agent 回复若包含明显 Markdown 结构，飞书会尽量按原生 Markdown 渲染发送
+- 如果需要强制直发 Markdown，可在 `Cron` 里把直发类型切到 `Markdown`
 
 **飞书会话规则**：
 - 长期记忆仍共用同一个记忆库
@@ -353,7 +358,7 @@ ngrok http 3000
 
 四种触发模式：
 - **Agent 模式**（默认）：Agent 执行指定消息，LLM 回复发送到 IM
-- **直发模式**（`direct: true`）：直接发送预设文本或图片，不经 LLM
+- **直发模式**（`direct: true`）：直接发送预设文本、Markdown 或图片，不经 LLM
 - **Skill 生成**（`skillId`）：执行指定 Skill，保存文件，不发 IM
 - **Skill 投递**（`sendSkillOutput`）：找指定 Skill 最新 PNG，发送到飞书
 
@@ -361,7 +366,7 @@ ngrok http 3000
 - 7:00 `skillId: "daily-digest"` — 生成日报
 - 8:00 `sendSkillOutput: "daily-digest"` — 发送到飞书
 
-WebUI 的 `Cron` 标签页还支持点击「运行」直接执行单条任务，不必等待下一个调度时间点。
+WebUI 的 `Cron` 标签页还支持点击「运行」直接执行单条任务，不必等待下一个调度时间点。若直发类型选 `Markdown`，飞书会按原生渲染展示标题、列表、引用、代码块和链接。
 
 ---
 

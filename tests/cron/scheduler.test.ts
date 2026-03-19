@@ -191,4 +191,25 @@ describe("CronScheduler cron parsing", () => {
 
     expect(platform.sentMessages).toEqual([{ chatId: "room-2", text: "direct ping" }]);
   });
+
+  it("runNow executes a direct markdown job via sendMarkdown when supported", async () => {
+    const platform = makeMockPlatform();
+    const sendMarkdown = vi.fn(async () => undefined);
+    platform.sendMarkdown = sendMarkdown;
+    const job: CronJob = {
+      id: "manual-markdown",
+      schedule: "0 9 * * *",
+      message: "## 更新\n\n- 第一条",
+      direct: true,
+      msgType: "markdown",
+      agent: makeAgent("unused"),
+      delivery: { platform, chatId: "room-3" },
+    };
+
+    const sched = new CronScheduler();
+    await sched.runNow(job);
+
+    expect(sendMarkdown).toHaveBeenCalledWith("room-3", "## 更新\n\n- 第一条");
+    expect(platform.sentMessages).toEqual([]);
+  });
 });
