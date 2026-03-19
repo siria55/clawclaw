@@ -111,6 +111,7 @@ pnpm start
 查看运行时状态：
 - IM 平台连接状态（飞书 / 企业微信）
 - 飞书运行摘要（配置来源、Webhook、App ID / Chat ID、加密校验配置是否存在）
+- 飞书群聊列表（机器人已加入的群、群名、最近事件、最近时间）
 - 配置文件状态（如 `data/im/im-config.json`、`data/agent/llm-config.json`、`data/cron/cron-config.json` 等）
 - 关键指标（长期记忆条数、IM 事件数、会话数、挂载文档同步数、Cron 启用数）
 - IM 事件日志（按群聊/直发分类，实时轮询）
@@ -159,6 +160,7 @@ pnpm start
 - 长期记忆仍共用同一个记忆库
 - 短期对话历史按 `sessionId` 存，不再只看 `chatId`
 - 飞书线程回复会自动拆成独立 session；首次切到新 session 时，会带一条很短的上一段会话参考，尽量保持连贯
+- 当机器人被加入飞书群时，系统会记录群 ID 和群名，状态页可直接查看已记录群聊
 
 ---
 

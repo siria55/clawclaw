@@ -52,6 +52,17 @@ describe("StatusView", () => {
                 sizeBytes: 123,
               },
             ],
+            chats: [
+              {
+                platform: "feishu",
+                chatId: "oc_demo",
+                chatName: "运营群",
+                active: true,
+                joinedAt: "2026-03-19T07:30:00.000Z",
+                lastSeen: "2026-03-19T08:00:00.000Z",
+                lastEventType: "bot_added",
+              },
+            ],
             lastIMEvent: {
               platform: "feishu",
               chatId: "oc_demo",
@@ -63,7 +74,20 @@ describe("StatusView", () => {
         });
       }
       if (input === "/api/im-log") {
-        return makeResponse({ events: [], total: 0 });
+        return makeResponse({
+          events: [{
+            id: "1",
+            platform: "feishu",
+            userId: "ou_demo",
+            chatId: "oc_demo",
+            chatName: "运营群",
+            eventType: "bot_added",
+            text: "机器人已加入群：运营群",
+            replyText: undefined,
+            timestamp: "2026-03-19T08:00:00.000Z",
+          }],
+          total: 1,
+        });
       }
       throw new Error(`Unexpected fetch: ${input}`);
     });
@@ -75,6 +99,8 @@ describe("StatusView", () => {
     expect(screen.getByText("3")).toBeDefined();
     expect(screen.getByText("飞书运行状态")).toBeDefined();
     expect(screen.getByText("cli_demo")).toBeDefined();
+    expect(screen.getAllByText("运营群").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("机器人进群").length).toBeGreaterThan(0);
     expect(screen.getByText("IM 配置")).toBeDefined();
     expect(screen.getByText("./data/im/im-config.json")).toBeDefined();
     expect(screen.getByText("请查看飞书状态")).toBeDefined();

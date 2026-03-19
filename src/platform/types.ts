@@ -10,6 +10,10 @@ export interface IMMessage {
   continuityId: string;
   /** ID of the user who sent the message */
   userId: string;
+  /** Optional human-readable chat/group name */
+  chatName?: string;
+  /** Event kind used by the server to decide whether to invoke the agent */
+  eventType?: "message" | "bot_added" | "bot_removed";
   /** Plain text content */
   text: string;
   /** Raw platform event payload, for advanced use */

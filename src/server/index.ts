@@ -151,9 +151,15 @@ export class ClawServer {
       platform: message.platform,
       userId: message.userId,
       chatId: message.chatId,
+      ...(message.chatName ? { chatName: message.chatName } : {}),
+      ...(message.eventType ? { eventType: message.eventType } : {}),
       text: message.text,
       replyText: undefined,
     });
+
+    if (message.eventType && message.eventType !== "message") {
+      return;
+    }
 
     const runContext = buildIMRunContext(message, this.#config.conversationStorage);
 

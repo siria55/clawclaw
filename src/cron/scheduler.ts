@@ -119,6 +119,7 @@ export class CronScheduler {
       platform: job.delivery.platform.name,
       userId: "",
       chatId: job.delivery.chatId,
+      eventType: "cron",
       text: `[cron:${job.id}] ${job.message}`,
       replyText: undefined,
     });

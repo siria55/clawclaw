@@ -249,6 +249,59 @@
   line-height: 1.6;
 }
 
+.chatList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chatCard {
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chatHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chatTitle {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.chatBadge {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.chatActive {
+  color: var(--tool-result-accent);
+  background: color-mix(in srgb, var(--tool-result-accent) 15%, transparent);
+}
+
+.chatInactive {
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+}
+
+.chatMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .fileList {
   display: flex;
   flex-direction: column;
@@ -310,6 +363,18 @@
 .imPlatform {
   color: var(--blue);
   font-weight: 600;
+}
+
+.imEventType {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border-radius: 999px;
+  padding: 2px 6px;
+}
+
+.imChatName {
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .imId,

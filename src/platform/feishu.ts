@@ -63,6 +63,12 @@ export interface FeishuDepartmentUserPage {
   hasMore: boolean;
 }
 
+export interface FeishuChat {
+  chat_id: string;
+  name?: string;
+  description?: string;
+}
+
 /** Max age of a Feishu request timestamp before it's considered a replay attack. */
 const MAX_TIMESTAMP_AGE_MS = 5 * 60 * 1000;
 
@@ -138,8 +144,15 @@ export class FeishuPlatform implements IMPlatform {
 
     const header = event["header"] as Record<string, unknown> | undefined;
     const eventBody = event["event"] as Record<string, unknown> | undefined;
+    const eventType = asString(header?.["event_type"]);
 
-    if (header?.["event_type"] !== "im.message.receive_v1") return null;
+    if (eventType === "im.chat.member.bot.added_v1") {
+      return this.#parseBotMembershipEvent(eventBody, "bot_added", "机器人已加入群");
+    }
+    if (eventType === "im.chat.member.bot.deleted_v1") {
+      return this.#parseBotMembershipEvent(eventBody, "bot_removed", "机器人已移出群");
+    }
+    if (eventType !== "im.message.receive_v1") return null;
 
     const message = eventBody?.["message"] as Record<string, unknown> | undefined;
     const sender = eventBody?.["sender"] as Record<string, unknown> | undefined;
@@ -153,13 +166,16 @@ export class FeishuPlatform implements IMPlatform {
     const senderId = asRecord(sender["sender_id"]);
     const chatId = asString(message["chat_id"]);
     const userId = asString(senderId?.["open_id"]);
+    const chatName = await this.#resolveChatName(chatId, eventBody);
 
     return {
       platform: this.name,
       chatId,
+      ...(chatName ? { chatName } : {}),
       sessionId: buildFeishuSessionId(message, chatId),
       continuityId: buildContinuityId(this.name, chatId, userId),
       userId,
+      eventType: "message",
       text: content.text?.trim() ?? "",
       raw: event,
     };
@@ -292,6 +308,21 @@ export class FeishuPlatform implements IMPlatform {
     };
   }
 
+  /** Fetch one chat's basic metadata by `chat_id`. */
+  async getChat(chatId: string): Promise<FeishuChat> {
+    const data = await this.#request<{ chat?: Omit<FeishuChat, "chat_id"> }>(
+      `/im/v1/chats/${encodeURIComponent(chatId)}`,
+      {},
+    );
+    if (!data.chat) {
+      throw new Error(`Feishu chat ${chatId} not found`);
+    }
+    return {
+      chat_id: chatId,
+      ...data.chat,
+    };
+  }
+
   async #uploadImageBuffer(token: string, buffer: Buffer): Promise<string> {
     const form = new FormData();
     form.append("image_type", "message");
@@ -421,6 +452,42 @@ export class FeishuPlatform implements IMPlatform {
     return dedupeDepartments(departments);
   }
 
+  async #parseBotMembershipEvent(
+    eventBody: Record<string, unknown> | undefined,
+    eventType: "bot_added" | "bot_removed",
+    defaultText: string,
+  ): Promise<IMMessage | null> {
+    const chatId = asString(eventBody?.["chat_id"]);
+    if (!chatId) return null;
+
+    const operatorId = asRecord(eventBody?.["operator_id"]);
+    const userId = asString(operatorId?.["open_id"]);
+    const chatName = await this.#resolveChatName(chatId, eventBody);
+
+    return {
+      platform: this.name,
+      chatId,
+      ...(chatName ? { chatName } : {}),
+      sessionId: chatId,
+      continuityId: buildContinuityId(this.name, chatId, userId || "system"),
+      userId,
+      eventType,
+      text: `${defaultText}${chatName ? `：${chatName}` : ""}`,
+      raw: eventBody,
+    };
+  }
+
+  async #resolveChatName(chatId: string, eventBody: Record<string, unknown> | undefined): Promise<string | undefined> {
+    const inlineName = extractFeishuChatName(eventBody);
+    if (inlineName) return inlineName;
+    if (!chatId.startsWith("oc_")) return undefined;
+    try {
+      return (await this.getChat(chatId)).name;
+    } catch {
+      return undefined;
+    }
+  }
+
   async #request<TData>(path: string, query: Record<string, string | undefined>): Promise<TData> {
     const token = await this.#getAccessToken();
     const url = new URL(`https://open.feishu.cn/open-apis${path}`);
@@ -507,6 +574,22 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function extractFeishuChatName(eventBody: Record<string, unknown> | undefined): string | undefined {
+  const directName = asString(eventBody?.["name"]) || asString(eventBody?.["chat_name"]);
+  if (directName) return directName;
+
+  const chat = asRecord(eventBody?.["chat"]);
+  const chatName = asString(chat?.["name"]);
+  if (chatName) return chatName;
+
+  const message = asRecord(eventBody?.["message"]);
+  const messageChatName = asString(message?.["chat_name"]);
+  if (messageChatName) return messageChatName;
+
+  const i18nNames = asRecord(eventBody?.["i18n_names"]) ?? asRecord(chat?.["i18n_names"]);
+  return asString(i18nNames?.["zh_cn"]) || asString(i18nNames?.["en_us"]) || undefined;
 }
 
 function clampPageSize(value: number | undefined): number {

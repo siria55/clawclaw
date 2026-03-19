@@ -8,6 +8,7 @@ import type { Agent } from "../../src/core/agent.js";
 import { FeishuChallenge } from "../../src/platform/feishu.js";
 import { WecomEcho } from "../../src/platform/wecom.js";
 import { ConversationStorage } from "../../src/im/conversations.js";
+import { IMEventStorage } from "../../src/im/storage.js";
 import type { ConversationStorage } from "../../src/im/conversations.js";
 
 function makeMockPlatform(overrides: Partial<IMPlatform> = {}): IMPlatform {
@@ -174,6 +175,47 @@ describe("ClawServer", () => {
     const res = await fetch(`${url}/hook`, { method: "POST", body: "{}" });
     expect(res.status).toBe(200);
     expect(vi.mocked(agent.run)).not.toHaveBeenCalled();
+    await server.stop();
+  });
+
+  it("records bot-added group events without invoking the agent", async () => {
+    const agent = makeMockAgent();
+    const imEventStorage = new IMEventStorage();
+    const platform = makeMockPlatform({
+      parse: vi.fn(async () => ({
+        platform: "feishu",
+        chatId: "oc_newgroup",
+        chatName: "运营群",
+        sessionId: "oc_newgroup",
+        continuityId: "feishu:oc_newgroup:ou_admin",
+        userId: "ou_admin",
+        eventType: "bot_added",
+        text: "机器人已加入群：运营群",
+        raw: {},
+      })),
+    });
+
+    const server = new ClawServer({
+      port: 0,
+      routes: { "/hook": { platform, agent } },
+      imEventStorage,
+    });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/hook`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(vi.mocked(agent.run)).not.toHaveBeenCalled();
+    expect(imEventStorage.listChats("feishu")).toEqual([
+      expect.objectContaining({
+        chatId: "oc_newgroup",
+        chatName: "运营群",
+        active: true,
+        lastEventType: "bot_added",
+      }),
+    ]);
+
     await server.stop();
   });
 });

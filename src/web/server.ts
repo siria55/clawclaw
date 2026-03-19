@@ -88,6 +88,15 @@ export interface StatusOverview {
   };
   metrics: StatusMetric[];
   configFiles: StatusFile[];
+  chats: Array<{
+    platform: string;
+    chatId: string;
+    chatName?: string;
+    active: boolean;
+    joinedAt?: string;
+    lastSeen: string;
+    lastEventType: "message" | "bot_added" | "bot_removed" | "cron";
+  }>;
   lastIMEvent?: LastIMEventSummary;
 }
 
@@ -451,6 +460,7 @@ export class WebServer {
     const snapshots = this.#config.mountedDocLibrary?.listSnapshots() ?? [];
     const cronJobs = this.#config.cronStorage?.read() ?? [];
     const imStorage = this.#config.imEventStorage;
+    const feishuChats = imStorage?.listChats("feishu") ?? [];
     const lastEvent = imStorage?.since(undefined).slice(-1)[0];
 
     return {
@@ -495,8 +505,15 @@ export class WebServer {
           value: `${cronJobs.filter((job) => job.enabled).length} / ${cronJobs.length}`,
           hint: "启用 / 总数",
         },
+        {
+          key: "feishu_chats",
+          label: "飞书群",
+          value: `${feishuChats.filter((chat) => chat.active).length}`,
+          hint: "已记录群聊",
+        },
       ],
       configFiles: this.#buildStatusFiles(),
+      chats: feishuChats,
       ...(lastEvent ? {
         lastIMEvent: {
           platform: lastEvent.platform,
@@ -990,9 +1007,15 @@ export class WebServer {
       platform: message.platform,
       userId: message.userId,
       chatId: message.chatId,
+      ...(message.chatName ? { chatName: message.chatName } : {}),
+      ...(message.eventType ? { eventType: message.eventType } : {}),
       text: message.text,
       replyText: undefined,
     });
+
+    if (message.eventType && message.eventType !== "message") {
+      return;
+    }
 
     const runContext = buildIMRunContext(message, this.#config.conversationStorage);
 

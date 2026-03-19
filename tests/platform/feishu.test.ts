@@ -20,6 +20,7 @@ function makeMessageEvent(extraMessage: Record<string, unknown> = {}): string {
       sender: { sender_id: { open_id: "ou_user123" }, sender_type: "user" },
       message: {
         chat_id: "oc_chat456",
+        chat_name: "产品讨论群",
         content: JSON.stringify({ text: "hello" }),
         ...extraMessage,
       },
@@ -100,10 +101,12 @@ describe("FeishuPlatform.parse()", () => {
     expect(msg).toMatchObject({
       platform: "feishu",
       chatId: "oc_chat456",
+      chatName: "产品讨论群",
       sessionId: "oc_chat456",
       continuityId: "feishu:oc_chat456:ou_user123",
       userId: "ou_user123",
       text: "hello",
+      eventType: "message",
     });
   });
 
@@ -152,6 +155,27 @@ describe("FeishuPlatform.parse()", () => {
     expect(
       await platform.parse(JSON.stringify({ header: { event_type: "other" }, event: {} })),
     ).toBeNull();
+  });
+
+  it("returns a system event when the bot is added to a group", async () => {
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    const msg = await platform.parse(JSON.stringify({
+      header: { event_type: "im.chat.member.bot.added_v1" },
+      event: {
+        chat_id: "oc_newgroup",
+        name: "运营群",
+        operator_id: { open_id: "ou_admin" },
+      },
+    }));
+
+    expect(msg).toMatchObject({
+      platform: "feishu",
+      chatId: "oc_newgroup",
+      chatName: "运营群",
+      userId: "ou_admin",
+      eventType: "bot_added",
+      text: "机器人已加入群：运营群",
+    });
   });
 });
 

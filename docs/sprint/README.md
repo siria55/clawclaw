@@ -141,6 +141,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 48 — WebUI 可视化飞书配置与运行状态
 状态页新增统一运行概览：集中展示飞书运行摘要、配置文件落盘状态和关键存储指标；设置页中的飞书表单也会显示当前运行摘要，便于确认配置来源和生效状态。
 
+### Sprint 49 — WebUI 展示飞书已加入群与群名
+飞书适配器新增机器人进群 / 退群事件解析，IM 存储会持久化群聊摘要；状态页现在可直接看到机器人已加入的飞书群、群名、最近事件和最近时间。
+
 ### Sprint 37 — 清理 src/news/ 死代码目录
 Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
 

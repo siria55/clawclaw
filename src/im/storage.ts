@@ -6,9 +6,21 @@ export interface IMEvent {
   platform: string;
   userId: string;
   chatId: string;
+  chatName?: string;
+  eventType?: "message" | "bot_added" | "bot_removed" | "cron";
   text: string;
   replyText: string | undefined;
   timestamp: string; // ISO 8601
+}
+
+export interface IMChatRecord {
+  platform: string;
+  chatId: string;
+  chatName?: string;
+  active: boolean;
+  joinedAt?: string;
+  lastSeen: string;
+  lastEventType: "message" | "bot_added" | "bot_removed" | "cron";
 }
 
 /**
@@ -18,6 +30,7 @@ export interface IMEvent {
 export class IMEventStorage {
   readonly #capacity: number;
   readonly #events: IMEvent[] = [];
+  readonly #chats = new Map<string, IMChatRecord>();
   readonly #filePath: string | undefined;
   #counter = 0;
 
@@ -35,6 +48,7 @@ export class IMEventStorage {
       this.#events.shift();
     }
     this.#events.push(entry);
+    this.#updateChat(entry);
     this.#persist();
     return id;
   }
@@ -70,12 +84,28 @@ export class IMEventStorage {
     return this.#filePath;
   }
 
+  /** Return tracked group chats, newest first. */
+  listChats(platform?: string): IMChatRecord[] {
+    return [...this.#chats.values()]
+      .filter((chat) => chat.chatId.startsWith("oc_"))
+      .filter((chat) => !platform || chat.platform === platform)
+      .sort((left, right) => right.lastSeen.localeCompare(left.lastSeen));
+  }
+
   #load(filePath: string): void {
     if (!existsSync(filePath)) return;
     try {
-      const { events, counter } = JSON.parse(readFileSync(filePath, "utf8")) as { events: IMEvent[]; counter: number };
+      const parsed = JSON.parse(readFileSync(filePath, "utf8")) as {
+        events: IMEvent[];
+        counter: number;
+        chats?: Record<string, IMChatRecord>;
+      };
+      const { events, counter } = parsed;
       this.#events.push(...events.slice(-this.#capacity));
       this.#counter = counter;
+      for (const [key, value] of Object.entries(parsed.chats ?? {})) {
+        this.#chats.set(key, value);
+      }
     } catch {
       // corrupt file — start fresh
     }
@@ -84,9 +114,34 @@ export class IMEventStorage {
   #persist(): void {
     if (!this.#filePath) return;
     try {
-      writeFileSync(this.#filePath, JSON.stringify({ events: this.#events, counter: this.#counter }, null, 2), "utf8");
+      writeFileSync(this.#filePath, JSON.stringify({
+        events: this.#events,
+        counter: this.#counter,
+        chats: Object.fromEntries(this.#chats.entries()),
+      }, null, 2), "utf8");
     } catch {
       // non-fatal
     }
+  }
+
+  #updateChat(event: IMEvent): void {
+    if (!event.chatId.startsWith("oc_")) return;
+
+    const key = `${event.platform}:${event.chatId}`;
+    const previous = this.#chats.get(key);
+    const eventType = event.eventType ?? "message";
+    const next: IMChatRecord = {
+      platform: event.platform,
+      chatId: event.chatId,
+      active: eventType === "bot_removed" ? false : previous?.active ?? true,
+      lastSeen: event.timestamp,
+      lastEventType: eventType,
+    };
+    const chatName = event.chatName ?? previous?.chatName;
+    if (chatName) next.chatName = chatName;
+    if (eventType === "bot_added") next.joinedAt = event.timestamp;
+    else if (previous?.joinedAt) next.joinedAt = previous.joinedAt;
+    if (eventType === "bot_added") next.active = true;
+    this.#chats.set(key, next);
   }
 }

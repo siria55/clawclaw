@@ -29,6 +29,7 @@ export function persistIMRunContext(
 
 function formatContextPrefix(message: IMMessage): string {
   const parts = [`消息来源: ${message.platform}`, `chatId: ${message.chatId}`];
+  if (message.chatName) parts.push(`chatName: ${message.chatName}`);
   if (message.sessionId !== message.chatId) parts.push(`sessionId: ${message.sessionId}`);
   parts.push(`userId: ${message.userId}`);
   return `[${parts.join(" | ")}]`;

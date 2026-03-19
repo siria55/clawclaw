@@ -44,6 +44,15 @@ interface StatusOverview {
   };
   metrics: StatusMetric[];
   configFiles: StatusFile[];
+  chats: Array<{
+    platform: string;
+    chatId: string;
+    chatName?: string;
+    active: boolean;
+    joinedAt?: string;
+    lastSeen: string;
+    lastEventType: "message" | "bot_added" | "bot_removed" | "cron";
+  }>;
   lastIMEvent?: {
     platform: string;
     chatId: string;
@@ -63,6 +72,8 @@ interface IMEvent {
   platform: string;
   userId: string;
   chatId: string;
+  chatName?: string;
+  eventType?: "message" | "bot_added" | "bot_removed" | "cron";
   text: string;
   replyText: string | undefined;
   timestamp: string;
@@ -210,6 +221,26 @@ export function StatusView(): React.JSX.Element {
               <p className={styles.platformHint}>{feishu.permissionsHint}</p>
             </div>
           )}
+          {!!overview?.chats.length && (
+            <div className={styles.chatList}>
+              {overview.chats.map((chat) => (
+                <div key={chat.chatId} className={styles.chatCard}>
+                  <div className={styles.chatHeader}>
+                    <strong className={styles.chatTitle}>{chat.chatName ?? "未命名群"}</strong>
+                    <span className={`${styles.chatBadge} ${chat.active ? styles.chatActive : styles.chatInactive}`}>
+                      {chat.active ? "已加入" : "已移出"}
+                    </span>
+                  </div>
+                  <div className={styles.chatMeta}>
+                    <span className={styles.mono}>{chat.chatId}</span>
+                    <span>最近事件：{describeEventType(chat.lastEventType)}</span>
+                    <span>最近时间：{formatDateTime(chat.lastSeen)}</span>
+                    <span>加入时间：{formatDateTime(chat.joinedAt)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {!status && !loading && <p className={styles.empty}>—</p>}
         </section>
 
@@ -258,6 +289,8 @@ export function StatusView(): React.JSX.Element {
               <div key={e.id} className={styles.imCard}>
                 <div className={styles.imMeta}>
                   <span className={styles.imPlatform}>{e.platform}</span>
+                  {e.eventType && <span className={styles.imEventType}>{describeEventType(e.eventType)}</span>}
+                  {e.chatName && <span className={styles.imChatName}>{e.chatName}</span>}
                   {e.userId && <span className={styles.imId} title={`点击复制: ${e.userId}`} onClick={() => void navigator.clipboard.writeText(e.userId)}>用户 {e.userId.slice(0, 16)}</span>}
                   {e.chatId && <span className={styles.imId} title={`点击复制: ${e.chatId}`} onClick={() => void navigator.clipboard.writeText(e.chatId)}>会话 {e.chatId.slice(0, 16)}</span>}
                   <span className={styles.imTime}>{formatTime(e.timestamp)}</span>
@@ -282,4 +315,17 @@ function InfoItem(props: { label: string; value: string; mono?: boolean }): Reac
       <span className={`${styles.infoValue} ${props.mono ? styles.mono : ""}`}>{props.value}</span>
     </div>
   );
+}
+
+function describeEventType(eventType: IMEvent["eventType"] | StatusOverview["chats"][number]["lastEventType"]): string {
+  switch (eventType) {
+    case "bot_added":
+      return "机器人进群";
+    case "bot_removed":
+      return "机器人退群";
+    case "cron":
+      return "Cron";
+    default:
+      return "消息";
+  }
 }

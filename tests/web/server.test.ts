@@ -6,6 +6,7 @@ import { WebServer } from "../../src/web/server.js";
 import { MemoryStorage } from "../../src/memory/storage.js";
 import { ConfigStorage } from "../../src/config/storage.js";
 import { ConversationStorage } from "../../src/im/conversations.js";
+import { IMEventStorage } from "../../src/im/storage.js";
 import { MountedDocLibrary } from "../../src/docs/library.js";
 import type { IMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "../../src/config/types.js";
 import type { Agent } from "../../src/core/agent.js";
@@ -212,6 +213,16 @@ describe("WebServer", () => {
       const agent = makeMockAgent();
       const memoryStorage = new MemoryStorage(join(dir, "memory.json"));
       memoryStorage.save({ content: "记住今天要同步飞书配置", tags: ["ops"] });
+      const imEventStorage = new IMEventStorage(50, join(dir, "im-events.json"));
+      imEventStorage.append({
+        platform: "feishu",
+        userId: "ou_admin",
+        chatId: "oc_demo",
+        chatName: "运营群",
+        eventType: "bot_added",
+        text: "机器人已加入群：运营群",
+        replyText: undefined,
+      });
       const imConfigStorage = new ConfigStorage<IMConfig>(join(dir, "im-config.json"));
       imConfigStorage.write({
         feishu: {
@@ -240,6 +251,7 @@ describe("WebServer", () => {
         port: 0,
         staticDir,
         memoryStorage,
+        imEventStorage,
         imConfigStorage,
         agentConfigStorage,
         dailyDigestConfigStorage,
@@ -265,6 +277,7 @@ describe("WebServer", () => {
           feishu: { runtime: { source: string; active: boolean }; appId?: string; chatId?: string };
           metrics: Array<{ key: string; value: string }>;
           configFiles: Array<{ key: string; exists: boolean; summary: string }>;
+          chats: Array<{ chatId: string; chatName?: string; lastEventType: string }>;
         };
       };
 
@@ -274,8 +287,16 @@ describe("WebServer", () => {
       expect(body.overview.feishu.appId).toBe("cli_demo");
       expect(body.overview.feishu.chatId).toBe("oc_demo");
       expect(body.overview.metrics.find((item) => item.key === "memory")?.value).toBe("1");
+      expect(body.overview.metrics.find((item) => item.key === "feishu_chats")?.value).toBe("1");
       expect(body.overview.configFiles.find((item) => item.key === "im_config")?.exists).toBe(true);
       expect(body.overview.configFiles.find((item) => item.key === "cron_config")?.summary).toContain("任务 1 条");
+      expect(body.overview.chats).toEqual([
+        expect.objectContaining({
+          chatId: "oc_demo",
+          chatName: "运营群",
+          lastEventType: "bot_added",
+        }),
+      ]);
 
       await server.stop();
     } finally {
