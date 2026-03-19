@@ -180,10 +180,11 @@ data/skills/{skillId}/
 | `GET/POST /api/config/agent` | Agent 配置 |
 | `GET/POST /api/config/daily-digest` | DailyDigest 搜索主题配置 |
 | `GET/POST /api/cron` | Cron 任务管理 |
+| `POST /api/cron/:id/run` | 立即执行单条 Cron 任务 |
 
 所有 POST 配置接口均支持热更新，保存后立即生效，无需重启。
 
-Web UI 六个标签页各对应独立 URL（hash 路由）：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#settings`，支持直接访问和浏览器前进/后退。
+Web UI 七个标签页各对应独立 URL（hash 路由）：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#cron` / `#settings`，支持直接访问和浏览器前进/后退。
 
 ---
 
@@ -231,7 +232,7 @@ src/
 │       └── index.ts     DailyDigestSkill 实现
 └── web/
     ├── server.ts       WebServer，调试 API + 静态文件服务
-    └── ui/             React + Vite 前端（六标签页）
+    └── ui/             React + Vite 前端（七标签页）
 ```
 
 依赖方向：`server/web → platform / core`，`core → llm / tools`，`tools → news / memory`，`skills → core`，各层不反向依赖。

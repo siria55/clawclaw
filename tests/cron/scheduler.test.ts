@@ -154,4 +154,41 @@ describe("CronScheduler cron parsing", () => {
     expect(scheduler2.jobIds).toContain("never");
     scheduler2.stop();
   });
+
+  it("runNow executes an agent-backed job immediately", async () => {
+    const platform = makeMockPlatform();
+    const agent = makeAgent("manual reply");
+    const job: CronJob = {
+      id: "manual-agent",
+      schedule: "0 9 * * *",
+      message: "run now",
+      direct: false,
+      msgType: "text",
+      agent,
+      delivery: { platform, chatId: "room-1" },
+    };
+
+    const sched = new CronScheduler();
+    await sched.runNow(job);
+
+    expect(platform.sentMessages).toEqual([{ chatId: "room-1", text: "manual reply" }]);
+  });
+
+  it("runNow executes a direct job immediately", async () => {
+    const platform = makeMockPlatform();
+    const job: CronJob = {
+      id: "manual-direct",
+      schedule: "0 9 * * *",
+      message: "direct ping",
+      direct: true,
+      msgType: "text",
+      agent: makeAgent("unused"),
+      delivery: { platform, chatId: "room-2" },
+    };
+
+    const sched = new CronScheduler();
+    await sched.runNow(job);
+
+    expect(platform.sentMessages).toEqual([{ chatId: "room-2", text: "direct ping" }]);
+  });
 });

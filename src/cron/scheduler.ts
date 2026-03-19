@@ -85,6 +85,11 @@ export class CronScheduler {
     }));
   }
 
+  /** Run a job immediately, bypassing cron expression matching. */
+  async runNow(job: CronJob): Promise<void> {
+    await this.#fire(job);
+  }
+
   #tick(): void {
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: this.#tz }));
     const [minute, hour, dom, month, dow] = [

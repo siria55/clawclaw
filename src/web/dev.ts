@@ -22,7 +22,7 @@ import type { Message } from "../llm/types.js";
 import type { LLMConfig, IMConfig, AgentMetaConfig, DailyDigestConfig } from "../config/types.js";
 import { WebServer } from "./server.js";
 import { CronScheduler } from "../cron/scheduler.js";
-import type { CronJobConfig } from "../cron/types.js";
+import type { CronJob, CronJobConfig } from "../cron/types.js";
 
 mkdirSync("./data/agent", { recursive: true });
 mkdirSync("./data/im", { recursive: true });
@@ -92,10 +92,32 @@ skillRegistry.register(new DailyDigestSkill({ configStorage: dailyDigestConfigSt
 
 const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry, skillDataRoot: "./data/skills" });
 
-function registerCronJob(cfg: CronJobConfig): void {
+function buildRuntimeCronJob(cfg: CronJobConfig): CronJob | undefined {
   const platform = cfg.platform === "feishu" ? feishu : undefined;
-  if (!platform || !cfg.chatId) return;
-  cron.add({ id: cfg.id, schedule: cfg.schedule, message: cfg.message, direct: cfg.direct ?? false, msgType: cfg.msgType ?? "text", ...(cfg.skillId !== undefined && { skillId: cfg.skillId }), ...(cfg.sendSkillOutput !== undefined && { sendSkillOutput: cfg.sendSkillOutput }), agent, delivery: { platform, chatId: cfg.chatId } });
+  if (!platform || !cfg.chatId) return undefined;
+  return {
+    id: cfg.id,
+    schedule: cfg.schedule,
+    message: cfg.message,
+    direct: cfg.direct ?? false,
+    msgType: cfg.msgType ?? "text",
+    ...(cfg.skillId !== undefined && { skillId: cfg.skillId }),
+    ...(cfg.sendSkillOutput !== undefined && { sendSkillOutput: cfg.sendSkillOutput }),
+    agent,
+    delivery: { platform, chatId: cfg.chatId },
+  };
+}
+
+function registerCronJob(cfg: CronJobConfig): void {
+  const job = buildRuntimeCronJob(cfg);
+  if (!job) return;
+  cron.add(job);
+}
+
+async function runCronJob(cfg: CronJobConfig): Promise<void> {
+  const job = buildRuntimeCronJob(cfg);
+  if (!job) throw new Error(`Cron job ${cfg.id} requires configured platform and chatId`);
+  await cron.runNow(job);
 }
 
 const server = new WebServer({
@@ -142,6 +164,7 @@ const server = new WebServer({
   }),
   onCronAdd: (cfg: CronJobConfig) => registerCronJob(cfg),
   onCronDelete: (id: string) => cron.remove(id),
+  onCronRun: async (cfg: CronJobConfig) => runCronJob(cfg),
   skillRegistry,
   onRunSkill: async (skillId: string, log: (msg: string) => void) => {
     const skill = skillRegistry.get(skillId);

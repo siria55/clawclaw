@@ -91,6 +91,8 @@ export interface WebServerConfig {
   onCronAdd?: (config: CronJobConfig) => void;
   /** Called after DELETE /api/cron/:id to remove a job from the scheduler. */
   onCronDelete?: (id: string) => void;
+  /** Called when POST /api/cron/:id/run is triggered from WebUI. */
+  onCronRun?: (config: CronJobConfig) => Promise<void>;
   /** Skill registry for GET /api/skills. */
   skillRegistry?: SkillRegistry;
   /** Called when POST /api/skills/:id/run is triggered from WebUI. */
@@ -116,7 +118,7 @@ interface ClawConfig {
  * API key, base URL, proxy, and model for that request.
  */
 export class WebServer {
-  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "skillDataRoot" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "dailyDigestConfigStorage" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "skillRegistry" | "onRunSkill">> & {
+  readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "skillDataRoot" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "dailyDigestConfigStorage" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "onCronRun" | "skillRegistry" | "onRunSkill">> & {
     agentConfig: AgentConfig | undefined;
     getStatus: (() => SystemStatus) | undefined;
     skillDataRoot: string | undefined;
@@ -133,6 +135,7 @@ export class WebServer {
     cronStorage: ConfigStorage<CronJobConfig[]> | undefined;
     onCronAdd: ((config: CronJobConfig) => void) | undefined;
     onCronDelete: ((id: string) => void) | undefined;
+    onCronRun: ((config: CronJobConfig) => Promise<void>) | undefined;
     skillRegistry: SkillRegistry | undefined;
     onRunSkill: ((skillId: string, log: (msg: string) => void) => Promise<SkillResult>) | undefined;
   };
@@ -159,6 +162,7 @@ export class WebServer {
       cronStorage: undefined,
       onCronAdd: undefined,
       onCronDelete: undefined,
+      onCronRun: undefined,
       skillRegistry: undefined,
       onRunSkill: undefined,
       ...config,
@@ -255,8 +259,14 @@ export class WebServer {
       return;
     }
 
+    if (req.method === "POST" && path.startsWith("/api/cron/") && path.endsWith("/run")) {
+      const id = decodeURIComponent(path.slice("/api/cron/".length, -"/run".length));
+      await this.#handleRunCron(id, res);
+      return;
+    }
+
     if (req.method === "DELETE" && path.startsWith("/api/cron/")) {
-      const id = path.slice("/api/cron/".length);
+      const id = decodeURIComponent(path.slice("/api/cron/".length));
       this.#handleDeleteCron(id, res);
       return;
     }
@@ -477,6 +487,34 @@ export class WebServer {
     this.#config.onCronDelete?.(id);
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ ok: true }));
+  }
+
+  async #handleRunCron(id: string, res: ServerResponse): Promise<void> {
+    if (!this.#config.cronStorage) {
+      res.writeHead(503, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: false, error: "Cron storage not configured" }));
+      return;
+    }
+    if (!this.#config.onCronRun) {
+      res.writeHead(503, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: false, error: "onCronRun not configured" }));
+      return;
+    }
+    const job = this.#config.cronStorage.read().find((item) => item.id === id);
+    if (!job) {
+      res.writeHead(404, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: false, error: `Cron job not found: ${id}` }));
+      return;
+    }
+    try {
+      await this.#config.onCronRun(job);
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: false, error: message }));
+    }
   }
 
   #handleGetIMConfig(res: ServerResponse): void {

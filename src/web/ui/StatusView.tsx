@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./StatusView.module.css";
 
-interface CronJobStatus {
-  id: string;
-  schedule: string;
-  message: string;
-  timezone: string;
-  chatId: string;
-  platform: string;
-}
-
 interface ConnectionStatus {
   platform: string;
   label: string;
@@ -17,7 +8,6 @@ interface ConnectionStatus {
 }
 
 interface SystemStatus {
-  cronJobs: CronJobStatus[];
   connections: ConnectionStatus[];
 }
 
@@ -31,39 +21,10 @@ interface IMEvent {
   timestamp: string;
 }
 
-interface CronJobConfig {
-  id: string;
-  schedule: string;
-  message: string;
-  chatId: string;
-  platform: string;
-  enabled: boolean;
-  direct: boolean;
-  msgType: "text" | "image";
-  skillId?: string;
-}
-
-const EMPTY_FORM: CronJobConfig = { id: "", schedule: "", message: "", chatId: "", platform: "feishu", enabled: true, direct: false, msgType: "text", skillId: "" };
-
 async function fetchStatus(): Promise<SystemStatus> {
   const res = await fetch("/api/status");
-  if (!res.ok) return { cronJobs: [], connections: [] };
+  if (!res.ok) return { connections: [] };
   return res.json() as Promise<SystemStatus>;
-}
-
-async function fetchCronJobs(): Promise<CronJobConfig[]> {
-  const res = await fetch("/api/cron");
-  if (!res.ok) return [];
-  const data = await res.json() as { jobs: CronJobConfig[] };
-  return data.jobs;
-}
-
-async function saveCronJob(job: CronJobConfig): Promise<void> {
-  await fetch("/api/cron", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(job) });
-}
-
-async function deleteCronJob(id: string): Promise<void> {
-  await fetch(`/api/cron/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 async function fetchIMLog(since?: string): Promise<{ events: IMEvent[]; total: number }> {
@@ -80,10 +41,6 @@ function formatTime(iso: string): string {
 export function StatusView(): React.JSX.Element {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(false);
-  const [cronJobs, setCronJobs] = useState<CronJobConfig[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<CronJobConfig>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
   const [imEvents, setIMEvents] = useState<IMEvent[]>([]);
   const [imFilter, setIMFilter] = useState<"all" | "group" | "direct">("all");
   const lastIdRef = useRef<string | undefined>(undefined);
@@ -91,30 +48,6 @@ export function StatusView(): React.JSX.Element {
   const load = (): void => {
     setLoading(true);
     void fetchStatus().then((s) => setStatus(s)).finally(() => setLoading(false));
-    void fetchCronJobs().then(setCronJobs);
-  };
-
-  const handleSave = (): void => {
-    if (!form.id || !form.schedule || !form.message) return;
-    setSaving(true);
-    void saveCronJob(form).then(() => {
-      setShowForm(false);
-      setForm(EMPTY_FORM);
-      void fetchCronJobs().then(setCronJobs);
-      void fetchStatus().then((s) => setStatus(s));
-    }).finally(() => setSaving(false));
-  };
-
-  const handleDelete = (id: string): void => {
-    void deleteCronJob(id).then(() => {
-      void fetchCronJobs().then(setCronJobs);
-      void fetchStatus().then((s) => setStatus(s));
-    });
-  };
-
-  const handleEdit = (job: CronJobConfig): void => {
-    setForm(job);
-    setShowForm(true);
   };
 
   useEffect(() => {
@@ -162,84 +95,6 @@ export function StatusView(): React.JSX.Element {
             </div>
           ))}
           {!status && !loading && <p className={styles.empty}>—</p>}
-        </section>
-
-        {/* Cron 任务 */}
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h3 className={styles.sectionTitle}>Cron 任务</h3>
-            <button className={styles.addBtn} onClick={() => { setForm(EMPTY_FORM); setShowForm(true); }}>+ 新增</button>
-          </div>
-
-          {cronJobs.length === 0 && <p className={styles.empty}>无已注册任务</p>}
-          {cronJobs.map((job) => (
-            <div key={job.id} className={styles.cronCard}>
-              <div className={styles.cronTop}>
-                <span className={styles.cronId}>{job.id}</span>
-                <code className={styles.cronExpr}>{job.schedule}</code>
-                <span className={`${styles.cronEnabled} ${job.enabled ? styles.cronEnabledOn : styles.cronEnabledOff}`}>
-                  {job.enabled ? "启用" : "停用"}
-                </span>
-              </div>
-              <p className={styles.cronMsg}>{job.message}</p>
-              <div className={styles.cronFooter}>
-                <span className={styles.cronMeta}>{job.platform} · {job.chatId || "—"}{job.chatId.startsWith("oc_") ? " 群聊" : job.chatId.startsWith("ou_") ? " 用户" : ""}</span>
-                <div className={styles.cronActions}>
-                  <button className={styles.cronActionBtn} onClick={() => handleEdit(job)}>编辑</button>
-                  <button className={`${styles.cronActionBtn} ${styles.cronDeleteBtn}`} onClick={() => handleDelete(job.id)}>删除</button>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {showForm && (
-            <div className={styles.cronForm}>
-              <div className={styles.formRow}>
-                <label className={styles.formLabel}>ID</label>
-                <input className={styles.formInput} value={form.id} placeholder="daily-digest" onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))} />
-              </div>
-              <div className={styles.formRow}>
-                <label className={styles.formLabel}>Schedule</label>
-                <input className={styles.formInput} value={form.schedule} placeholder="0 9 * * *" onChange={(e) => setForm((f) => ({ ...f, schedule: e.target.value }))} />
-              </div>
-              <div className={styles.formRow}>
-                <label className={styles.formLabel}>Chat ID</label>
-                <div className={styles.formInputGroup}>
-                  <input className={styles.formInput} value={form.chatId} placeholder="ou_xxx（用户）/ oc_xxx（群聊）" onChange={(e) => setForm((f) => ({ ...f, chatId: e.target.value }))} />
-                  <span className={styles.formHint}>{form.chatId.startsWith("oc_") ? "群聊" : form.chatId.startsWith("ou_") ? "用户" : ""}</span>
-                </div>
-              </div>
-              <div className={styles.formRow}>
-                <label className={styles.formLabel}>消息</label>
-                <textarea className={styles.formTextarea} value={form.message} rows={3} onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))} />
-              </div>
-              <div className={styles.formRow}>
-                <label className={styles.formLabel}>直发</label>
-                <input type="checkbox" checked={form.direct} onChange={(e) => setForm((f) => ({ ...f, direct: e.target.checked }))} />
-              </div>
-              {form.direct && (
-                <div className={styles.formRow}>
-                  <label className={styles.formLabel}>类型</label>
-                  <select className={styles.formInput} value={form.msgType} onChange={(e) => setForm((f) => ({ ...f, msgType: e.target.value as "text" | "image" }))}>
-                    <option value="text">文本</option>
-                    <option value="image">图片</option>
-                  </select>
-                </div>
-              )}
-              <div className={styles.formRow}>
-                <label className={styles.formLabel}>Skill ID</label>
-                <input className={styles.formInput} value={form.skillId ?? ""} placeholder="可选，如 news-digest" onChange={(e) => setForm((f) => ({ ...f, skillId: e.target.value || undefined }))} />
-              </div>
-              <div className={styles.formRow}>
-                <label className={styles.formLabel}>启用</label>
-                <input type="checkbox" checked={form.enabled} onChange={(e) => setForm((f) => ({ ...f, enabled: e.target.checked }))} />
-              </div>
-              <div className={styles.formActions}>
-                <button className={styles.saveBtn} onClick={handleSave} disabled={saving}>{saving ? "保存中…" : "保存"}</button>
-                <button className={styles.cancelBtn} onClick={() => setShowForm(false)}>取消</button>
-              </div>
-            </div>
-          )}
         </section>
 
         {/* IM 消息日志 */}

@@ -10,6 +10,7 @@ import type { IMConfig, AgentMetaConfig, DailyDigestConfig } from "../../src/con
 import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";
+import type { CronJobConfig } from "../../src/cron/types.js";
 
 /** Temp directory with a fake index.html for static serving tests */
 let staticDir: string;
@@ -202,6 +203,55 @@ describe("WebServer", () => {
     expect(body.connections).toHaveLength(1);
     expect(getStatus).toHaveBeenCalled();
     await server.stop();
+  });
+
+  it("POST /api/cron/:id/run calls onCronRun with stored config", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claw-cron-run-"));
+    try {
+      const cronStorage = new ConfigStorage<CronJobConfig[]>(join(dir, "cron.json"), []);
+      cronStorage.write([{
+        id: "daily-digest",
+        schedule: "0 9 * * *",
+        message: "生成日报",
+        chatId: "oc_daily",
+        platform: "feishu",
+        enabled: true,
+      }]);
+      const onCronRun = vi.fn(async () => undefined);
+      const agent = makeMockAgent();
+      const server = new WebServer({ agent, port: 0, staticDir, cronStorage, onCronRun });
+      await server.start();
+
+      const res = await fetch(`http://localhost:${server.port}/api/cron/daily-digest/run`, { method: "POST" });
+      const body = await res.json() as { ok: boolean };
+
+      expect(res.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(onCronRun).toHaveBeenCalledWith(expect.objectContaining({ id: "daily-digest" }));
+      await server.stop();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("POST /api/cron/:id/run returns 404 when job does not exist", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claw-cron-missing-"));
+    try {
+      const cronStorage = new ConfigStorage<CronJobConfig[]>(join(dir, "cron.json"), []);
+      const agent = makeMockAgent();
+      const server = new WebServer({ agent, port: 0, staticDir, cronStorage, onCronRun: vi.fn(async () => undefined) });
+      await server.start();
+
+      const res = await fetch(`http://localhost:${server.port}/api/cron/missing/run`, { method: "POST" });
+      const body = await res.json() as { ok: boolean; error: string };
+
+      expect(res.status).toBe(404);
+      expect(body.ok).toBe(false);
+      expect(body.error).toContain("Cron job not found");
+      await server.stop();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("emits thinking SSE event for thinking content blocks", async () => {

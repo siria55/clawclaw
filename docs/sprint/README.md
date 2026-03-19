@@ -129,6 +129,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 44 — DailyDigest 主题支持 WebUI 配置
 `DailyDigestSkill` 新增运行时配置：WebUI 设置页可直接修改搜索主题，服务端写入 `data/skills/daily-digest/config.json`，skill 下次运行自动读取覆盖 `SKILL.md` 默认主题。同时放大 HTML 日报中的编号数字，提高视觉层级。
 
+### Sprint 45 — Cron 独立 Tab 与手动执行
+`CronView` 从 `StatusView` 拆出为独立 tab；新增 `POST /api/cron/:id/run` 和 `CronScheduler.runNow()`，支持从 WebUI 直接执行单条 Cron 任务。状态页回归为 IM 连接和日志视图。
+
 ### Sprint 37 — 清理 src/news/ 死代码目录
 Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
 

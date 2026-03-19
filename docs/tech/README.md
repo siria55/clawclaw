@@ -250,6 +250,7 @@ defineTool({
 | `/api/config/agent` | GET/POST | Agent 配置（读写 `data/agent-config.json`） |
 | `/api/config/daily-digest` | GET/POST | DailyDigest 搜索主题（读写 `data/skills/daily-digest/config.json`） |
 | `/api/cron` | GET/POST/DELETE | Cron 任务 CRUD |
+| `/api/cron/:id/run` | POST | 立即执行单条 Cron 任务 |
 | `/api/im-log` | GET | IM 事件日志（query: `since=`） |
 | `*` | GET | 静态文件或 SPA fallback |
 
@@ -287,7 +288,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 - API server（`pnpm dev:api`）：`http://localhost:3000`
 - WebServer（生产 app.ts）：`http://localhost:3001`
 
-**六标签页导航（hash 路由）：**
+**七标签页导航（hash 路由）：**
 
 | Tab | URL hash | 组件 | 说明 |
 |-----|----------|------|------|
@@ -295,10 +296,13 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 新闻库 | `#news` | `NewsView` | 关键词搜索、分页浏览（读 skill JSON 输出） |
 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起 |
 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志 |
-| 状态 | `#status` | `StatusView` | IM 连接状态、Cron 任务列表、IM 日志 |
-| 设置 | `#settings` | `SettingsView` | Agent 配置 / DailyDigest 搜索主题 / LLM 配置 / 飞书 IM 配置 / Cron 管理 |
+| 状态 | `#status` | `StatusView` | IM 连接状态、IM 日志 |
+| Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行 |
+| 设置 | `#settings` | `SettingsView` | Agent 配置 / DailyDigest 搜索主题 / LLM 配置 / 飞书 IM 配置 |
 
 URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读 `window.location.hash`，切换 tab 更新 hash，监听 `hashchange` 支持浏览器前进/后退。
+
+`CronView` 通过 `GET /api/cron` 读取配置，`POST /api/cron` 保存，`DELETE /api/cron/:id` 删除，`POST /api/cron/:id/run` 直接触发一次运行；后端再通过 `CronScheduler.runNow()` 复用既有 Skill / IM 投递链路。
 
 **关键 hooks：**
 - `useChatStream` — SSE 解析、事件状态管理、thinking 块累积
