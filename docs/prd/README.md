@@ -132,11 +132,13 @@ Agent 指令...
 ```
 
 **内置 Skill — DailyDigestSkill：**
-1. 启动 Playwright 浏览器，创建新闻搜索子 Agent
-2. 子 Agent 使用 `browser_navigate` / `browser_get_links` 工具，按 LLM 推理提取文章
-3. 渲染 HTML 日报，Playwright 截图为 PNG
-4. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
-5. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
+1. 启动 Playwright 浏览器，依次搜索多个科技关键词
+2. 直接从搜索结果页提取候选链接并去重
+3. 调用一次专用 LLM 抽取提示词，将候选链接筛成结构化文章数组
+4. 若 LLM 返回 fenced json 或 near-JSON（如标题引号未转义），解析层会做兜底修复
+5. 渲染 HTML 日报，Playwright 截图为 PNG
+6. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
+7. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
 
 **数据目录：**
 ```

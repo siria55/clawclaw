@@ -114,6 +114,9 @@ Skills 输出保存到 `data/skills/{id}/YYYY-MM-DD.*`（MD / HTML / PNG）；`r
 ### Sprint 39 — 飞书 Session 拆分 + 会话桥接
 `IMMessage` 新增 `sessionId` / `continuityId`。飞书普通消息沿用 `chatId`，线程消息改用 `chatId#thread:<rootId|threadId|parentId>`，避免不同来源串 session。`ConversationStorage` 改为按 `sessionId` 持久化，并在同 `chatId + userId` 的新 session 首轮注入一条短桥接消息；长期记忆仍由全局 `MemoryStorage` 共用。143 tests 通过。
 
+### Sprint 40 — DailyDigestSkill 抽取链路加固
+`DailyDigestSkill` 抽取阶段不再复用聊天 Agent 的 `run()`，改为直接调用 `ctx.agent.llm.complete()` + 专用 `EXTRACTION_SYSTEM`，避免被人设 prompt 干扰。新增 fenced json 提取和 near-JSON 宽松解析兜底，修复“抓到链接但日报为空”的问题；真实重跑后 `2026-03-19.json` 恢复为 12 篇文章。
+
 ### Sprint 37 — 清理 src/news/ 死代码目录
 Sprint 36 后 `src/news/types.ts` / `index.ts` 无任何 import 引用，删除整个 `src/news/` 目录。137 tests 通过。
 
