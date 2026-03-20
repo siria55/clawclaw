@@ -1,58 +1,103 @@
 import { useEffect, useState } from "react";
+import { AutomationView, type AutomationTab } from "./AutomationView";
 import { ChatView } from "./ChatView";
-import { CronView } from "./CronView";
-import { IMView } from "./IMView";
+import { ContentView, type ContentTab } from "./ContentView";
+import { IMView, type IMSubTab } from "./IMView";
 import { InputBar } from "./InputBar";
-import { MemoryView } from "./MemoryView";
-import { NewsView } from "./NewsView";
-import { SettingsView } from "./SettingsView";
-import { SkillsView } from "./SkillsView";
-import { StatusView } from "./StatusView";
+import { SystemView, type SystemTab } from "./SystemView";
 import { useChatStream } from "./useChatStream";
 import styles from "./App.module.css";
 
-type View = "chat" | "news" | "memory" | "skills" | "status" | "im" | "cron" | "settings";
+type View = "chat" | "content" | "automation" | "im" | "system";
 
-const HASH_TO_VIEW: Record<string, View> = {
-  "#chat": "chat",
-  "#news": "news",
-  "#memory": "memory",
-  "#skills": "skills",
-  "#status": "status",
-  "#im-status": "im",
-  "#im": "im",
-  "#cron": "cron",
-  "#settings": "settings",
+interface RouteState {
+  view: View;
+  contentTab: ContentTab;
+  automationTab: AutomationTab;
+  imTab: IMSubTab;
+  systemTab: SystemTab;
+}
+
+const DEFAULT_ROUTE: RouteState = {
+  view: "chat",
+  contentTab: "news",
+  automationTab: "cron",
+  imTab: "messages",
+  systemTab: "status",
 };
 
-const VIEWS: View[] = ["chat", "news", "memory", "skills", "status", "im", "cron", "settings"];
+const VIEWS: View[] = ["chat", "content", "automation", "im", "system"];
 
 const TAB_LABELS: Record<View, string> = {
   chat: "对话",
-  news: "新闻库",
-  memory: "记忆库",
-  skills: "Skills",
-  status: "状态",
+  content: "内容",
+  automation: "自动化",
   im: "IM",
-  cron: "Cron",
-  settings: "设置",
+  system: "系统",
 };
 
-function getViewFromHash(): View {
-  return HASH_TO_VIEW[window.location.hash] ?? "chat";
+const DEFAULT_HASH_BY_VIEW: Record<View, string> = {
+  chat: "#chat",
+  content: "#news",
+  automation: "#cron",
+  im: "#im",
+  system: "#status",
+};
+
+function getRouteFromHash(hash: string): RouteState {
+  switch (hash) {
+    case "#news":
+      return { ...DEFAULT_ROUTE, view: "content", contentTab: "news" };
+    case "#memory":
+      return { ...DEFAULT_ROUTE, view: "content", contentTab: "memory" };
+    case "#skills":
+      return { ...DEFAULT_ROUTE, view: "automation", automationTab: "skills" };
+    case "#cron":
+      return { ...DEFAULT_ROUTE, view: "automation", automationTab: "cron" };
+    case "#im-status":
+      return { ...DEFAULT_ROUTE, view: "im", imTab: "status" };
+    case "#im-config":
+      return { ...DEFAULT_ROUTE, view: "im", imTab: "config" };
+    case "#im":
+      return { ...DEFAULT_ROUTE, view: "im", imTab: "messages" };
+    case "#settings":
+      return { ...DEFAULT_ROUTE, view: "system", systemTab: "settings" };
+    case "#status":
+      return { ...DEFAULT_ROUTE, view: "system", systemTab: "status" };
+    default:
+      return DEFAULT_ROUTE;
+  }
+}
+
+function getHashForContentTab(tab: ContentTab): string {
+  return tab === "memory" ? "#memory" : "#news";
+}
+
+function getHashForAutomationTab(tab: AutomationTab): string {
+  return tab === "skills" ? "#skills" : "#cron";
+}
+
+function getHashForIMTab(tab: IMSubTab): string {
+  if (tab === "status") return "#im-status";
+  if (tab === "config") return "#im-config";
+  return "#im";
+}
+
+function getHashForSystemTab(tab: SystemTab): string {
+  return tab === "settings" ? "#settings" : "#status";
 }
 
 export function App(): React.JSX.Element {
   const { entries, streaming, send } = useChatStream();
-  const [view, setView] = useState<View>(getViewFromHash);
+  const [route, setRoute] = useState<RouteState>(() => getRouteFromHash(window.location.hash));
 
   useEffect(() => {
-    const onHashChange = (): void => setView(getViewFromHash());
+    const onHashChange = (): void => setRoute(getRouteFromHash(window.location.hash));
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  const navigate = (v: View): void => { window.location.hash = v; };
+  const navigate = (view: View): void => { window.location.hash = DEFAULT_HASH_BY_VIEW[view]; };
   const handleSend = (text: string): void => { void send(text); };
 
   return (
@@ -70,7 +115,7 @@ export function App(): React.JSX.Element {
           {VIEWS.map((v) => (
             <button
               key={v}
-              className={`${styles.tab} ${view === v ? styles.tabActive : ""}`}
+              className={`${styles.tab} ${route.view === v ? styles.tabActive : ""}`}
               onClick={() => navigate(v)}
             >
               {TAB_LABELS[v]}
@@ -80,27 +125,51 @@ export function App(): React.JSX.Element {
       </aside>
 
       <main className={styles.content}>
-        {view === "chat" ? (
+        {route.view === "chat" ? (
           <>
             <ChatView entries={entries} streaming={streaming} />
             <InputBar disabled={streaming} onSend={handleSend} />
           </>
-        ) : view === "news" ? (
-          <NewsView />
-        ) : view === "memory" ? (
-          <MemoryView />
-        ) : view === "skills" ? (
-          <SkillsView />
-        ) : view === "status" ? (
-          <StatusView />
-        ) : view === "im" ? (
-          <IMView />
-        ) : view === "cron" ? (
-          <CronView />
         ) : (
-          <SettingsView />
+          <RouteView route={route} />
         )}
       </main>
     </div>
+  );
+}
+
+function RouteView(props: { route: RouteState }): React.JSX.Element {
+  if (props.route.view === "content") {
+    return (
+      <ContentView
+        activeTab={props.route.contentTab}
+        onTabChange={(tab) => { window.location.hash = getHashForContentTab(tab); }}
+      />
+    );
+  }
+
+  if (props.route.view === "automation") {
+    return (
+      <AutomationView
+        activeTab={props.route.automationTab}
+        onTabChange={(tab) => { window.location.hash = getHashForAutomationTab(tab); }}
+      />
+    );
+  }
+
+  if (props.route.view === "im") {
+    return (
+      <IMView
+        activeTab={props.route.imTab}
+        onTabChange={(tab) => { window.location.hash = getHashForIMTab(tab); }}
+      />
+    );
+  }
+
+  return (
+    <SystemView
+      activeTab={props.route.systemTab}
+      onTabChange={(tab) => { window.location.hash = getHashForSystemTab(tab); }}
+    />
   );
 }

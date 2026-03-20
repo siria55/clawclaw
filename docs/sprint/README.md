@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`。
 
 ---
 
@@ -111,13 +111,21 @@
 - `IM` 大 tab 新增 `配置` 子 tab，承载飞书 IM 凭证和运行摘要
 - `设置` 页移除飞书 IM 配置，避免 IM 相关内容分散在两个一级 tab
 
+## 第十八阶段：导航信息架构重整（Sprint 60）
+
+- WebUI 一级 tab 重构为 `对话` / `内容` / `自动化` / `IM` / `系统`
+- `内容`、`自动化`、`系统` 通过二级 tab 承载原来的单页入口，旧 hash 继续兼容
+
 ---
 
 ## 当前落点
 
-- WebUI 为 8 个标签页：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#im` / `#cron` / `#settings`
-- `#status` / `#settings` 以及 `#im` 的状态子 tab 内部提供页内 TOC，不改变主 tab hash
-- `#im` 内部现有 `状态` / `消息` / `配置` 三个子 tab
+- WebUI 一级导航为 5 个大 tab：`对话` / `内容` / `自动化` / `IM` / `系统`
+- `内容` 内部为 `新闻库` / `记忆库`
+- `自动化` 内部为 `Cron` / `Skills`
+- `IM` 内部为 `状态` / `消息` / `配置`
+- `系统` 内部为 `状态` / `设置`
+- `#status` / `#settings` 以及 `#im-status` 等旧 hash 仍兼容到新的二级页
 - 新闻库来自 `data/skills/*/YYYY-MM-DD.json`
 - 长期记忆来自 `data/agent/memory.json`，仅保存 `memory_save` 显式写入的内容
 - 飞书文档挂载、飞书组织读取、Cron 立即执行、飞书群聊可视化均已可用

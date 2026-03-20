@@ -15,10 +15,14 @@ import {
 import styles from "./StatusView.module.css";
 
 type IMFilter = "all" | "group" | "direct";
-type IMSubTab = "status" | "messages" | "config";
+export type IMSubTab = "status" | "messages" | "config";
 
-export function IMView(): React.JSX.Element {
-  const [subTab, setSubTab] = useState<IMSubTab>(getInitialSubTab);
+interface IMViewProps {
+  activeTab: IMSubTab;
+  onTabChange: (tab: IMSubTab) => void;
+}
+
+export function IMView(props: IMViewProps): React.JSX.Element {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [events, setEvents] = useState<IMEvent[]>([]);
@@ -52,51 +56,37 @@ export function IMView(): React.JSX.Element {
   };
 
   useEffect(() => {
-    const syncSubTabFromHash = (): void => {
-      if (window.location.hash === "#im-status") {
-        setSubTab("status");
-        return;
-      }
-      if (window.location.hash === "#im") {
-        setSubTab("messages");
-      }
-    };
-    window.addEventListener("hashchange", syncSubTabFromHash);
-    return () => window.removeEventListener("hashchange", syncSubTabFromHash);
-  }, []);
-
-  useEffect(() => {
-    if (subTab === "status" && !status && !statusLoading) {
+    if (props.activeTab === "status" && !status && !statusLoading) {
       loadStatus();
     }
-    if (subTab === "messages" && events.length === 0 && !logLoading) {
+    if (props.activeTab === "messages" && events.length === 0 && !logLoading) {
       load(undefined, true);
     }
-  }, [events.length, logLoading, status, statusLoading, subTab]);
+  }, [events.length, logLoading, props.activeTab, status, statusLoading]);
 
   useEffect(() => {
-    if (subTab !== "messages") return;
+    if (props.activeTab !== "messages") return;
     const timer = setInterval(() => load(lastIdRef.current), 3000);
     return () => clearInterval(timer);
-  }, [subTab]);
+  }, [props.activeTab]);
 
   const refresh = (): void => {
-    if (subTab === "status") {
+    if (props.activeTab === "status") {
       loadStatus();
       return;
     }
-    if (subTab === "config") {
+    if (props.activeTab === "config") {
       setConfigReloadToken((prev) => prev + 1);
       return;
     }
     lastIdRef.current = undefined;
     load(undefined, true);
   };
-  const refreshing = subTab === "status" ? statusLoading : subTab === "messages" ? logLoading : false;
+  const refreshing = props.activeTab === "status" ? statusLoading : props.activeTab === "messages" ? logLoading : false;
 
   return (
     <div className={styles.page}>
-      <div className={subTab === "status" ? styles.inner : styles.innerSingle}>
+      <div className={props.activeTab === "status" ? styles.inner : styles.innerSingle}>
         <div className={styles.main}>
           <div className={styles.header}>
             <h2 className={styles.title}>IM</h2>
@@ -114,20 +104,20 @@ export function IMView(): React.JSX.Element {
               <button
                 key={value}
                 type="button"
-                className={`${styles.imTab} ${subTab === value ? styles.imTabActive : ""}`}
-                onClick={() => setSubTab(value)}
+                className={`${styles.imTab} ${props.activeTab === value ? styles.imTabActive : ""}`}
+                onClick={() => props.onTabChange(value)}
               >
                 {value === "status" ? "状态" : value === "messages" ? "消息" : "配置"}
               </button>
             ))}
           </div>
-          {subTab === "status" ? (
+          {props.activeTab === "status" ? (
             <>
               <ConnectionsSection status={status} />
               <FeishuRuntimeSection overview={status?.overview} />
               <ChatSummarySection overview={status?.overview} />
             </>
-          ) : subTab === "config" ? (
+          ) : props.activeTab === "config" ? (
             <FeishuConfigSection id="im-config" title="飞书 IM 配置" reloadToken={configReloadToken} />
           ) : (
             <section id="im-log" className={styles.section}>
@@ -150,14 +140,10 @@ export function IMView(): React.JSX.Element {
             </section>
           )}
         </div>
-        {subTab === "status" ? <SectionToc items={tocItems} /> : null}
+        {props.activeTab === "status" ? <SectionToc items={tocItems} /> : null}
       </div>
     </div>
   );
-}
-
-function getInitialSubTab(): IMSubTab {
-  return window.location.hash === "#im-status" ? "status" : "messages";
 }
 
 function ConnectionsSection(props: { status: SystemStatus | null }): React.JSX.Element {
