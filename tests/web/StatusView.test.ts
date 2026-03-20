@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
-import { IMStatusView } from "../../src/web/ui/IMStatusView.js";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { IMView } from "../../src/web/ui/IMView.js";
 import { StatusView } from "../../src/web/ui/StatusView.js";
 
@@ -17,6 +16,7 @@ function makeResponse(body: unknown, ok = true): Response {
 describe("StatusView", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
+    window.location.hash = "";
   });
 
   afterEach(() => {
@@ -93,7 +93,8 @@ describe("StatusView", () => {
     expect(screen.queryByText("飞书运行状态")).toBeNull();
   });
 
-  it("renders IM platform status and chat summaries in the IM status tab", async () => {
+  it("renders IM status as a subtab when opened from the old #im-status hash", async () => {
+    window.location.hash = "#im-status";
     const fetchMock = vi.fn(async (input: string) => {
       if (input !== "/api/status") {
         throw new Error(`Unexpected fetch: ${input}`);
@@ -133,7 +134,7 @@ describe("StatusView", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(React.createElement(IMStatusView));
+    render(React.createElement(IMView));
 
     expect(await screen.findByText("飞书运行状态")).toBeDefined();
     expect(screen.getByText("cli_demo")).toBeDefined();
@@ -141,25 +142,60 @@ describe("StatusView", () => {
     expect(screen.getByText(/机器人进群/)).toBeDefined();
   });
 
-  it("renders IM log in a dedicated tab", async () => {
+  it("renders IM log by default and can switch to the status subtab", async () => {
+    window.location.hash = "#im";
     const fetchMock = vi.fn(async (input: string) => {
-      if (input !== "/api/im-log") {
-        throw new Error(`Unexpected fetch: ${input}`);
+      if (input === "/api/im-log") {
+        return makeResponse({
+          events: [{
+            id: "1",
+            platform: "feishu",
+            userId: "ou_demo",
+            chatId: "oc_demo",
+            chatName: "运营群",
+            eventType: "bot_added",
+            text: "机器人已加入群：运营群",
+            replyText: "https://example.com/news",
+            timestamp: "2026-03-19T08:00:00.000Z",
+          }],
+          total: 1,
+        });
       }
-      return makeResponse({
-        events: [{
-          id: "1",
-          platform: "feishu",
-          userId: "ou_demo",
-          chatId: "oc_demo",
-          chatName: "运营群",
-          eventType: "bot_added",
-          text: "机器人已加入群：运营群",
-          replyText: "https://example.com/news",
-          timestamp: "2026-03-19T08:00:00.000Z",
-        }],
-        total: 1,
-      });
+      if (input === "/api/status") {
+        return makeResponse({
+          connections: [{ platform: "feishu", label: "飞书 Bot", connected: true }],
+          overview: {
+            feishu: {
+              runtime: {
+                configured: true,
+                active: true,
+                source: "storage",
+                webhookPath: "/feishu",
+              },
+              appId: "cli_demo",
+              chatId: "oc_demo",
+              hasAppSecret: true,
+              hasVerificationToken: true,
+              hasEncryptKey: false,
+              permissionsHint: "需要通讯录读取权限",
+            },
+            metrics: [],
+            configFiles: [],
+            chats: [
+              {
+                platform: "feishu",
+                chatId: "oc_demo",
+                chatName: "运营群",
+                active: true,
+                joinedAt: "2026-03-19T07:30:00.000Z",
+                lastSeen: "2026-03-19T08:00:00.000Z",
+                lastEventType: "bot_added",
+              },
+            ],
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${input}`);
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -169,5 +205,11 @@ describe("StatusView", () => {
     expect(screen.getAllByText("运营群").length).toBeGreaterThan(0);
     expect(screen.getByText("机器人已加入群：运营群")).toBeDefined();
     expect(screen.getByText("https://example.com/news")).toBeDefined();
+    expect(screen.queryByText("飞书运行状态")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "状态" }));
+
+    expect(await screen.findByText("飞书运行状态")).toBeDefined();
+    expect(screen.getByText("cli_demo")).toBeDefined();
   });
 });

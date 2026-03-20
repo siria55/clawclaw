@@ -16,6 +16,11 @@
   align-items: start;
 }
 
+.innerSingle {
+  width: 100%;
+  max-width: 1320px;
+}
+
 .main {
   min-width: 0;
   display: flex;

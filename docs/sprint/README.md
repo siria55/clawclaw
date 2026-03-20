@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`。
 
 ---
 
@@ -96,12 +96,17 @@
 - WebUI 将 `状态`、`IM 状态`、`IM` 拆成三个独立 tab，分别承载运行概览、IM 平台状态和消息日志
 - 飞书 digest 数字回复改成直接返回单独新闻链接，不再发送详情卡片
 
+## 第十五阶段：IM 导航收敛（Sprint 57）
+
+- WebUI 将侧边栏里的 `IM 状态` / `IM` 合并为单个 `IM` tab，页内再拆 `状态` / `消息` 子 tab
+- 旧的 `#im-status` hash 兼容映射到新的 `IM` 页状态子 tab
+
 ---
 
 ## 当前落点
 
-- WebUI 为 9 个标签页：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#im-status` / `#im` / `#cron` / `#settings`
-- `#status` / `#im-status` / `#settings` 内部提供页内 TOC，不改变 tab 自身 hash
+- WebUI 为 8 个标签页：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#im` / `#cron` / `#settings`
+- `#status` / `#settings` 以及 `#im` 的状态子 tab 内部提供页内 TOC，不改变主 tab hash
 - 新闻库来自 `data/skills/*/YYYY-MM-DD.json`
 - 长期记忆来自 `data/agent/memory.json`，仅保存 `memory_save` 显式写入的内容
 - 飞书文档挂载、飞书组织读取、Cron 立即执行、飞书群聊可视化均已可用

@@ -450,7 +450,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 - API server（`pnpm dev:api`）：`http://localhost:3000`
 - WebServer（生产 app.ts）：`http://localhost:3001`
 
-**九标签页导航（hash 路由）：**
+**八标签页导航（hash 路由）：**
 
 | Tab | URL hash | 组件 | 说明 |
 |-----|----------|------|------|
@@ -459,8 +459,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起，只展示已通过 `memory_save` 落库的条目 |
 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志 |
 | 状态 | `#status` | `StatusView` | 运行概览、最近 IM 活动、配置文件，并带停靠在页面右侧的页内 TOC |
-| IM 状态 | `#im-status` | `IMStatusView` | IM 平台连接、飞书运行摘要、群聊列表，并带停靠在页面右侧的页内 TOC |
-| IM | `#im` | `IMView` | 实时 IM 消息日志、群聊 / 直发筛选、手动刷新 |
+| IM | `#im` | `IMView` | 页内子 tab 切分为 `状态` / `消息`；状态子 tab 展示 IM 平台连接、飞书运行摘要、群聊列表并带右侧 TOC，消息子 tab 展示实时 IM 日志、群聊 / 直发筛选 |
 | Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行、直发文本 / Markdown / 图片、支持多目标发送 |
 | 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / DailyDigest 搜索主题 / LLM 配置 / 飞书 IM 配置，并带停靠在页面右侧的页内 TOC |
 
@@ -468,9 +467,13 @@ URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读
 
 `CronView` 通过 `GET /api/cron` 读取配置，`POST /api/cron` 保存，`DELETE /api/cron/:id` 删除，`POST /api/cron/:id/run` 直接触发一次运行；后端再通过 `CronScheduler.runNow()` 复用既有 Skill / IM 投递链路。直发模式下可选择 `text` / `markdown` / `image`，其中 Markdown 会优先走平台的 `sendMarkdown()` 能力。发送目标支持多行输入，保存后会归一化为 `chatId + chatIds`。
 
-`SettingsView`、`StatusView` 和 `IMStatusView` 都会在页面右侧渲染 `SectionToc`，点击后使用 `scrollIntoView()` 在当前 tab 内平滑滚动到目标区块，不修改 URL hash。
+`SettingsView`、`StatusView` 以及 `IMView` 的状态子 tab 都会在页面右侧渲染 `SectionToc`，点击后使用 `scrollIntoView()` 在当前 tab 内平滑滚动到目标区块，不修改主 URL hash。
 
-`IMView` 通过 `GET /api/im-log` 首次加载最近事件，再基于 `since=<lastId>` 轮询增量日志；前端只保留最近 50 条，避免单页无限增长。
+`IMView` 通过内部子 tab 组织两类数据：
+
+- `状态` 子 tab 读取 `GET /api/status`，展示 IM 平台连接、飞书运行信息和群聊摘要
+- `消息` 子 tab 通过 `GET /api/im-log` 首次加载最近事件，再基于 `since=<lastId>` 轮询增量日志；前端只保留最近 50 条，避免单页无限增长
+- 为兼容旧链接，`#im-status` 会映射到 `IMView` 的 `状态` 子 tab
 
 `SettingsView` 的飞书文档区块通过 `GET /api/config/feishu-docs` 读取配置和同步状态，`POST /api/config/feishu-docs` 保存来源列表，`POST /api/config/feishu-docs/sync` 调用 `MountedDocLibrary` 用 Playwright 拉取正文并写入本地缓存。
 

@@ -238,17 +238,19 @@ Agent 可挂载一组飞书文档来源（名称 + URL），由服务端使用 P
 
 所有 POST 配置接口均支持热更新，保存后立即生效，无需重启。
 
-Web UI 现在将运行态和 IM 可视化拆成三个独立页面：
+Web UI 现在将运行态和 IM 可视化拆成两个主页面：
 
 - `状态`：运行指标、最近 IM 活动、配置文件状态
-- `IM 状态`：IM 平台连接、飞书运行摘要、飞书群聊列表
-- `IM`：实时 IM 消息日志，支持群聊 / 直发筛选
-- `状态` / `IM 状态` / `设置` 三个长页面 tab 内置页内 TOC，并固定在页面外侧，减少遮挡主内容
+- `IM`：页内子 tab 切分为 `状态` / `消息`
+- `IM > 状态`：IM 平台连接、飞书运行摘要、飞书群聊列表
+- `IM > 消息`：实时 IM 消息日志，支持群聊 / 直发筛选
+- `状态` / `设置` 以及 `IM > 状态` 长页面内置页内 TOC，并固定在页面外侧，减少遮挡主内容
 
-Web UI 九个标签页各对应独立 URL（hash 路由）：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#im-status` / `#im` / `#cron` / `#settings`，支持直接访问和浏览器前进/后退。
+Web UI 八个标签页各对应独立 URL（hash 路由）：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#im` / `#cron` / `#settings`，支持直接访问和浏览器前进/后退。
 
 其中：
-- `#status` / `#im-status` / `#settings` 内部支持页内 TOC 跳转，不影响原有 tab hash 路由
+- `#status` / `#settings` 以及 `#im` 的状态子 tab 内部支持页内 TOC 跳转，不影响主 tab hash 路由
+- 旧的 `#im-status` 链接会自动兼容到 `#im` 的状态子 tab
 - `#cron` 的直发模式支持 `text` / `markdown` / `image`
 - `#cron` 的发送目标支持多行配置，一个任务可同时发给多个 chatId
 - 飞书 IM 对“今天的新闻”类请求支持直接回图片 / 文本，不必先配置 Cron
@@ -302,7 +304,7 @@ src/
 │       └── index.ts     DailyDigestSkill 实现
 └── web/
     ├── server.ts       WebServer，调试 API + 静态文件服务
-    └── ui/             React + Vite 前端（九标签页）
+    └── ui/             React + Vite 前端（八标签页）
 ```
 
 依赖方向：`server/web → platform / core`，`core → llm / tools`，`tools → news / memory`，`skills → core`，各层不反向依赖。
