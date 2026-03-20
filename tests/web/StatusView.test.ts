@@ -2,7 +2,7 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { IMView } from "../../src/web/ui/IMView.js";
+import { IMView, type IMSubTab } from "../../src/web/ui/IMView.js";
 import { StatusView } from "../../src/web/ui/StatusView.js";
 
 function makeResponse(body: unknown, ok = true): Response {
@@ -11,6 +11,11 @@ function makeResponse(body: unknown, ok = true): Response {
     json: async () => body,
     text: async () => typeof body === "string" ? body : JSON.stringify(body),
   } as Response;
+}
+
+function ControlledIMView(props: { initialTab: IMSubTab }): React.JSX.Element {
+  const [tab, setTab] = React.useState<IMSubTab>(props.initialTab);
+  return React.createElement(IMView, { activeTab: tab, onTabChange: setTab });
 }
 
 describe("StatusView", () => {
@@ -93,8 +98,7 @@ describe("StatusView", () => {
     expect(screen.queryByText("飞书运行状态")).toBeNull();
   });
 
-  it("renders IM status as a subtab when opened from the old #im-status hash", async () => {
-    window.location.hash = "#im-status";
+  it("renders IM status when the status subtab is active", async () => {
     const fetchMock = vi.fn(async (input: string) => {
       if (input !== "/api/status") {
         throw new Error(`Unexpected fetch: ${input}`);
@@ -134,7 +138,7 @@ describe("StatusView", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(React.createElement(IMView));
+    render(React.createElement(ControlledIMView, { initialTab: "status" }));
 
     expect(await screen.findByText("飞书运行状态")).toBeDefined();
     expect(screen.getByText("cli_demo")).toBeDefined();
@@ -143,9 +147,8 @@ describe("StatusView", () => {
   });
 
   it("renders IM log by default and can switch to the status subtab", async () => {
-    window.location.hash = "#im";
     const fetchMock = vi.fn(async (input: string) => {
-      if (input === "/api/im-log") {
+      if (input.startsWith("/api/im-log")) {
         return makeResponse({
           events: [{
             id: "1",
@@ -210,11 +213,11 @@ describe("StatusView", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(React.createElement(IMView));
+    render(React.createElement(ControlledIMView, { initialTab: "messages" }));
 
-    expect(await screen.findByText("IM 消息日志")).toBeDefined();
+    expect(await screen.findByText("机器人已加入群：运营群")).toBeDefined();
+    expect(screen.getByText("IM 消息日志")).toBeDefined();
     expect(screen.getAllByText("运营群").length).toBeGreaterThan(0);
-    expect(screen.getByText("机器人已加入群：运营群")).toBeDefined();
     expect(screen.getByText("https://example.com/news")).toBeDefined();
     expect(screen.queryByText("飞书运行状态")).toBeNull();
 

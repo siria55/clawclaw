@@ -29,7 +29,7 @@
 ## 验证
 
 - [x] `corepack pnpm typecheck`
-- [x] `corepack pnpm test tests/web/App.test.tsx tests/web/StatusView.test.ts`
+- [x] `corepack pnpm test tests/web/App.test.ts tests/web/StatusView.test.ts`
 - [x] `corepack pnpm build`
 
 ## 结果
