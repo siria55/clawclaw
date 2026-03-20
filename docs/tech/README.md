@@ -42,6 +42,8 @@ src/index.ts（公共入口）
 
 原则：依赖只向下，`server` 和 `web` 依赖 `core`，`core` 依赖 `llm` 和 `tools`，`tools` 依赖 `news` 和 `memory`，`skills` 依赖 `core`，各层不反向依赖。
 
+运行期数据统一写入项目根目录下的 `data/`。启动入口会自动创建所需目录，因此仓库本身不需要提交任何本机生成的配置、会话日志或 skill 产物；这些内容应作为本地运行态并通过 `.gitignore` 排除。
+
 ---
 
 ## Agent 编排循环
@@ -449,7 +451,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 
 **开发服务端口：**
 - Vite dev server：`http://localhost:5173`（通过 proxy 转发 `/api/*` 到 `http://localhost:3000`）
-- API server（`pnpm dev:api`）：`http://localhost:3000`
+- API server（`corepack pnpm dev:api`）：`http://localhost:3000`
 - WebServer（生产 app.ts）：`http://localhost:3001`
 
 **五个一级能力域 + 二级 tab（hash 路由）：**

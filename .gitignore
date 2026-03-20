@@ -1,8 +1,12 @@
 node_modules/
 dist/
 coverage/
+src/web/dist/
 .env
 .env.*
 !.env.example
 *.log
 .DS_Store
+.claude/
+data/
+package-lock.json

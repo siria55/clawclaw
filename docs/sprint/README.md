@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`。
 
 ---
 
@@ -122,11 +122,20 @@
 - `设置` 页移除 `DailyDigest` 独立区块，保留系统级配置
 - `daily-digest` 现在可在同一处完成配置、手动运行、日志查看和截图预览
 
+## 第二十阶段：GitHub 与跨机器准备（Sprint 62）
+
+- 新增根目录 `README.md`，明确另一台电脑的最短启动路径
+- `.env.example` 和使用文档补齐 `corepack pnpm` 与 Playwright 浏览器安装步骤
+- `data/` 改回本地运行态目录，不再作为 Git 仓库内容同步
+- 删除 `package-lock.json`，统一只保留 `pnpm-lock.yaml`
+
 ---
 
 ## 当前落点
 
 - WebUI 一级导航为 5 个大 tab：`对话` / `内容` / `自动化` / `IM` / `系统`
+- 仓库根目录已提供 GitHub 友好的 `README.md` 和新机器启动步骤
+- 运行态数据统一保存在本地 `data/`，不再跟随仓库提交
 - `内容` 内部为 `新闻库` / `记忆库`
 - `自动化` 内部为 `Cron` / `Skills`
 - `IM` 内部为 `状态` / `消息` / `配置`

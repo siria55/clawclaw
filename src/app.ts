@@ -2,8 +2,8 @@
  * clawclaw 应用入口
  *
  * 启动方式：
- *   npm run dev          开发模式（tsx watch，自动重载）
- *   npm start            生产模式（node dist/app.js）
+ *   corepack pnpm dev    开发模式（tsx watch，自动重载）
+ *   corepack pnpm start  生产模式（node dist/app.js）
  *
  * 环境变量（.env 文件）：
  *   ANTHROPIC_API_KEY        必填

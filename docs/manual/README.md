@@ -5,7 +5,9 @@
 **第一步：安装依赖**
 
 ```bash
-pnpm install
+corepack enable
+corepack pnpm install
+corepack pnpm playwright:install
 ```
 
 **第二步：配置环境变量**
@@ -15,11 +17,12 @@ cp .env.example .env
 ```
 
 然后编辑 `.env`，飞书/企业微信等 IM 凭证可留空，启动后也可以直接在 WebUI 里配置。
+运行产生的本地状态会写入 `data/`，该目录不应提交到 GitHub。
 
 **第三步：启动调试界面**
 
 ```bash
-pnpm dev:web
+corepack pnpm dev:web
 ```
 
 浏览器访问 `http://localhost:5173`，即可看到 Web 调试界面。首次使用在「设置」页填入 API Key 并保存。
@@ -27,8 +30,8 @@ pnpm dev:web
 **第四步：生产部署**
 
 ```bash
-pnpm build
-pnpm start
+corepack pnpm build
+corepack pnpm start
 ```
 
 ---
@@ -63,17 +66,17 @@ pnpm start
 
 | 命令 | 说明 |
 |------|------|
-| `pnpm dev:web` | 启动本地调试界面（API + Vite UI） |
-| `pnpm dev` | 启动完整应用（含 IM Webhook 服务） |
-| `pnpm start` | 生产模式启动 |
-| `pnpm build` | 编译 TypeScript + 构建前端 |
-| `pnpm test` | 运行所有测试 |
+| `corepack pnpm dev:web` | 启动本地调试界面（API + Vite UI） |
+| `corepack pnpm dev` | 启动完整应用（含 IM Webhook 服务） |
+| `corepack pnpm start` | 生产模式启动 |
+| `corepack pnpm build` | 编译 TypeScript + 构建前端 |
+| `corepack pnpm test` | 运行所有测试 |
 
 ---
 
 ## Web 调试界面
 
-运行 `pnpm dev:web` 后访问 `http://localhost:5173`，界面现在按 5 个一级 tab 组织，每个一级 tab 下再分二级 tab；所有页面仍然使用 hash 路由，支持直接访问和浏览器前进/后退。
+运行 `corepack pnpm dev:web` 后访问 `http://localhost:5173`，界面现在按 5 个一级 tab 组织，每个一级 tab 下再分二级 tab；所有页面仍然使用 hash 路由，支持直接访问和浏览器前进/后退。
 
 ### 对话 — `/#chat`
 
