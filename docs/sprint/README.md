@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`。
 
 ---
 
@@ -116,6 +116,12 @@
 - WebUI 一级 tab 重构为 `对话` / `内容` / `自动化` / `IM` / `系统`
 - `内容`、`自动化`、`系统` 通过二级 tab 承载原来的单页入口，旧 hash 继续兼容
 
+## 第十九阶段：DailyDigest 配置与执行收拢（Sprint 61）
+
+- `daily-digest` 的搜索主题配置并入 `自动化 > Skills` 的同一卡片
+- `设置` 页移除 `DailyDigest` 独立区块，保留系统级配置
+- `daily-digest` 现在可在同一处完成配置、手动运行、日志查看和截图预览
+
 ---
 
 ## 当前落点
@@ -132,6 +138,7 @@
 - 飞书回复已支持 Markdown 渲染，Cron 直发可选 `text` / `markdown` / `image`
 - 飞书里问“给我今天的新闻”会优先收到今日日报图片；文本版可显式索取
 - 飞书 Cron 已支持同一任务同时投递到多个 chat / 群
+- `daily-digest` 的搜索主题配置、手动运行、日志和图片预览已收拢到 `自动化 > Skills > daily-digest`
 - 今日日报封面会轮换一句中文短句，“今日摘要”展示内容概览而不是数量统计
 - 今日日报长图已收紧版式并移除高风险滤镜层，同花顺来源不会进入最终结果
 - 今日日报支持回复数字获取原文链接，编号与当天 JSON 输出顺序一致，返回内容为单独链接

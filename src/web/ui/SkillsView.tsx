@@ -6,11 +6,52 @@ interface SkillInfo {
   description: string;
 }
 
+interface DailyDigestFields {
+  queries: string;
+}
+
+interface StatusMessage {
+  type: "ok" | "err";
+  msg: string;
+}
+
 async function fetchSkills(): Promise<SkillInfo[]> {
   const res = await fetch("/api/skills");
   if (!res.ok) return [];
   const data = await res.json() as { skills: SkillInfo[] };
   return data.skills;
+}
+
+async function fetchDailyDigestConfig(): Promise<DailyDigestFields> {
+  const res = await fetch("/api/config/daily-digest");
+  if (!res.ok) return { queries: "" };
+  const data = await res.json() as { queries?: string[] };
+  return { queries: (data.queries ?? []).join("\n") };
+}
+
+async function saveDailyDigestConfig(queries: string): Promise<void> {
+  const res = await fetch("/api/config/daily-digest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      queries: normalizeQueries(queries),
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+function normalizeQueries(queries: string): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const query of queries.split("\n")) {
+    const trimmed = query.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
 }
 
 interface SSEEvent {
@@ -60,9 +101,14 @@ function SkillRow({ skill }: { skill: SkillInfo }): React.JSX.Element {
             const event = JSON.parse(line.slice(6)) as SSEEvent;
             if (event.type === "log" && event.text) {
               setLogs((prev) => [...prev, event.text ?? ""]);
-              requestAnimationFrame(() => {
+              const scrollToBottom = (): void => {
                 if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-              });
+              };
+              if (typeof requestAnimationFrame === "function") {
+                requestAnimationFrame(scrollToBottom);
+              } else {
+                setTimeout(scrollToBottom, 0);
+              }
             } else if (event.type === "done") {
               setDone("ok");
               setPreviewUrl(`/api/skills/${encodeURIComponent(skill.id)}/latest-image?t=${Date.now()}`);
@@ -96,6 +142,7 @@ function SkillRow({ skill }: { skill: SkillInfo }): React.JSX.Element {
           {done === "err" && <span className={styles.runErr}>✗ 失败</span>}
         </div>
       </div>
+      {skill.id === "daily-digest" && <DailyDigestConfigCard />}
       {logs.length > 0 && (
         <div className={styles.logPanel} ref={logRef}>
           {logs.map((line, i) => <div key={i} className={styles.logLine}>{line}</div>)}
@@ -110,6 +157,72 @@ function SkillRow({ skill }: { skill: SkillInfo }): React.JSX.Element {
         />
       )}
     </div>
+  );
+}
+
+function DailyDigestConfigCard(): React.JSX.Element {
+  const [fields, setFields] = useState<DailyDigestFields>({ queries: "" });
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<StatusMessage | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    void fetchDailyDigestConfig().then(setFields).catch(() => {
+      setStatus({ type: "err", msg: "加载 DailyDigest 配置失败" });
+    });
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const showStatus = (next: StatusMessage): void => {
+    setStatus(next);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setStatus(null), 4000);
+  };
+
+  const save = (): void => {
+    setSaving(true);
+    void saveDailyDigestConfig(fields.queries)
+      .then(() => {
+        showStatus({ type: "ok", msg: "已保存，下一次运行 daily-digest 即生效" });
+      })
+      .catch((error: unknown) => {
+        showStatus({ type: "err", msg: error instanceof Error ? error.message : String(error) });
+      })
+      .finally(() => {
+        setSaving(false);
+      });
+  };
+
+  return (
+    <section className={styles.configCard}>
+      <div className={styles.configHeader}>
+        <div className={styles.configTitle}>DailyDigest 配置</div>
+        <div className={styles.configHint}>
+          搜索主题和手动运行放在同一张卡片里。保存后无需重启，直接点击上方「运行」即可按新配置生成。
+        </div>
+      </div>
+      <label className={styles.configLabel} htmlFor="daily-digest-queries">搜索主题（每行一个）</label>
+      <textarea
+        id="daily-digest-queries"
+        className={styles.configInput}
+        placeholder={"国内AI科技\n中国创业投资\n中国互联网平台\n美国OpenAI\n美国英伟达AI"}
+        value={fields.queries}
+        onChange={(e) => setFields({ queries: e.target.value })}
+        rows={6}
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <div className={styles.configMeta}>skill 会按这些主题逐个搜索，再做国内 / 国际分类筛选。</div>
+      <div className={styles.configActions}>
+        <button className={styles.saveBtn} type="button" onClick={save} disabled={saving}>
+          {saving ? "保存中…" : "保存 DailyDigest 配置"}
+        </button>
+        {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
+      </div>
+    </section>
   );
 }
 

@@ -30,6 +30,7 @@
 
 .skillCard {
   border-bottom: 1px solid var(--border-default);
+  padding: 16px 0 20px;
 }
 
 .skillCard:last-child {
@@ -41,7 +42,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 0;
 }
 
 .skillInfo {
@@ -109,6 +109,107 @@
   text-overflow: ellipsis;
 }
 
+.configCard {
+  margin-top: 14px;
+  padding: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.configHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.configTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.configHint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.configLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.configInput {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.configInput:focus {
+  border-color: var(--border-focus);
+}
+
+.configMeta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.configActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.saveBtn {
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 13px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.saveBtn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.saveBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.saveStatus {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.saveStatus.ok {
+  color: var(--success, #22c55e);
+}
+
+.saveStatus.err {
+  color: var(--error-accent);
+}
+
 .logPanel {
   margin: 0 0 12px;
   background: #0d1117;
@@ -133,4 +234,15 @@
   max-width: 100%;
   border-radius: 8px;
   border: 1px solid #e5e7eb;
+}
+
+@media (max-width: 720px) {
+  .skillRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .skillActions {
+    justify-content: flex-start;
+  }
 }

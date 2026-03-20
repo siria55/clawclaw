@@ -460,12 +460,12 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 内容 | 新闻库 | `#news` | `NewsView` | 关键词搜索、分页浏览（读 skill JSON 输出） |
 | 内容 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起，只展示已通过 `memory_save` 落库的条目 |
 | 自动化 | Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行、直发文本 / Markdown / 图片、支持多目标发送 |
-| 自动化 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志 |
+| 自动化 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志；`daily-digest` 卡片内可直接修改搜索主题 |
 | IM | 消息 | `#im` | `IMView` | IM 页默认二级 tab；展示实时 IM 日志、群聊 / 直发筛选 |
 | IM | 状态 | `#im-status` | `IMView` | 展示 IM 平台连接、飞书运行摘要、群聊列表，并带右侧 TOC |
 | IM | 配置 | `#im-config` | `IMView` | 展示飞书 IM 凭证表单和运行摘要 |
 | 系统 | 状态 | `#status` | `StatusView` | 运行概览、最近 IM 活动、配置文件，并带停靠在页面右侧的页内 TOC |
-| 系统 | 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / DailyDigest 搜索主题 / LLM 配置，并带停靠在页面右侧的页内 TOC |
+| 系统 | 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / LLM 配置，并带停靠在页面右侧的页内 TOC |
 
 URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读 `window.location.hash`，将其解析为 `view + subtab` 路由状态；切换一级 tab 时跳到该组默认 hash，切换二级 tab 时更新对应子页 hash，监听 `hashchange` 支持浏览器前进/后退。
 
@@ -490,7 +490,7 @@ URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读
 
 **等待指示器（TypingBubble）：** `streaming=true` 且无正在流式输出的 assistant 气泡时显示三点跳动动画，给予即时反馈。
 
-**SkillsView 日志面板：** 手动触发 Skill 后，通过 `fetch` + `ReadableStream` 读取 SSE 流，实时渲染深色终端风格日志，自动滚动到底部。`done` 事件后请求 `GET /api/skills/:id/latest-image` 展示 PNG 预览，加载失败自动隐藏。
+**SkillsView 日志面板：** 手动触发 Skill 后，通过 `fetch` + `ReadableStream` 读取 SSE 流，实时渲染深色终端风格日志，自动滚动到底部。`done` 事件后请求 `GET /api/skills/:id/latest-image` 展示 PNG 预览，加载失败自动隐藏。`daily-digest` 额外在同一卡片内提供搜索主题配置，避免手动运行和配置分散在不同 tab。
 
 ---
 
