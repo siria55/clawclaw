@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`。
 
 ---
 
@@ -106,12 +106,18 @@
 - 飞书群聊里的 `@机器人 1` / `@机器人 10` 会正确命中日报数字回复链路
 - 日报快捷指令也兼容前置 mention，不再因群聊 @ 机器人而落回普通 Agent
 
+## 第十七阶段：IM 配置并入 IM 大 tab（Sprint 59）
+
+- `IM` 大 tab 新增 `配置` 子 tab，承载飞书 IM 凭证和运行摘要
+- `设置` 页移除飞书 IM 配置，避免 IM 相关内容分散在两个一级 tab
+
 ---
 
 ## 当前落点
 
 - WebUI 为 8 个标签页：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#im` / `#cron` / `#settings`
 - `#status` / `#settings` 以及 `#im` 的状态子 tab 内部提供页内 TOC，不改变主 tab hash
+- `#im` 内部现有 `状态` / `消息` / `配置` 三个子 tab
 - 新闻库来自 `data/skills/*/YYYY-MM-DD.json`
 - 长期记忆来自 `data/agent/memory.json`，仅保存 `memory_save` 显式写入的内容
 - 飞书文档挂载、飞书组织读取、Cron 立即执行、飞书群聊可视化均已可用

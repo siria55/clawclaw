@@ -195,6 +195,17 @@ describe("StatusView", () => {
           },
         });
       }
+      if (input === "/api/im-config") {
+        return makeResponse({
+          feishu: {
+            appId: "cli_saved",
+            appSecret: "secret_masked",
+            verificationToken: "token_masked",
+            encryptKey: "",
+            chatId: "oc_saved",
+          },
+        });
+      }
       throw new Error(`Unexpected fetch: ${input}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -211,5 +222,11 @@ describe("StatusView", () => {
 
     expect(await screen.findByText("飞书运行状态")).toBeDefined();
     expect(screen.getByText("cli_demo")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "配置" }));
+
+    expect(await screen.findByText("飞书 IM 配置")).toBeDefined();
+    expect(screen.getByDisplayValue("cli_saved")).toBeDefined();
+    expect(screen.getByDisplayValue("oc_saved")).toBeDefined();
   });
 });

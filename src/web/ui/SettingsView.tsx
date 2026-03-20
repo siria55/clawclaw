@@ -9,14 +9,6 @@ interface LLMFields {
   model: string;
 }
 
-interface FeishuFields {
-  appId: string;
-  appSecret: string;
-  verificationToken: string;
-  encryptKey: string;
-  chatId: string;
-}
-
 interface DailyDigestFields {
   queries: string;
 }
@@ -30,21 +22,6 @@ interface MountedDocFields {
   excerpt?: string;
 }
 
-interface FeishuStatusSnapshot {
-  runtime: {
-    configured: boolean;
-    active: boolean;
-    source: "storage" | "env" | "none";
-    webhookPath: string;
-  };
-  appId?: string;
-  chatId?: string;
-  hasAppSecret: boolean;
-  hasVerificationToken: boolean;
-  hasEncryptKey: boolean;
-  permissionsHint: string;
-}
-
 /** Full-page settings view. All config is saved server-side. */
 export function SettingsView(): React.JSX.Element {
   const tocItems = [
@@ -52,7 +29,6 @@ export function SettingsView(): React.JSX.Element {
     { id: "settings-docs", label: "飞书文档", hint: "挂载、同步、缓存" },
     { id: "settings-digest", label: "DailyDigest", hint: "搜索主题配置" },
     { id: "settings-llm", label: "模型", hint: "API Key、代理、模型名" },
-    { id: "settings-feishu", label: "飞书 IM", hint: "凭证、Webhook、Chat ID" },
   ];
 
   return (
@@ -64,7 +40,6 @@ export function SettingsView(): React.JSX.Element {
           <MountedDocsSection />
           <DailyDigestSection />
           <LLMSection />
-          <FeishuSection />
         </div>
         <SectionToc items={tocItems} />
       </div>
@@ -469,162 +444,6 @@ function LLMSection(): React.JSX.Element {
         {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
       </div>
     </section>
-  );
-}
-
-/** Feishu IM configuration section — saved server-side to data/im/im-config.json. */
-function FeishuSection(): React.JSX.Element {
-  const [fields, setFields] = useState<FeishuFields>({
-    appId: "",
-    appSecret: "",
-    verificationToken: "",
-    encryptKey: "",
-    chatId: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
-  const [snapshot, setSnapshot] = useState<FeishuStatusSnapshot | null>(null);
-  const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    fetch("/api/im-config")
-      .then((r) => r.json() as Promise<{ feishu?: Partial<FeishuFields> }>)
-      .then((data) => {
-        if (data.feishu) {
-          setFields((f) => ({
-            appId: data.feishu?.appId ?? f.appId,
-            appSecret: data.feishu?.appSecret ?? f.appSecret,
-            verificationToken: data.feishu?.verificationToken ?? f.verificationToken,
-            encryptKey: data.feishu?.encryptKey ?? f.encryptKey,
-            chatId: data.feishu?.chatId ?? f.chatId,
-          }));
-        }
-      })
-      .catch(() => { /* server may not have im-config yet */ });
-
-    fetch("/api/status")
-      .then((r) => r.json() as Promise<{ overview?: { feishu?: FeishuStatusSnapshot } }>)
-      .then((data) => setSnapshot(data.overview?.feishu ?? null))
-      .catch(() => { /* ignore status load failure */ });
-  }, []);
-
-  const setField = (key: keyof FeishuFields, value: string): void => {
-    setFields((f) => ({ ...f, [key]: value }));
-  };
-
-  const save = (): void => {
-    setSaving(true);
-    fetch("/api/im-config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        feishu: {
-          appId: fields.appId,
-          appSecret: fields.appSecret,
-          verificationToken: fields.verificationToken,
-          ...(fields.encryptKey ? { encryptKey: fields.encryptKey } : {}),
-          ...(fields.chatId ? { chatId: fields.chatId } : {}),
-        },
-      }),
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        setStatus({ type: "ok", msg: "已保存，飞书 Webhook 立即生效" });
-      })
-      .catch((e: unknown) => {
-        setStatus({ type: "err", msg: e instanceof Error ? e.message : String(e) });
-      })
-      .finally(() => {
-        setSaving(false);
-        if (statusTimer.current) clearTimeout(statusTimer.current);
-        statusTimer.current = setTimeout(() => setStatus(null), 4000);
-      });
-  };
-
-  const canSave = !saving && !!(fields.appId && fields.appSecret && fields.verificationToken);
-
-  return (
-    <section id="settings-feishu" className={styles.section}>
-      <div className={styles.sectionTitle}>飞书（Feishu）</div>
-      <div className={styles.sectionHint}>
-        配置保存在服务端 `data/im/im-config.json`，保存后立即生效，无需重启。<br />
-        已保存的敏感字段显示为脱敏值（如 cli_****），修改后重新保存即可更新。
-      </div>
-      {snapshot && (
-        <div className={styles.runtimeCard}>
-          <div className={styles.runtimeHeader}>
-            <strong className={styles.runtimeTitle}>当前飞书运行摘要</strong>
-            <span className={`${styles.runtimeBadge} ${snapshot.runtime.active ? styles.runtimeOn : styles.runtimeOff}`}>
-              {snapshot.runtime.active ? "运行中" : "未运行"}
-            </span>
-          </div>
-          <div className={styles.runtimeGrid}>
-            <RuntimeItem label="配置来源" value={snapshot.runtime.source === "storage" ? "已保存配置" : snapshot.runtime.source === "env" ? "环境变量" : "未启用"} />
-            <RuntimeItem label="Webhook" value={snapshot.runtime.webhookPath} mono />
-            <RuntimeItem label="App ID" value={snapshot.appId ?? "-"} mono />
-            <RuntimeItem label="Chat ID" value={snapshot.chatId ?? "-"} mono />
-            <RuntimeItem label="App Secret" value={snapshot.hasAppSecret ? "已配置" : "未配置"} />
-            <RuntimeItem label="Verification Token" value={snapshot.hasVerificationToken ? "已配置" : "未配置"} />
-            <RuntimeItem label="Encrypt Key" value={snapshot.hasEncryptKey ? "已配置" : "未配置"} />
-          </div>
-          <div className={styles.runtimeHint}>{snapshot.permissionsHint}</div>
-        </div>
-      )}
-      <div className={styles.fields}>
-        <Field
-          label="App ID"
-          placeholder="cli_xxxxxxxxxx"
-          value={fields.appId}
-          onChange={(v) => setField("appId", v)}
-        />
-        <Field
-          label="App Secret"
-          type="password"
-          placeholder="xxxxxxxxxxxxxxxx"
-          value={fields.appSecret}
-          onChange={(v) => setField("appSecret", v)}
-        />
-        <Field
-          label="Verification Token"
-          type="password"
-          placeholder="xxxxxxxxxxxxxxxx"
-          value={fields.verificationToken}
-          onChange={(v) => setField("verificationToken", v)}
-        />
-        <Field
-          label="Encrypt Key（可选）"
-          type="password"
-          placeholder="留空则不启用签名验证"
-          value={fields.encryptKey}
-          onChange={(v) => setField("encryptKey", v)}
-        />
-        <Field
-          label="Chat ID（Cron 推送目标，可选）"
-          placeholder="oc_xxxxxxxxxx"
-          value={fields.chatId}
-          onChange={(v) => setField("chatId", v)}
-        />
-      </div>
-      <div className={styles.saveRow}>
-        <button className={styles.saveBtn} onClick={save} disabled={!canSave}>
-          {saving ? "保存中…" : "保存飞书配置"}
-        </button>
-        {status && (
-          <span className={`${styles.saveStatus} ${styles[status.type]}`}>
-            {status.msg}
-          </span>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function RuntimeItem(props: { label: string; value: string; mono?: boolean }): React.JSX.Element {
-  return (
-    <div className={styles.runtimeItem}>
-      <span className={styles.runtimeLabel}>{props.label}</span>
-      <span className={`${styles.runtimeValue} ${props.mono ? styles.runtimeMono : ""}`}>{props.value}</span>
-    </div>
   );
 }
 

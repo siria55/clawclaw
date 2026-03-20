@@ -461,9 +461,9 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起，只展示已通过 `memory_save` 落库的条目 |
 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志 |
 | 状态 | `#status` | `StatusView` | 运行概览、最近 IM 活动、配置文件，并带停靠在页面右侧的页内 TOC |
-| IM | `#im` | `IMView` | 页内子 tab 切分为 `状态` / `消息`；状态子 tab 展示 IM 平台连接、飞书运行摘要、群聊列表并带右侧 TOC，消息子 tab 展示实时 IM 日志、群聊 / 直发筛选 |
+| IM | `#im` | `IMView` | 页内子 tab 切分为 `状态` / `消息` / `配置`；状态子 tab 展示 IM 平台连接、飞书运行摘要、群聊列表并带右侧 TOC，消息子 tab 展示实时 IM 日志、群聊 / 直发筛选，配置子 tab 展示飞书 IM 凭证表单 |
 | Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行、直发文本 / Markdown / 图片、支持多目标发送 |
-| 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / DailyDigest 搜索主题 / LLM 配置 / 飞书 IM 配置，并带停靠在页面右侧的页内 TOC |
+| 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / DailyDigest 搜索主题 / LLM 配置，并带停靠在页面右侧的页内 TOC |
 
 URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读 `window.location.hash`，切换 tab 更新 hash，监听 `hashchange` 支持浏览器前进/后退。
 
@@ -475,6 +475,7 @@ URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读
 
 - `状态` 子 tab 读取 `GET /api/status`，展示 IM 平台连接、飞书运行信息和群聊摘要
 - `消息` 子 tab 通过 `GET /api/im-log` 首次加载最近事件，再基于 `since=<lastId>` 轮询增量日志；前端只保留最近 50 条，避免单页无限增长
+- `配置` 子 tab 读取 `GET /api/im-config` 与 `GET /api/status`，展示飞书 IM 凭证表单和当前运行摘要；保存继续写回 `POST /api/im-config`
 - 为兼容旧链接，`#im-status` 会映射到 `IMView` 的 `状态` 子 tab
 
 `SettingsView` 的飞书文档区块通过 `GET /api/config/feishu-docs` 读取配置和同步状态，`POST /api/config/feishu-docs` 保存来源列表，`POST /api/config/feishu-docs/sync` 调用 `MountedDocLibrary` 用 Playwright 拉取正文并写入本地缓存。

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FeishuConfigSection } from "./FeishuConfigSection";
 import { SectionToc } from "./SectionToc";
 import {
   describeEventType,
@@ -14,7 +15,7 @@ import {
 import styles from "./StatusView.module.css";
 
 type IMFilter = "all" | "group" | "direct";
-type IMSubTab = "status" | "messages";
+type IMSubTab = "status" | "messages" | "config";
 
 export function IMView(): React.JSX.Element {
   const [subTab, setSubTab] = useState<IMSubTab>(getInitialSubTab);
@@ -23,6 +24,7 @@ export function IMView(): React.JSX.Element {
   const [events, setEvents] = useState<IMEvent[]>([]);
   const [filter, setFilter] = useState<IMFilter>("all");
   const [logLoading, setLogLoading] = useState(false);
+  const [configReloadToken, setConfigReloadToken] = useState(0);
   const lastIdRef = useRef<string | undefined>(undefined);
   const tocItems = [
     { id: "im-status-connections", label: "平台连接", hint: "飞书 / 企业微信运行态" },
@@ -83,10 +85,14 @@ export function IMView(): React.JSX.Element {
       loadStatus();
       return;
     }
+    if (subTab === "config") {
+      setConfigReloadToken((prev) => prev + 1);
+      return;
+    }
     lastIdRef.current = undefined;
     load(undefined, true);
   };
-  const refreshing = subTab === "status" ? statusLoading : logLoading;
+  const refreshing = subTab === "status" ? statusLoading : subTab === "messages" ? logLoading : false;
 
   return (
     <div className={styles.page}>
@@ -104,14 +110,14 @@ export function IMView(): React.JSX.Element {
             </button>
           </div>
           <div className={styles.imTabs}>
-            {(["status", "messages"] as IMSubTab[]).map((value) => (
+            {(["status", "messages", "config"] as IMSubTab[]).map((value) => (
               <button
                 key={value}
                 type="button"
                 className={`${styles.imTab} ${subTab === value ? styles.imTabActive : ""}`}
                 onClick={() => setSubTab(value)}
               >
-                {value === "status" ? "状态" : "消息"}
+                {value === "status" ? "状态" : value === "messages" ? "消息" : "配置"}
               </button>
             ))}
           </div>
@@ -121,6 +127,8 @@ export function IMView(): React.JSX.Element {
               <FeishuRuntimeSection overview={status?.overview} />
               <ChatSummarySection overview={status?.overview} />
             </>
+          ) : subTab === "config" ? (
+            <FeishuConfigSection id="im-config" title="飞书 IM 配置" reloadToken={configReloadToken} />
           ) : (
             <section id="im-log" className={styles.section}>
               <div className={styles.sectionHeader}>
