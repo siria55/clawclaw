@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`。
 
 ---
 
@@ -101,6 +101,11 @@
 - WebUI 将侧边栏里的 `IM 状态` / `IM` 合并为单个 `IM` tab，页内再拆 `状态` / `消息` 子 tab
 - 旧的 `#im-status` hash 兼容映射到新的 `IM` 页状态子 tab
 
+## 第十六阶段：飞书 mention 数字回复修复（Sprint 58）
+
+- 飞书群聊里的 `@机器人 1` / `@机器人 10` 会正确命中日报数字回复链路
+- 日报快捷指令也兼容前置 mention，不再因群聊 @ 机器人而落回普通 Agent
+
 ---
 
 ## 当前落点
@@ -116,3 +121,4 @@
 - 今日日报封面会轮换一句中文短句，“今日摘要”展示内容概览而不是数量统计
 - 今日日报长图已收紧版式并移除高风险滤镜层，同花顺来源不会进入最终结果
 - 今日日报支持回复数字获取原文链接，编号与当天 JSON 输出顺序一致，返回内容为单独链接
+- 飞书群聊里带 mention 的数字回复和新闻快捷指令也已兼容

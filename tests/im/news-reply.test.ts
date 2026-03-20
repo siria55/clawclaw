@@ -36,6 +36,11 @@ describe("parseNewsReplyIntent", () => {
   it("matches explicit text requests", () => {
     expect(parseNewsReplyIntent("今天新闻文本版")).toEqual({ format: "text" });
   });
+
+  it("matches requests with a leading mention", () => {
+    expect(parseNewsReplyIntent("@_user_1 给我今天的新闻")).toEqual({ format: "image" });
+    expect(parseNewsReplyIntent("@_user_1 今天新闻文本版")).toEqual({ format: "text" });
+  });
 });
 
 describe("parseDailyDigestReplyIndex", () => {
@@ -43,6 +48,11 @@ describe("parseDailyDigestReplyIndex", () => {
     expect(parseDailyDigestReplyIndex("03")).toBe(3);
     expect(parseDailyDigestReplyIndex("8")).toBe(8);
     expect(parseDailyDigestReplyIndex("第3条")).toBeUndefined();
+  });
+
+  it("parses numeric replies with a leading mention", () => {
+    expect(parseDailyDigestReplyIndex("@_user_1 03")).toBe(3);
+    expect(parseDailyDigestReplyIndex("@_user_1：8")).toBe(8);
   });
 });
 
@@ -194,6 +204,48 @@ describe("createDailyDigestNewsReplyHandler", () => {
     expect(result).toEqual({ handled: true, replyText: `[日报链接] ${todayKey()}#02` });
     expect(vi.mocked(platform.send)).toHaveBeenCalledWith("oc_daily", "https://example.com/b");
     expect(vi.mocked(platform.sendMarkdown)).not.toHaveBeenCalled();
+  });
+
+  it("sends the matching article link when the group reply includes a mention prefix", async () => {
+    dir = mkdtempSync(join(tmpdir(), "claw-news-link-mention-"));
+    const digestDir = join(dir, "daily-digest");
+    mkdirSync(digestDir, { recursive: true });
+    writeFileSync(join(digestDir, `${todayKey()}.json`), JSON.stringify([
+      createDigestArticle("第一条", "https://example.com/a"),
+      createDigestArticle("第二条", "https://example.com/b", "international"),
+    ]));
+
+    const imEventStorage = new IMEventStorage(20);
+    const eventId = imEventStorage.append({
+      platform: "feishu",
+      userId: "ou_user",
+      chatId: "oc_daily",
+      text: "给我今天的新闻",
+      replyText: undefined,
+    });
+    imEventStorage.setReply(eventId, `[日报图片] ${todayKey()}`);
+
+    const platform = makeMockPlatform();
+    const handler = createDailyDigestNewsReplyHandler({
+      agent: makeMockAgent(),
+      getPlatform: () => platform,
+      getSkill: () => undefined,
+      dataRoot: dir,
+      imEventStorage,
+    });
+
+    const result = await handler({
+      platform: "feishu",
+      chatId: "oc_daily",
+      sessionId: "oc_daily",
+      continuityId: "feishu:oc_daily:ou_user",
+      userId: "ou_user",
+      text: "@_user_1 2",
+      raw: {},
+    });
+
+    expect(result).toEqual({ handled: true, replyText: `[日报链接] ${todayKey()}#02` });
+    expect(vi.mocked(platform.send)).toHaveBeenCalledWith("oc_daily", "https://example.com/b");
   });
 
   it("does not hijack plain numeric messages when no recent digest was sent", async () => {

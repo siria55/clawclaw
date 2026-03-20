@@ -36,7 +36,7 @@ export interface DailyDigestNewsReplyOptions {
 
 /** Parse short IM prompts like “给我今天的新闻” into a daily-digest reply intent. */
 export function parseNewsReplyIntent(text: string): NewsReplyIntent | undefined {
-  const normalized = normalizeText(text);
+  const normalized = normalizeText(stripLeadingMentions(text));
   if (!normalized) return undefined;
 
   const hasNewsKeyword = /(新闻|日报|简报|头条)/.test(normalized);
@@ -54,7 +54,7 @@ export function parseNewsReplyIntent(text: string): NewsReplyIntent | undefined 
 
 /** Parse pure numeric replies like `3` / `03` into a digest item index. */
 export function parseDailyDigestReplyIndex(text: string): number | undefined {
-  const normalized = normalizeText(text);
+  const normalized = normalizeText(stripLeadingMentions(text));
   if (!/^\d{1,2}$/.test(normalized)) return undefined;
   const value = Number(normalized);
   return Number.isInteger(value) && value > 0 ? value : undefined;
@@ -165,4 +165,10 @@ async function ensureDailyDigestFiles(
 
 function normalizeText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function stripLeadingMentions(value: string): string {
+  return value
+    .replace(/^(?:@[^@\s\u3000,:：，]+[\s\u3000,:：，]*)+/u, "")
+    .trim();
 }
