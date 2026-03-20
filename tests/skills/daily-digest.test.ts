@@ -162,6 +162,8 @@ describe("renderDailyDigestHtml", () => {
     expect(html).toContain("国际方面重点关注B summary。");
     expect(html).toContain("https://example.com/A");
     expect(html).toContain("https://example.com/B");
+    expect(html).toContain('<span class="num">01</span>');
+    expect(html).toContain('<span class="num">02</span>');
     expect(html).not.toContain("Browser-searched");
     expect(html).not.toContain("LOCAL SIGNAL");
     expect(html).not.toContain("GLOBAL SIGNAL");

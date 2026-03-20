@@ -3,6 +3,12 @@ import { join } from "node:path";
 import { normalizeCronChatIds } from "./types.js";
 import type { CronJob, CronSchedulerOptions } from "./types.js";
 import type { IMEventStorage } from "../im/storage.js";
+import {
+  buildDailyDigestImageHint,
+  extractDailyDigestDateKeyFromPath,
+  getDailyDigestArticleCount,
+  getDailyDigestFilesByDate,
+} from "../im/daily-digest.js";
 import type { FeishuPlatform } from "../platform/feishu.js";
 import type { SkillRegistry } from "../skills/registry.js";
 import { findLatestSkillPng } from "../skills/loader.js";
@@ -154,10 +160,19 @@ export class CronScheduler {
           : undefined;
         if (!pngPath) throw new Error(`No output PNG found for skill: ${job.sendSkillOutput}`);
         const p = job.delivery.platform as unknown as FeishuPlatform;
+        const digestDateKey = job.sendSkillOutput === "daily-digest"
+          ? extractDailyDigestDateKeyFromPath(pngPath)
+          : undefined;
+        const digestCount = digestDateKey && this.#skillDataRoot
+          ? getDailyDigestArticleCount(getDailyDigestFilesByDate(this.#skillDataRoot, digestDateKey).jsonPath)
+          : undefined;
         for (const chatId of targetChatIds) {
           await p.sendImage(chatId, pngPath);
+          if (job.sendSkillOutput === "daily-digest") {
+            await job.delivery.platform.send(chatId, buildDailyDigestImageHint(digestCount));
+          }
         }
-        setCronReplies(this.#imEventStorage, eventIds, "[图片]");
+        setCronReplies(this.#imEventStorage, eventIds, digestDateKey ? `[日报图片] ${digestDateKey}` : "[图片]");
         return;
       } else if (job.direct) {
         if (job.msgType === "image") {

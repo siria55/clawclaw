@@ -174,6 +174,7 @@ const handleNewsRequest = createDailyDigestNewsReplyHandler({
   getPlatform: () => feishu,
   getSkill: () => skillRegistry.get("daily-digest"),
   dataRoot: "./data/skills",
+  imEventStorage,
 });
 
 if (feishu) clawServer.setRoute("/feishu", { platform: feishu, agent, onMessage: handleNewsRequest });

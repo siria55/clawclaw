@@ -132,6 +132,7 @@ const handleNewsRequest = createDailyDigestNewsReplyHandler({
   getPlatform: () => feishu,
   getSkill: () => skillRegistry.get("daily-digest"),
   dataRoot: "./data/skills",
+  imEventStorage,
 });
 
 const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry, skillDataRoot: "./data/skills" });

@@ -1,21 +1,30 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "../core/agent.js";
 import type { IMMessage } from "../platform/types.js";
 import type { FeishuPlatform } from "../platform/feishu.js";
 import type { Skill } from "../skills/types.js";
+import type { IMEventStorage } from "./storage.js";
 import type { IMRouteHandleResult } from "./route.js";
+import {
+  buildDailyDigestImageHint,
+  buildDailyDigestInvalidIndexReply,
+  buildDailyDigestLinkMarkdown,
+  buildDailyDigestLinkText,
+  buildDailyDigestTextHint,
+  findDailyDigestArticleByIndex,
+  findRecentDailyDigestDateKey,
+  getDailyDigestArticleCount,
+  getDailyDigestFiles,
+  getDailyDigestFilesByDate,
+  readDailyDigestMarkdown,
+  type DailyDigestFiles,
+} from "./daily-digest.js";
 
 type NewsReplyFormat = "image" | "text";
 
 export interface NewsReplyIntent {
   format: NewsReplyFormat;
-}
-
-interface DailyDigestFiles {
-  dateKey: string;
-  pngPath?: string;
-  markdownPath?: string;
 }
 
 export interface DailyDigestNewsReplyOptions {
@@ -24,6 +33,7 @@ export interface DailyDigestNewsReplyOptions {
   getSkill: () => Skill | undefined;
   dataRoot: string;
   timezone?: string;
+  imEventStorage?: IMEventStorage;
 }
 
 /** Parse short IM prompts like “给我今天的新闻” into a daily-digest reply intent. */
@@ -44,6 +54,14 @@ export function parseNewsReplyIntent(text: string): NewsReplyIntent | undefined 
   return { format: "image" };
 }
 
+/** Parse pure numeric replies like `3` / `03` into a digest item index. */
+export function parseDailyDigestReplyIndex(text: string): number | undefined {
+  const normalized = normalizeText(text);
+  if (!/^\d{1,2}$/.test(normalized)) return undefined;
+  const value = Number(normalized);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
 export function createDailyDigestNewsReplyHandler(
   options: DailyDigestNewsReplyOptions,
 ): (message: IMMessage) => Promise<IMRouteHandleResult | undefined> {
@@ -51,10 +69,32 @@ export function createDailyDigestNewsReplyHandler(
   let generation: Promise<DailyDigestFiles> | undefined;
 
   return async (message: IMMessage): Promise<IMRouteHandleResult | undefined> => {
+    const platform = options.getPlatform();
+    const replyIndex = parseDailyDigestReplyIndex(message.text);
+    if (platform && replyIndex !== undefined) {
+      const dateKey = findRecentDailyDigestDateKey(message.chatId, options.imEventStorage);
+      if (dateKey) {
+        const resolved = findDailyDigestArticleByIndex(options.dataRoot, dateKey, replyIndex);
+        if (!resolved) {
+          const total = getDailyDigestArticleCount(getDailyDigestFilesByDate(options.dataRoot, dateKey).jsonPath);
+          const fallback = buildDailyDigestInvalidIndexReply(total);
+          await platform.send(message.chatId, fallback);
+          return { handled: true, replyText: fallback };
+        }
+        if (platform.sendMarkdown) {
+          await platform.sendMarkdown(message.chatId, buildDailyDigestLinkMarkdown(replyIndex, resolved.article));
+        } else {
+          await platform.send(message.chatId, buildDailyDigestLinkText(replyIndex, resolved.article));
+        }
+        return {
+          handled: true,
+          replyText: `[日报链接] ${dateKey}#${String(replyIndex).padStart(2, "0")}`,
+        };
+      }
+    }
+
     const intent = parseNewsReplyIntent(message.text);
     if (!intent) return undefined;
-
-    const platform = options.getPlatform();
     if (!platform) return undefined;
 
     let files = getDailyDigestFiles(options.dataRoot, timezone);
@@ -83,6 +123,7 @@ export function createDailyDigestNewsReplyHandler(
       } else {
         await platform.send(message.chatId, markdown);
       }
+      await platform.send(message.chatId, buildDailyDigestTextHint(getDailyDigestArticleCount(files.jsonPath)));
       return { handled: true, replyText: `[日报文本] ${files.dateKey}` };
     }
 
@@ -93,10 +134,7 @@ export function createDailyDigestNewsReplyHandler(
     }
 
     await platform.sendImage(message.chatId, files.pngPath);
-    await platform.send(
-      message.chatId,
-      "已发送今天的新闻图片。如需文字版，回复“今天新闻文本版”。",
-    );
+    await platform.send(message.chatId, buildDailyDigestImageHint(getDailyDigestArticleCount(files.jsonPath)));
     return { handled: true, replyText: `[日报图片] ${files.dateKey}` };
   };
 }
@@ -128,27 +166,6 @@ async function ensureDailyDigestFiles(
     if (getGeneration() === next) {
       setGeneration(undefined);
     }
-  }
-}
-
-function getDailyDigestFiles(dataRoot: string, timezone: string): DailyDigestFiles {
-  const dateKey = new Date().toLocaleDateString("sv-SE", { timeZone: timezone });
-  const dir = join(dataRoot, "daily-digest");
-  const pngPath = join(dir, `${dateKey}.png`);
-  const markdownPath = join(dir, `${dateKey}.md`);
-  return {
-    dateKey,
-    ...(existsSync(pngPath) ? { pngPath } : {}),
-    ...(existsSync(markdownPath) ? { markdownPath } : {}),
-  };
-}
-
-function readDailyDigestMarkdown(filePath: string): string | undefined {
-  try {
-    const text = readFileSync(filePath, "utf8").trim();
-    return text || undefined;
-  } catch {
-    return undefined;
   }
 }
 

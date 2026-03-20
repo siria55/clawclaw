@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CronScheduler } from "../../src/cron/scheduler.js";
 import type { CronJob } from "../../src/cron/types.js";
@@ -13,7 +16,14 @@ function makeMockLLM(reply: string): LLMProvider {
   };
 }
 
-function makeMockPlatform(): IMPlatform & { sentMessages: Array<{ chatId: string; text: string }> } {
+function todayKey(): string {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Shanghai" });
+}
+
+function makeMockPlatform(): IMPlatform & {
+  sentMessages: Array<{ chatId: string; text: string }>;
+  sendImage: ReturnType<typeof vi.fn>;
+} {
   const sentMessages: Array<{ chatId: string; text: string }> = [];
   return {
     name: "mock",
@@ -23,6 +33,7 @@ function makeMockPlatform(): IMPlatform & { sentMessages: Array<{ chatId: string
     send: vi.fn(async (chatId: string, text: string) => {
       sentMessages.push({ chatId, text });
     }),
+    sendImage: vi.fn(async () => undefined),
   };
 }
 
@@ -233,5 +244,40 @@ describe("CronScheduler cron parsing", () => {
       { chatId: "room-1", text: "群发 reply" },
       { chatId: "room-2", text: "群发 reply" },
     ]);
+  });
+
+  it("runNow sends daily-digest image plus numeric reply hint", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claw-cron-digest-"));
+    try {
+      const digestDir = join(dir, "daily-digest");
+      mkdirSync(digestDir, { recursive: true });
+      writeFileSync(join(digestDir, `${todayKey()}.png`), Buffer.from("png"));
+      writeFileSync(join(digestDir, `${todayKey()}.json`), JSON.stringify([
+        { title: "第一条", url: "https://example.com/a", summary: "", source: "S1", category: "domestic" },
+        { title: "第二条", url: "https://example.com/b", summary: "", source: "S2", category: "international" },
+      ]));
+
+      const platform = makeMockPlatform();
+      const job: CronJob = {
+        id: "manual-digest-send",
+        schedule: "0 8 * * *",
+        message: "send digest",
+        sendSkillOutput: "daily-digest",
+        agent: makeAgent("unused"),
+        delivery: { platform, chatId: "room-digest" },
+      };
+
+      const sched = new CronScheduler({ skillDataRoot: dir });
+      await sched.runNow(job);
+
+      expect(platform.sendImage).toHaveBeenCalledWith("room-digest", join(digestDir, `${todayKey()}.png`));
+      expect(platform.sentMessages).toHaveLength(1);
+      expect(platform.sentMessages[0]).toEqual({
+        chatId: "room-digest",
+        text: expect.stringContaining("回复 1-2 获取对应新闻原文链接"),
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

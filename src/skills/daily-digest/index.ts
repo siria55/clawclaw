@@ -214,15 +214,15 @@ export function renderDailyDigestHtml(selection: DailyDigestSelection, date: str
     VOL_LABEL: String(Math.max(selection.all.length, 1)).padStart(2, "0"),
     DECK_TEXT: escapeHtml(pickDeckText(date)),
     SUMMARY_TEXT: escapeHtml(buildSummaryText(selection)),
-    DOMESTIC_SECTION: renderSection("domestic", selection.domestic),
-    INTERNATIONAL_SECTION: renderSection("international", selection.international),
+    DOMESTIC_SECTION: renderSection("domestic", selection.domestic, 1),
+    INTERNATIONAL_SECTION: renderSection("international", selection.international, selection.domestic.length + 1),
   });
 }
 
 /** Render articles as a Markdown digest. */
 function renderMarkdown(selection: DailyDigestSelection, date: string): string {
-  const domesticRows = renderMarkdownSection(selection.domestic);
-  const internationalRows = renderMarkdownSection(selection.international);
+  const domesticRows = renderMarkdownSection(selection.domestic, 1);
+  const internationalRows = renderMarkdownSection(selection.international, selection.domestic.length + 1);
   const summary = buildSummaryText(selection);
   return [
     "# AI x 教育日报",
@@ -230,6 +230,7 @@ function renderMarkdown(selection: DailyDigestSelection, date: string): string {
     `**${date}**`,
     "",
     `> ${summary}`,
+    `> 回复数字获取对应新闻原文链接，例如回复“3”。`,
     "",
     `## 国内（${selection.domestic.length}）`,
     "",
@@ -709,9 +710,9 @@ function pickArticlesByCategory(
   return articles.filter((article) => article.category === category).slice(0, limit);
 }
 
-function renderSection(category: DigestCategory, articles: DigestArticle[]): string {
+function renderSection(category: DigestCategory, articles: DigestArticle[], startIndex: number): string {
   const items = articles.length > 0
-    ? articles.map((article, index) => renderItem(article, index + 1)).join("\n")
+    ? articles.map((article, index) => renderItem(article, startIndex + index)).join("\n")
     : `<div class="empty-state">暂无符合条件的${CATEGORY_LABEL[category]}内容</div>`;
 
   return fillTemplate(SECTION_TEMPLATE, {
@@ -737,12 +738,12 @@ function renderItem(article: DigestArticle, index: number): string {
   });
 }
 
-function renderMarkdownSection(articles: DigestArticle[]): string {
+function renderMarkdownSection(articles: DigestArticle[], startIndex: number): string {
   if (articles.length === 0) return "_暂无符合条件的内容_";
   return articles
     .map((article, index) => {
       const lines = [
-        `${index + 1}. **[${article.title}](${article.url})**`,
+        `${startIndex + index}. **[${article.title}](${article.url})**`,
         article.summary ? `   ${article.summary}` : "",
         `   _${article.source}_`,
       ].filter(Boolean);
