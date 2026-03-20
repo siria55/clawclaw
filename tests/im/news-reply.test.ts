@@ -192,7 +192,8 @@ describe("createDailyDigestNewsReplyHandler", () => {
     });
 
     expect(result).toEqual({ handled: true, replyText: `[日报链接] ${todayKey()}#02` });
-    expect(vi.mocked(platform.sendMarkdown)).toHaveBeenCalledWith("oc_daily", expect.stringContaining("https://example.com/b"));
+    expect(vi.mocked(platform.send)).toHaveBeenCalledWith("oc_daily", "https://example.com/b");
+    expect(vi.mocked(platform.sendMarkdown)).not.toHaveBeenCalled();
   });
 
   it("does not hijack plain numeric messages when no recent digest was sent", async () => {

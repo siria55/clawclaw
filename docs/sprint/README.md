@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`。
 
 ---
 
@@ -91,12 +91,17 @@
 - 飞书里收到 digest 后可直接回复数字，机器人返回对应新闻原文链接
 - Cron 发图和 IM 快捷发送都会补一条“回复数字获取链接”的提示
 
+## 第十四阶段：IM 视图拆分（Sprint 56）
+
+- WebUI 将 `状态`、`IM 状态`、`IM` 拆成三个独立 tab，分别承载运行概览、IM 平台状态和消息日志
+- 飞书 digest 数字回复改成直接返回单独新闻链接，不再发送详情卡片
+
 ---
 
 ## 当前落点
 
-- WebUI 为 7 个标签页：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#cron` / `#settings`
-- `#status` / `#settings` 内部提供页内 TOC，不改变 tab 自身 hash
+- WebUI 为 9 个标签页：`#chat` / `#news` / `#memory` / `#skills` / `#status` / `#im-status` / `#im` / `#cron` / `#settings`
+- `#status` / `#im-status` / `#settings` 内部提供页内 TOC，不改变 tab 自身 hash
 - 新闻库来自 `data/skills/*/YYYY-MM-DD.json`
 - 长期记忆来自 `data/agent/memory.json`，仅保存 `memory_save` 显式写入的内容
 - 飞书文档挂载、飞书组织读取、Cron 立即执行、飞书群聊可视化均已可用
@@ -105,4 +110,4 @@
 - 飞书 Cron 已支持同一任务同时投递到多个 chat / 群
 - 今日日报封面会轮换一句中文短句，“今日摘要”展示内容概览而不是数量统计
 - 今日日报长图已收紧版式并移除高风险滤镜层，同花顺来源不会进入最终结果
-- 今日日报支持回复数字获取原文链接，编号与当天 JSON 输出顺序一致
+- 今日日报支持回复数字获取原文链接，编号与当天 JSON 输出顺序一致，返回内容为单独链接

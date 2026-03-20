@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { ChatView } from "./ChatView";
 import { CronView } from "./CronView";
+import { IMStatusView } from "./IMStatusView";
+import { IMView } from "./IMView";
 import { InputBar } from "./InputBar";
 import { MemoryView } from "./MemoryView";
 import { NewsView } from "./NewsView";
@@ -10,7 +12,7 @@ import { StatusView } from "./StatusView";
 import { useChatStream } from "./useChatStream";
 import styles from "./App.module.css";
 
-type View = "chat" | "news" | "memory" | "skills" | "status" | "cron" | "settings";
+type View = "chat" | "news" | "memory" | "skills" | "status" | "im-status" | "im" | "cron" | "settings";
 
 const HASH_TO_VIEW: Record<string, View> = {
   "#chat": "chat",
@@ -18,9 +20,13 @@ const HASH_TO_VIEW: Record<string, View> = {
   "#memory": "memory",
   "#skills": "skills",
   "#status": "status",
+  "#im-status": "im-status",
+  "#im": "im",
   "#cron": "cron",
   "#settings": "settings",
 };
+
+const VIEWS: View[] = ["chat", "news", "memory", "skills", "status", "im-status", "im", "cron", "settings"];
 
 const TAB_LABELS: Record<View, string> = {
   chat: "对话",
@@ -28,6 +34,8 @@ const TAB_LABELS: Record<View, string> = {
   memory: "记忆库",
   skills: "Skills",
   status: "状态",
+  "im-status": "IM 状态",
+  im: "IM",
   cron: "Cron",
   settings: "设置",
 };
@@ -61,7 +69,7 @@ export function App(): React.JSX.Element {
         </div>
 
         <nav className={styles.nav}>
-          {(["chat", "news", "memory", "skills", "status", "cron", "settings"] as View[]).map((v) => (
+          {VIEWS.map((v) => (
             <button
               key={v}
               className={`${styles.tab} ${view === v ? styles.tabActive : ""}`}
@@ -87,6 +95,10 @@ export function App(): React.JSX.Element {
           <SkillsView />
         ) : view === "status" ? (
           <StatusView />
+        ) : view === "im-status" ? (
+          <IMStatusView />
+        ) : view === "im" ? (
+          <IMView />
         ) : view === "cron" ? (
           <CronView />
         ) : (

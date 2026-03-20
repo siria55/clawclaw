@@ -109,35 +109,6 @@ export function buildDailyDigestInvalidIndexReply(total: number | undefined): st
     : "这份日报暂时没有可用的编号链接。";
 }
 
-export function buildDailyDigestLinkMarkdown(index: number, article: DigestArticle): string {
-  const category = article.category === "domestic" ? "国内" : "国际";
-  const lines = [
-    `### ${String(index).padStart(2, "0")}. ${article.title}`,
-    "",
-    `- 分类：${category}`,
-    `- 来源：${article.source || "未知来源"}`,
-    `- 原文：[点击打开](${article.url})`,
-  ];
-  if (article.summary) {
-    lines.push("", article.summary);
-  }
-  return lines.join("\n");
-}
-
-export function buildDailyDigestLinkText(index: number, article: DigestArticle): string {
-  const category = article.category === "domestic" ? "国内" : "国际";
-  const parts = [
-    `${String(index).padStart(2, "0")}. ${article.title}`,
-    `分类：${category}`,
-    `来源：${article.source || "未知来源"}`,
-    `链接：${article.url}`,
-  ];
-  if (article.summary) {
-    parts.push(`摘要：${article.summary}`);
-  }
-  return parts.join("\n");
-}
-
 function isDigestArticle(value: unknown): value is DigestArticle {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const article = value as Record<string, unknown>;

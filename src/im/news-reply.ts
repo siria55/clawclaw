@@ -9,8 +9,6 @@ import type { IMRouteHandleResult } from "./route.js";
 import {
   buildDailyDigestImageHint,
   buildDailyDigestInvalidIndexReply,
-  buildDailyDigestLinkMarkdown,
-  buildDailyDigestLinkText,
   buildDailyDigestTextHint,
   findDailyDigestArticleByIndex,
   findRecentDailyDigestDateKey,
@@ -81,11 +79,7 @@ export function createDailyDigestNewsReplyHandler(
           await platform.send(message.chatId, fallback);
           return { handled: true, replyText: fallback };
         }
-        if (platform.sendMarkdown) {
-          await platform.sendMarkdown(message.chatId, buildDailyDigestLinkMarkdown(replyIndex, resolved.article));
-        } else {
-          await platform.send(message.chatId, buildDailyDigestLinkText(replyIndex, resolved.article));
-        }
+        await platform.send(message.chatId, resolved.article.url);
         return {
           handled: true,
           replyText: `[日报链接] ${dateKey}#${String(replyIndex).padStart(2, "0")}`,

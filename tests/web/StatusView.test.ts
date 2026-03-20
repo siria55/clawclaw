@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { IMStatusView } from "../../src/web/ui/IMStatusView.js";
+import { IMView } from "../../src/web/ui/IMView.js";
 import { StatusView } from "../../src/web/ui/StatusView.js";
 
 function makeResponse(body: unknown, ok = true): Response {
@@ -17,7 +19,11 @@ describe("StatusView", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders overview metrics, Feishu runtime and config files", async () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders overview metrics and config files only", async () => {
     const fetchMock = vi.fn(async (input: string) => {
       if (input === "/api/status") {
         return makeResponse({
@@ -73,22 +79,6 @@ describe("StatusView", () => {
           },
         });
       }
-      if (input === "/api/im-log") {
-        return makeResponse({
-          events: [{
-            id: "1",
-            platform: "feishu",
-            userId: "ou_demo",
-            chatId: "oc_demo",
-            chatName: "运营群",
-            eventType: "bot_added",
-            text: "机器人已加入群：运营群",
-            replyText: undefined,
-            timestamp: "2026-03-19T08:00:00.000Z",
-          }],
-          total: 1,
-        });
-      }
       throw new Error(`Unexpected fetch: ${input}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -97,12 +87,87 @@ describe("StatusView", () => {
 
     expect(await screen.findByText("长期记忆")).toBeDefined();
     expect(screen.getByText("3")).toBeDefined();
-    expect(screen.getByText("飞书运行状态")).toBeDefined();
-    expect(screen.getByText("cli_demo")).toBeDefined();
-    expect(screen.getAllByText("运营群").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("机器人进群").length).toBeGreaterThan(0);
     expect(screen.getByText("IM 配置")).toBeDefined();
     expect(screen.getByText("./data/im/im-config.json")).toBeDefined();
     expect(screen.getByText("请查看飞书状态")).toBeDefined();
+    expect(screen.queryByText("飞书运行状态")).toBeNull();
+  });
+
+  it("renders IM platform status and chat summaries in the IM status tab", async () => {
+    const fetchMock = vi.fn(async (input: string) => {
+      if (input !== "/api/status") {
+        throw new Error(`Unexpected fetch: ${input}`);
+      }
+      return makeResponse({
+        connections: [{ platform: "feishu", label: "飞书 Bot", connected: true }],
+        overview: {
+          feishu: {
+            runtime: {
+              configured: true,
+              active: true,
+              source: "storage",
+              webhookPath: "/feishu",
+            },
+            appId: "cli_demo",
+            chatId: "oc_demo",
+            hasAppSecret: true,
+            hasVerificationToken: true,
+            hasEncryptKey: false,
+            permissionsHint: "需要通讯录读取权限",
+          },
+          metrics: [],
+          configFiles: [],
+          chats: [
+            {
+              platform: "feishu",
+              chatId: "oc_demo",
+              chatName: "运营群",
+              active: true,
+              joinedAt: "2026-03-19T07:30:00.000Z",
+              lastSeen: "2026-03-19T08:00:00.000Z",
+              lastEventType: "bot_added",
+            },
+          ],
+        },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(React.createElement(IMStatusView));
+
+    expect(await screen.findByText("飞书运行状态")).toBeDefined();
+    expect(screen.getByText("cli_demo")).toBeDefined();
+    expect(screen.getByText("运营群")).toBeDefined();
+    expect(screen.getByText(/机器人进群/)).toBeDefined();
+  });
+
+  it("renders IM log in a dedicated tab", async () => {
+    const fetchMock = vi.fn(async (input: string) => {
+      if (input !== "/api/im-log") {
+        throw new Error(`Unexpected fetch: ${input}`);
+      }
+      return makeResponse({
+        events: [{
+          id: "1",
+          platform: "feishu",
+          userId: "ou_demo",
+          chatId: "oc_demo",
+          chatName: "运营群",
+          eventType: "bot_added",
+          text: "机器人已加入群：运营群",
+          replyText: "https://example.com/news",
+          timestamp: "2026-03-19T08:00:00.000Z",
+        }],
+        total: 1,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(React.createElement(IMView));
+
+    expect(await screen.findByText("IM 消息日志")).toBeDefined();
+    expect(screen.getAllByText("运营群").length).toBeGreaterThan(0);
+    expect(screen.getByText("机器人已加入群：运营群")).toBeDefined();
+    expect(screen.getByText("https://example.com/news")).toBeDefined();
   });
 });
