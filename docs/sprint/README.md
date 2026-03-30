@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`。
 
 ---
 
@@ -184,6 +184,12 @@
 - 飞书消息解析会优先把事件体里可直接拿到的用户名落盘，减少页面对额外查询权限的依赖
 - 若飞书身份没解析出来，页面会明确显示“未解析用户名 / 群名”，避免误以为前端没刷新
 
+## 第三十阶段：日报条目新闻时间（Sprint 72）
+
+- `daily-digest` 会尽量从百度新闻搜索结果里提取每条新闻的时间信息
+- 日报条目元信息改为显示“来源 + 新闻时间”
+- JSON / Markdown 输出会一起携带新闻时间，便于后续复用
+
 ---
 
 ## 当前落点
@@ -219,3 +225,4 @@
 - 默认 `daily-digest` Cron 现在会自动初始化为 `9:00 生成 / 10:00 发送`
 - Skill-only Cron 允许空发送目标，适合只生成文件、不直接投递的自动化任务
 - `IM > 消息` 现在会直接显示 `会话 群名（oc_xxx）` / `用户 用户名（ou_xxx）`；若当前飞书权限不足，也会明确提示未解析状态
+- `daily-digest` 的新闻条目现在会显示来源与新闻时间；若搜索结果没带稳定时间，则该条仅显示来源

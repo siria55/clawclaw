@@ -24,6 +24,7 @@ export interface DigestArticle {
   url: string;
   summary: string;
   source: string;
+  publishedAt?: string;
   category: DigestCategory;
 }
 
@@ -37,6 +38,7 @@ interface LinkItem {
   text: string;
   href: string;
   hintCategory: DigestCategory;
+  publishedAt?: string;
 }
 
 interface SearchPlan {
@@ -48,6 +50,11 @@ interface SearchPlan {
 interface DigestQuota {
   domestic: number;
   international: number;
+}
+
+interface LinkHint {
+  category: DigestCategory;
+  publishedAt?: string;
 }
 
 const ArticleDraftSchema = z.object({
@@ -130,17 +137,58 @@ const EXTRACTION_SYSTEM = [
 
 /** Extract all anchor links from the current page using Playwright locators (zero LLM calls). */
 async function extractPageLinks(page: Page, hintCategory: DigestCategory): Promise<LinkItem[]> {
-  const anchors = await page.locator("a[href]").all();
-  const items: LinkItem[] = [];
-  for (const anchor of anchors) {
-    const text = ((await anchor.textContent().catch(() => "")) ?? "").trim().slice(0, 120);
-    const href = (await anchor.getAttribute("href").catch(() => "")) ?? "";
-    const absHref = href.startsWith("http") ? href : "";
-    if (text.length > 3 && absHref) {
-      items.push({ text, href: absHref, hintCategory });
+  return page.locator("a[href]").evaluateAll((anchors, category) => {
+    type DomLikeNode = {
+      textContent?: string | null;
+      parentElement?: DomLikeNode | null;
+      href?: string;
+    };
+    const datePatterns = [
+      /\d{4}年\d{1,2}月\d{1,2}日(?:\s*\d{1,2}:\d{2})?/,
+      /\d{4}[./-]\d{1,2}[./-]\d{1,2}(?:\s+\d{1,2}:\d{2})?/,
+      /\d{1,2}月\d{1,2}日(?:\s*\d{1,2}:\d{2})?/,
+      /(?:今天|昨日|昨天|前天)\s*\d{1,2}:\d{2}/,
+      /\d+\s*分钟前/,
+      /\d+\s*小时前/,
+    ];
+
+    function normalizeText(value: string): string {
+      return value.replace(/\s+/g, " ").trim();
     }
-  }
-  return items;
+
+    function extractPublishedAtFromText(text: string): string | undefined {
+      const normalized = normalizeText(text);
+      for (const pattern of datePatterns) {
+        const match = normalized.match(pattern)?.[0];
+        if (match) return match;
+      }
+      return undefined;
+    }
+
+    function extractPublishedAt(anchor: DomLikeNode): string | undefined {
+      let current: DomLikeNode | null | undefined = anchor;
+      for (let depth = 0; depth < 5 && current; depth += 1) {
+        const publishedAt = extractPublishedAtFromText(current.textContent ?? "");
+        if (publishedAt) return publishedAt;
+        current = current.parentElement;
+      }
+      return undefined;
+    }
+
+    return anchors.flatMap((node) => {
+      const anchor = node as DomLikeNode;
+      const href = anchor.href ?? "";
+      const text = normalizeText(anchor.textContent ?? "").slice(0, 120);
+      if (text.length <= 3 || !href.startsWith("http")) return [];
+      const publishedAt = extractPublishedAt(anchor);
+      return [{
+        text,
+        href,
+        hintCategory: category as DigestCategory,
+        ...(publishedAt ? { publishedAt } : {}),
+      }];
+    });
+  }, hintCategory);
 }
 
 /**
@@ -334,7 +382,7 @@ export class DailyDigestSkill implements Skill {
 
 export function parseArticlesFromLLMOutput(
   content: unknown,
-  urlHints: ReadonlyMap<string, DigestCategory> = new Map(),
+  urlHints: ReadonlyMap<string, LinkHint> = new Map(),
 ): DigestArticle[] | undefined {
   const text = extractText(content);
   const jsonText = extractJsonArray(text);
@@ -479,18 +527,30 @@ function dedupeLinks(links: LinkItem[]): LinkItem[] {
     }
     const previous = byUrl.get(key);
     if (!previous) continue;
-    if (previous.hintCategory === "domestic" && link.hintCategory === "international") {
-      byUrl.set(key, link);
-    }
+    byUrl.set(key, mergeLinkItems(previous, link));
   }
   return [...byUrl.values()];
 }
 
-function buildLinkHintMap(links: LinkItem[]): ReadonlyMap<string, DigestCategory> {
-  const hints = new Map<string, DigestCategory>();
+function mergeLinkItems(previous: LinkItem, next: LinkItem): LinkItem {
+  return {
+    ...previous,
+    ...(previous.hintCategory === "domestic" && next.hintCategory === "international"
+      ? { hintCategory: next.hintCategory }
+      : {}),
+    ...(!previous.publishedAt && next.publishedAt ? { publishedAt: next.publishedAt } : {}),
+  };
+}
+
+function buildLinkHintMap(links: LinkItem[]): ReadonlyMap<string, LinkHint> {
+  const hints = new Map<string, LinkHint>();
   for (const link of links) {
-    hints.set(link.href, link.hintCategory);
-    hints.set(canonicalizeUrl(link.href), link.hintCategory);
+    const hint: LinkHint = {
+      category: link.hintCategory,
+      ...(link.publishedAt ? { publishedAt: link.publishedAt } : {}),
+    };
+    hints.set(link.href, hint);
+    hints.set(canonicalizeUrl(link.href), hint);
   }
   return hints;
 }
@@ -555,7 +615,7 @@ function isTextBlock(value: unknown): value is { type: "text"; text: string } {
 
 function validateArticles(
   items: ArticleDraft[],
-  urlHints: ReadonlyMap<string, DigestCategory>,
+  urlHints: ReadonlyMap<string, LinkHint>,
 ): DigestArticle[] {
   return items.flatMap((item) => {
     const result = ArticleDraftSchema.safeParse(item);
@@ -566,20 +626,22 @@ function validateArticles(
 
 function normalizeArticle(
   article: ArticleDraft,
-  urlHints: ReadonlyMap<string, DigestCategory>,
+  urlHints: ReadonlyMap<string, LinkHint>,
 ): DigestArticle {
+  const hint = urlHints.get(article.url) ?? urlHints.get(canonicalizeUrl(article.url));
   return {
     title: article.title.trim(),
     url: article.url.trim(),
     summary: article.summary.trim(),
     source: article.source.trim(),
+    ...(hint?.publishedAt ? { publishedAt: hint.publishedAt } : {}),
     category: normalizeCategory(article, urlHints),
   };
 }
 
 function normalizeCategory(
   article: ArticleDraft,
-  urlHints: ReadonlyMap<string, DigestCategory>,
+  urlHints: ReadonlyMap<string, LinkHint>,
 ): DigestCategory {
   const normalized = normalizeCategoryValue(article.category);
   if (normalized) return normalized;
@@ -588,7 +650,7 @@ function normalizeCategory(
   if (inferred) return inferred;
 
   const hint = urlHints.get(article.url) ?? urlHints.get(canonicalizeUrl(article.url));
-  if (hint) return hint;
+  if (hint) return hint.category;
 
   return "domestic";
 }
@@ -728,6 +790,9 @@ function renderItem(article: DigestArticle, index: number): string {
   const summaryBlock = article.summary
     ? `<p class="summary">${escapeHtml(article.summary)}</p>`
     : "";
+  const publishedAtBlock = article.publishedAt
+    ? `<span class="published-at">${escapeHtml(article.publishedAt)}</span>`
+    : "";
 
   return fillTemplate(ITEM_TEMPLATE, {
     INDEX: String(index).padStart(2, "0"),
@@ -735,6 +800,7 @@ function renderItem(article: DigestArticle, index: number): string {
     TITLE: escapeHtml(article.title),
     SUMMARY_BLOCK: summaryBlock,
     SOURCE: escapeHtml(article.source || "未知来源"),
+    PUBLISHED_AT_BLOCK: publishedAtBlock,
   });
 }
 
@@ -745,7 +811,7 @@ function renderMarkdownSection(articles: DigestArticle[], startIndex: number): s
       const lines = [
         `${startIndex + index}. **[${article.title}](${article.url})**`,
         article.summary ? `   ${article.summary}` : "",
-        `   _${article.source}_`,
+        `   _${article.source}${article.publishedAt ? ` · ${article.publishedAt}` : ""}_`,
       ].filter(Boolean);
       return lines.join("\n");
     })

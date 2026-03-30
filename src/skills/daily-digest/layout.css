@@ -387,6 +387,14 @@ body {
   letter-spacing: 0.12em;
 }
 
+.published-at {
+  color: var(--ink-muted);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
 .empty-state {
   padding: 22px 24px;
   border-radius: 24px;

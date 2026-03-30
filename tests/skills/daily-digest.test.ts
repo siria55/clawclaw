@@ -72,6 +72,23 @@ describe("parseArticlesFromLLMOutput", () => {
   it("returns undefined for invalid output", () => {
     expect(parseArticlesFromLLMOutput([{ type: "text", text: "not json" }])).toBeUndefined();
   });
+
+  it("applies publishedAt from link hints when available", () => {
+    const articles = parseArticlesFromLLMOutput([
+      {
+        type: "text",
+        text: `[
+  {"title":"A","url":"https://example.com/a","summary":"","source":"S1","category":"domestic"}
+]`,
+      },
+    ], new Map([
+      ["https://example.com/a", { category: "domestic" as const, publishedAt: "2小时前" }],
+    ]));
+
+    expect(articles).toEqual([
+      { title: "A", url: "https://example.com/a", summary: "", source: "S1", publishedAt: "2小时前", category: "domestic" },
+    ]);
+  });
 });
 
 describe("selectDigestArticles", () => {
@@ -164,6 +181,8 @@ describe("renderDailyDigestHtml", () => {
     expect(html).toContain("https://example.com/B");
     expect(html).toContain('<span class="num">01</span>');
     expect(html).toContain('<span class="num">02</span>');
+    expect(html).toContain("A time");
+    expect(html).toContain("B time");
     expect(html).not.toContain("Browser-searched");
     expect(html).not.toContain("LOCAL SIGNAL");
     expect(html).not.toContain("GLOBAL SIGNAL");
@@ -193,6 +212,7 @@ function createArticle(
     url: `https://example.com/${seed}`,
     summary: `${seed} summary`,
     source: `${seed} source`,
+    publishedAt: `${seed} time`,
     category,
     ...overrides,
   };

@@ -165,13 +165,14 @@ Agent 指令...
 
 **内置 Skill — DailyDigestSkill：**
 1. 启动 Playwright 浏览器，依次搜索多个科技关键词
-2. 直接从搜索结果页提取候选链接并去重，同时为每个链接保留国内/国际查询提示
+2. 直接从搜索结果页提取候选链接并去重，同时为每个链接保留国内/国际查询提示，并尽量补充新闻时间
 3. 按国内 / 国际两路调用专用 LLM 抽取提示词，将候选链接筛成带 `category` 的结构化文章数组
 4. 若 LLM 返回 fenced json 或 near-JSON（如标题引号未转义），解析层会做兜底修复
 5. 依据配额裁成国内 10 篇、国际 5 篇，共 15 篇
 6. 将内容填入 HTML 模板，封面 `deck` 使用每日轮换短句，“今日摘要”按新闻内容生成概览
-7. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
-8. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
+7. 新闻条目展示来源与新闻时间；若个别条目未提取到时间，则仅展示来源
+8. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
+9. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
 
 HTML 结构由 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 提供，视觉样式由 `src/skills/daily-digest/layout.css` 提供；Skill 运行时读取这些模板并填入文本内容，保证模板、截图和导出 HTML 使用同一套版式。
 PNG 截图使用 `1080px` 版心和 `4x` 高清输出，适合在 IM 里预览和放大查看。
