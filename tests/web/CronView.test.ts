@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { CronView } from "../../src/web/ui/CronView.js";
 
 function makeResponse(body: unknown, ok = true): Response {
@@ -15,6 +15,10 @@ function makeResponse(body: unknown, ok = true): Response {
 describe("CronView", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("loads and renders cron jobs", async () => {
@@ -108,5 +112,32 @@ describe("CronView", () => {
     expect(await screen.findByText(/共 2 个目标/)).toBeDefined();
     expect(screen.getByText(/Owner（ou_owner）/)).toBeDefined();
     expect(screen.getByText(/团队群（oc_team）/)).toBeDefined();
+  });
+
+  it("allows saving a skill-only cron job without delivery targets", async () => {
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      if (input === "/api/cron" && !init) {
+        return makeResponse({ jobs: [] });
+      }
+      if (input === "/api/cron" && init?.method === "POST") {
+        return makeResponse({ ok: true });
+      }
+      throw new Error(`Unexpected fetch: ${input}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(React.createElement(CronView));
+
+    fireEvent.click(screen.getAllByText("+ 新增")[0]!);
+    const textboxes = screen.getAllByRole("textbox");
+    fireEvent.change(textboxes[0]!, { target: { value: "daily-digest-generate" } });
+    fireEvent.change(textboxes[1]!, { target: { value: "0 9 * * *" } });
+    fireEvent.change(textboxes[3]!, { target: { value: "执行 daily-digest" } });
+    fireEvent.change(textboxes[4]!, { target: { value: "daily-digest" } });
+    fireEvent.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/cron", expect.objectContaining({ method: "POST" }));
+    });
   });
 });

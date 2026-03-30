@@ -22,8 +22,8 @@ export interface CronJob {
   sendSkillOutput?: string;
   /** Agent to run */
   agent: Agent;
-  /** Where to deliver the agent's reply */
-  delivery: {
+  /** Where to deliver the reply; omitted for skill-only jobs. */
+  delivery?: {
     platform: IMPlatform;
     chatId: string;
     chatIds?: string[];
@@ -84,4 +84,12 @@ export function normalizeCronJobConfig(config: CronJobConfig): CronJobConfig {
     chatId: chatIds[0] ?? "",
     ...(chatIds.length > 0 ? { chatIds } : {}),
   };
+}
+
+export function cronJobRequiresDelivery(
+  config: Pick<CronJobConfig, "direct" | "skillId" | "sendSkillOutput">,
+): boolean {
+  if (config.sendSkillOutput) return true;
+  if (config.direct) return true;
+  return !config.skillId;
 }

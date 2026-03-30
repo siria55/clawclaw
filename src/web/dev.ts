@@ -27,8 +27,9 @@ import type { LLMConfig, IMConfig, AgentMetaConfig, DailyDigestConfig, MountedDo
 import { WebServer } from "./server.js";
 import type { SystemStatus } from "./server.js";
 import { CronScheduler } from "../cron/scheduler.js";
-import { normalizeCronChatIds } from "../cron/types.js";
+import { cronJobRequiresDelivery, normalizeCronChatIds } from "../cron/types.js";
 import type { CronJob, CronJobConfig } from "../cron/types.js";
+import { ensureDefaultDailyDigestCronJobs } from "../cron/default-jobs.js";
 
 mkdirSync("./data/agent", { recursive: true });
 mkdirSync("./data/agent/feishu-docs", { recursive: true });
@@ -134,8 +135,21 @@ const handleNewsRequest = createDailyDigestNewsReplyHandler({
 const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry, skillDataRoot: "./data/skills" });
 
 function buildRuntimeCronJob(cfg: CronJobConfig): CronJob | undefined {
-  const platform = cfg.platform === "feishu" ? feishu : undefined;
   const chatIds = normalizeCronChatIds(cfg);
+  if (!cronJobRequiresDelivery(cfg)) {
+    return {
+      id: cfg.id,
+      schedule: cfg.schedule,
+      message: cfg.message,
+      direct: cfg.direct ?? false,
+      msgType: cfg.msgType ?? "text",
+      ...(cfg.skillId !== undefined && { skillId: cfg.skillId }),
+      ...(cfg.sendSkillOutput !== undefined && { sendSkillOutput: cfg.sendSkillOutput }),
+      agent,
+    };
+  }
+
+  const platform = cfg.platform === "feishu" ? feishu : undefined;
   if (!platform || chatIds.length === 0) return undefined;
   return {
     id: cfg.id,
@@ -227,6 +241,12 @@ const server = new WebServer({
     });
   },
 });
+
+const defaultCronChatId = imConfigStorage.read().feishu?.chatId ?? process.env["FEISHU_CHAT_ID"] ?? "";
+const ensuredCronJobs = ensureDefaultDailyDigestCronJobs(cronStorage.read(), defaultCronChatId);
+if (JSON.stringify(ensuredCronJobs) !== JSON.stringify(cronStorage.read())) {
+  cronStorage.write(ensuredCronJobs);
+}
 
 for (const cfg of cronStorage.read()) {
   if (cfg.enabled) registerCronJob(cfg);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { normalizeCronChatIds, normalizeCronJobConfig } from "../../cron/types";
+import { cronJobRequiresDelivery, normalizeCronChatIds, normalizeCronJobConfig } from "../../cron/types";
 import styles from "./CronView.module.css";
 
 interface CronJobConfig {
@@ -135,7 +135,8 @@ export function CronView(): React.JSX.Element {
 
   const handleSave = async (): Promise<void> => {
     const targetIds = normalizeCronChatIds({ chatIds: chatTargets.split("\n") });
-    if (!form.id || !form.schedule || !form.message || targetIds.length === 0) return;
+    if (!form.id || !form.schedule || !form.message) return;
+    if (cronJobRequiresDelivery(form) && targetIds.length === 0) return;
     const savedId = form.id;
     setSaving(true);
     setNotice(null);
@@ -274,7 +275,11 @@ export function CronView(): React.JSX.Element {
                     placeholder={"每行一个\nou_xxx（用户）\noc_xxx（群聊）"}
                     onChange={(e) => setChatTargets(e.target.value)}
                   />
-                  <span className={styles.formHint}>{normalizeCronChatIds({ chatIds: chatTargets.split("\n") }).map(getChatHint).filter(Boolean).join(" / ") || "支持同时发给个人和群"}</span>
+                  <span className={styles.formHint}>
+                    {cronJobRequiresDelivery(form)
+                      ? normalizeCronChatIds({ chatIds: chatTargets.split("\n") }).map(getChatHint).filter(Boolean).join(" / ") || "支持同时发给个人和群"
+                      : "仅执行 Skill 时可留空；发送型 Cron 需填写目标"}
+                  </span>
                 </div>
               </div>
               <div className={styles.formRow}>

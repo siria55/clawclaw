@@ -276,12 +276,16 @@ PNG 截图当前使用 4x 高清输出，版面宽度不变，但图片更适合
 
 ### 典型 Cron 配置
 
-在 `Cron` 标签页新增两条 Cron 任务：
+在 `Cron` 标签页通常保留两条日报任务；首次启动时，系统也会默认写入这两个模板：
 
 | 时间 | 类型 | 说明 |
 |------|------|------|
-| `0 7 * * *` | `skillId: "daily-digest"` | 每天 7:00 生成日报 |
-| `0 8 * * *` | `sendSkillOutput: "daily-digest"` | 每天 8:00 发送到飞书 |
+| `0 9 * * *` | `skillId: "daily-digest"` | 每天 9:00 生成日报 |
+| `0 10 * * *` | `sendSkillOutput: "daily-digest"` | 每天 10:00 发送到飞书 |
+
+说明：
+- `skillId: "daily-digest"` 这类“只生成不发送”的 Cron 可以不填发送目标
+- `sendSkillOutput: "daily-digest"` 这类发送型 Cron 需要填写飞书目标，可填 `oc_xxx` 群聊或 `ou_xxx` 用户
 
 ---
 
@@ -368,8 +372,12 @@ ngrok http 3000
 - 同一条 Cron 只运行一次，再把结果广播到所有目标
 
 生成和发送推荐拆成两个 Cron Job，分别设定时间，例如：
-- 7:00 `skillId: "daily-digest"` — 生成日报
-- 8:00 `sendSkillOutput: "daily-digest"` — 发送到飞书
+- 9:00 `skillId: "daily-digest"` — 生成日报
+- 10:00 `sendSkillOutput: "daily-digest"` — 发送到飞书
+
+其中：
+- 仅执行 Skill 的 Cron 可不填发送目标
+- 发送型 Cron 继续通过多行 `chatId` 选择飞书目标
 
 WebUI 的 `Cron` 标签页还支持点击「运行」直接执行单条任务，不必等待下一个调度时间点。若直发类型选 `Markdown`，飞书会按原生渲染展示标题、列表、引用、代码块和链接。
 

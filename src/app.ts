@@ -39,9 +39,10 @@ import { SkillRegistry } from "./skills/registry.js";
 import { DEFAULT_DAILY_DIGEST_QUERIES, DailyDigestSkill } from "./skills/daily-digest/index.js";
 import { MountedDocLibrary } from "./docs/library.js";
 import type { LLMProvider, Message } from "./llm/types.js";
-import { normalizeCronChatIds, normalizeCronJobConfig } from "./cron/types.js";
+import { cronJobRequiresDelivery, normalizeCronChatIds } from "./cron/types.js";
 import type { CronJob, CronJobConfig } from "./cron/types.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "./config/types.js";
+import { ensureDefaultDailyDigestCronJobs } from "./cron/default-jobs.js";
 
 // ── 存储 ──────────────────────────────────────────────────────────────────────
 
@@ -182,8 +183,21 @@ if (feishu) clawServer.setRoute("/feishu", { platform: feishu, agent, onMessage:
 const cron = new CronScheduler({ timezone: "Asia/Shanghai", imEventStorage, skillRegistry, skillDataRoot: "./data/skills" });
 
 function buildRuntimeCronJob(cfg: CronJobConfig): CronJob | undefined {
-  const platform = cfg.platform === "feishu" ? feishu : undefined;
   const chatIds = normalizeCronChatIds(cfg);
+  if (!cronJobRequiresDelivery(cfg)) {
+    return {
+      id: cfg.id,
+      schedule: cfg.schedule,
+      message: cfg.message,
+      direct: cfg.direct ?? false,
+      msgType: cfg.msgType ?? "text",
+      ...(cfg.skillId !== undefined && { skillId: cfg.skillId }),
+      ...(cfg.sendSkillOutput !== undefined && { sendSkillOutput: cfg.sendSkillOutput }),
+      agent,
+    };
+  }
+
+  const platform = cfg.platform === "feishu" ? feishu : undefined;
   if (!platform || chatIds.length === 0) return undefined;
   return {
     id: cfg.id,
@@ -270,19 +284,10 @@ const webServer = new WebServer({
   skillRegistry,
 });
 
-// Seed default daily-digest job if cron-config.json is empty
-if (cronStorage.read().length === 0) {
-  const chatId = imConfigStorage.read().feishu?.chatId ?? process.env["FEISHU_CHAT_ID"] ?? "";
-  if (chatId) {
-    cronStorage.write([normalizeCronJobConfig({
-      id: "daily-digest",
-      schedule: "0 9 * * *",
-      message: "请搜索今天的科技新闻头条，保存到新闻库，并生成一份简短的日报摘要。",
-      chatId,
-      platform: "feishu",
-      enabled: true,
-    })]);
-  }
+const defaultCronChatId = imConfigStorage.read().feishu?.chatId ?? process.env["FEISHU_CHAT_ID"] ?? "";
+const ensuredCronJobs = ensureDefaultDailyDigestCronJobs(cronStorage.read(), defaultCronChatId);
+if (JSON.stringify(ensuredCronJobs) !== JSON.stringify(cronStorage.read())) {
+  cronStorage.write(ensuredCronJobs);
 }
 
 // Load persisted cron jobs

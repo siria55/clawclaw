@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`。
 
 ---
 
@@ -172,6 +172,12 @@
 - `IM > 状态` 的飞书运行摘要会补充默认目标名称
 - `自动化 > Cron` 的投递目标会显示“用户名 / 群名 + 原始 ID”
 
+## 第二十八阶段：日报双 Cron 默认模板（Sprint 70）
+
+- 默认日报 Cron 改为两段式：`9:00` 先执行 `daily-digest`，`10:00` 再发送到飞书
+- `skillId` 类型的 skill-only Cron 不再强制要求填写发送目标
+- `dev:web` 与主应用入口统一默认 Cron 种子逻辑，避免两套运行时行为不一致
+
 ---
 
 ## 当前落点
@@ -204,3 +210,5 @@
 - `IM > 消息` 里的飞书记录会同时展示群名和发言人用户名，排查来源更直接
 - `系统状态` 和 `自动化 > Cron` 中出现的飞书 `ou_...` / `oc_...` 现在也会同时展示对应用户名 / 群名
 - `IM > 配置` 里填写飞书 `Chat ID` 时，会同时显示解析后的用户名 / 群名，减少配错目标的风险
+- 默认 `daily-digest` Cron 现在会自动初始化为 `9:00 生成 / 10:00 发送`
+- Skill-only Cron 允许空发送目标，适合只生成文件、不直接投递的自动化任务

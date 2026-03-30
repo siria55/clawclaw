@@ -87,9 +87,9 @@ export class CronScheduler {
       id: job.id,
       schedule: job.schedule,
       message: job.message,
-      chatId: job.delivery.chatId,
+      chatId: job.delivery?.chatId ?? "",
       chatIds: getDeliveryChatIds(job.delivery),
-      platform: job.delivery.platform.name,
+      platform: job.delivery?.platform.name ?? "",
     }));
   }
 
@@ -128,7 +128,7 @@ export class CronScheduler {
       ? targetChatIds.map((chatId) => ({
           chatId,
           eventId: this.#imEventStorage?.append({
-            platform: job.delivery.platform.name,
+            platform: job.delivery?.platform.name ?? "cron",
             userId: "",
             chatId,
             eventType: "cron",
@@ -155,11 +155,12 @@ export class CronScheduler {
         setCronReplies(this.#imEventStorage, eventIds, `[skill:${job.skillId}]`);
         return;
       } else if (job.sendSkillOutput) {
+        const delivery = requireDelivery(job);
         const pngPath = this.#skillDataRoot
           ? findLatestSkillPng(this.#skillDataRoot, job.sendSkillOutput)
           : undefined;
         if (!pngPath) throw new Error(`No output PNG found for skill: ${job.sendSkillOutput}`);
-        const p = job.delivery.platform as unknown as FeishuPlatform;
+        const p = delivery.platform as unknown as FeishuPlatform;
         const digestDateKey = job.sendSkillOutput === "daily-digest"
           ? extractDailyDigestDateKeyFromPath(pngPath)
           : undefined;
@@ -169,23 +170,24 @@ export class CronScheduler {
         for (const chatId of targetChatIds) {
           await p.sendImage(chatId, pngPath);
           if (job.sendSkillOutput === "daily-digest") {
-            await job.delivery.platform.send(chatId, buildDailyDigestImageHint(digestCount));
+            await delivery.platform.send(chatId, buildDailyDigestImageHint(digestCount));
           }
         }
         setCronReplies(this.#imEventStorage, eventIds, digestDateKey ? `[日报图片] ${digestDateKey}` : "[图片]");
         return;
       } else if (job.direct) {
+        const delivery = requireDelivery(job);
         if (job.msgType === "image") {
-          const p = job.delivery.platform as unknown as FeishuPlatform;
+          const p = delivery.platform as unknown as FeishuPlatform;
           for (const chatId of targetChatIds) {
             await p.sendImage(chatId, job.message);
           }
           setCronReplies(this.#imEventStorage, eventIds, "[图片]");
           return;
         }
-        if (job.msgType === "markdown" && job.delivery.platform.sendMarkdown) {
+        if (job.msgType === "markdown" && delivery.platform.sendMarkdown) {
           for (const chatId of targetChatIds) {
-            await job.delivery.platform.sendMarkdown(chatId, job.message);
+            await delivery.platform.sendMarkdown(chatId, job.message);
           }
           setCronReplies(this.#imEventStorage, eventIds, job.message);
           return;
@@ -198,8 +200,9 @@ export class CronScheduler {
       }
       setCronReplies(this.#imEventStorage, eventIds, reply);
       if (reply) {
+        const delivery = requireDelivery(job);
         for (const chatId of targetChatIds) {
-          await job.delivery.platform.send(chatId, reply);
+          await delivery.platform.send(chatId, reply);
         }
       }
     } catch (err) {
@@ -276,9 +279,17 @@ function extractText(content: unknown): string {
   return "";
 }
 
-function getDeliveryChatIds(delivery: CronJob["delivery"]): string[] {
+function getDeliveryChatIds(delivery: CronJob["delivery"] | undefined): string[] {
+  if (!delivery) return [];
   const chatIds = normalizeCronChatIds(delivery);
   return chatIds.length > 0 ? chatIds : [delivery.chatId];
+}
+
+function requireDelivery(job: CronJob): NonNullable<CronJob["delivery"]> {
+  if (!job.delivery) {
+    throw new Error(`Cron job ${job.id} requires configured delivery target`);
+  }
+  return job.delivery;
 }
 
 function setCronReplies(

@@ -452,6 +452,41 @@ describe("WebServer", () => {
     }
   });
 
+  it("GET /api/cron keeps skill-only feishu jobs readable without delivery targets", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claw-cron-skill-only-"));
+    try {
+      const agent = makeMockAgent();
+      const cronStorage = new ConfigStorage<CronJobConfig[]>(join(dir, "cron.json"), []);
+      cronStorage.write([{
+        id: "daily-digest-generate",
+        schedule: "0 9 * * *",
+        message: "生成日报",
+        skillId: "daily-digest",
+        chatId: "",
+        platform: "feishu",
+        enabled: true,
+      }]);
+
+      const server = new WebServer({ agent, port: 0, staticDir, cronStorage });
+      await server.start();
+
+      const response = await httpGetJson<{
+        jobs: Array<{ id: string; chatId: string; resolvedTargets?: Array<{ chatId: string; name?: string }> }>;
+      }>(server.port, "/api/cron");
+
+      expect(response.status).toBe(200);
+      expect(response.body.jobs[0]).toEqual(expect.objectContaining({
+        id: "daily-digest-generate",
+        chatId: "",
+        resolvedTargets: [],
+      }));
+
+      await server.stop();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("GET /api/im-log enriches feishu user and chat names", async () => {
     const originalFetch = global.fetch;
     const dir = mkdtempSync(join(tmpdir(), "claw-im-log-"));

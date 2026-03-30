@@ -268,6 +268,7 @@ Cron 直发链路也同步支持 `msgType: "markdown"`：
 - 生成出的同一条回复或同一张图片会依次发送到所有目标
 - `sendSkillOutput` 也是按同样的多目标广播逻辑执行
 - 飞书里既可以填用户 `ou_...`，也可以填群 `oc_...`
+- 仅 `skillId` 的 skill-only Cron 不要求配置 `chatId`
 
 这样可以避免“为了同时发个人和群而复制两条完全相同的 Cron 任务”。
 
@@ -340,7 +341,7 @@ WebUI 手动运行：
 onRunSkill → skill.run(ctx) → SkillResult → SSE done + outputPath → 前端加载图片预览
 ```
 
-生成与投递解耦为两个独立 Cron Job。
+生成与投递解耦为两个独立 Cron Job；默认日报模板为 `0 9 * * *` 生成、`0 10 * * *` 发送。
 
 `daily-digest` 模板渲染新增两条轻量规则：
 
@@ -567,7 +568,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 
 URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读 `window.location.hash`，将其解析为 `view + subtab` 路由状态；切换一级 tab 时跳到该组默认 hash，切换二级 tab 时更新对应子页 hash，监听 `hashchange` 支持浏览器前进/后退。
 
-`CronView` 通过 `GET /api/cron` 读取配置，`POST /api/cron` 保存，`DELETE /api/cron/:id` 删除，`POST /api/cron/:id/run` 直接触发一次运行；后端再通过 `CronScheduler.runNow()` 复用既有 Skill / IM 投递链路。直发模式下可选择 `text` / `markdown` / `image`，其中 Markdown 会优先走平台的 `sendMarkdown()` 能力。发送目标支持多行输入，保存后会归一化为 `chatId + chatIds`。
+`CronView` 通过 `GET /api/cron` 读取配置，`POST /api/cron` 保存，`DELETE /api/cron/:id` 删除，`POST /api/cron/:id/run` 直接触发一次运行；后端再通过 `CronScheduler.runNow()` 复用既有 Skill / IM 投递链路。直发模式下可选择 `text` / `markdown` / `image`，其中 Markdown 会优先走平台的 `sendMarkdown()` 能力。发送目标支持多行输入，保存后会归一化为 `chatId + chatIds`；若是仅执行 Skill 的 Cron，则允许空目标保存。
 
 `ContentView`、`AutomationView`、`SystemView` 负责承载同一一级域下的二级 tab 壳层；`App.tsx` 统一控制其 `activeTab` 和 `onTabChange`，避免子页各自读写 hash 导致路由分散。
 

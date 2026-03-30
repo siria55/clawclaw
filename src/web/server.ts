@@ -16,7 +16,7 @@ import type { IMEventStorage, IMEvent as StoredIMEvent } from "../im/storage.js"
 import type { ConversationStorage } from "../im/conversations.js";
 import { buildIMRunContext, persistIMRunContext } from "../im/context.js";
 import type { IMRoute } from "../im/route.js";
-import { normalizeCronJobConfig } from "../cron/types.js";
+import { normalizeCronChatIds, normalizeCronJobConfig } from "../cron/types.js";
 import type { CronJobConfig } from "../cron/types.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
@@ -1329,8 +1329,13 @@ export class WebServer {
         return job;
       }
 
+      const chatIds = normalizeCronChatIds(job);
+      if (chatIds.length === 0) {
+        return { ...job, resolvedTargets: [] };
+      }
+
       const targets = await Promise.all(
-        normalizeCronJobConfig(job).chatIds!.map(async (chatId) => this.#resolveFeishuTargetInfo(chatId)),
+        chatIds.map(async (chatId) => this.#resolveFeishuTargetInfo(chatId)),
       );
 
       return {

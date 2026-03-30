@@ -185,6 +185,28 @@ describe("CronScheduler cron parsing", () => {
     expect(platform.sentMessages).toEqual([{ chatId: "room-1", text: "manual reply" }]);
   });
 
+  it("runNow executes a skill-only job without delivery target", async () => {
+    const skillRun = vi.fn(async () => ({ outputPath: "data/skills/daily-digest/2026-03-30.png" }));
+    const sched = new CronScheduler({
+      skillRegistry: {
+        get: (id: string) => id === "daily-digest" ? { id, description: "日报", run: skillRun } : undefined,
+      } as unknown as import("../../src/skills/registry.js").SkillRegistry,
+      skillDataRoot: join(tmpdir(), "claw-skill-only"),
+    });
+
+    await sched.runNow({
+      id: "daily-digest-generate",
+      schedule: "0 9 * * *",
+      message: "生成日报",
+      direct: false,
+      msgType: "text",
+      skillId: "daily-digest",
+      agent: makeAgent("unused"),
+    });
+
+    expect(skillRun).toHaveBeenCalledOnce();
+  });
+
   it("runNow executes a direct job immediately", async () => {
     const platform = makeMockPlatform();
     const job: CronJob = {
