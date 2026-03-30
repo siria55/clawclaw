@@ -18,6 +18,8 @@ max-candidates: 36
 6. 将内容填入 HTML 模板，读取 `layout.css` 渲染日报并截图为 PNG
 7. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
 
+手动执行默认 Cron `daily-digest-generate` 时，生成文件同样写入 `data/skills/daily-digest/`。
+
 ## 数据格式
 
 ```json

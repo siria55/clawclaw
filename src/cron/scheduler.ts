@@ -95,7 +95,7 @@ export class CronScheduler {
 
   /** Run a job immediately, bypassing cron expression matching. */
   async runNow(job: CronJob): Promise<void> {
-    await this.#fire(job);
+    await this.#fire(job, true);
   }
 
   #tick(): void {
@@ -117,12 +117,12 @@ export class CronScheduler {
         fMonth.has(month) &&
         fDow.has(dow)
       ) {
-        void this.#fire(job);
+        void this.#fire(job, false);
       }
     }
   }
 
-  async #fire(job: CronJob): Promise<void> {
+  async #fire(job: CronJob, propagateError: boolean): Promise<void> {
     const targetChatIds = getDeliveryChatIds(job.delivery);
     const eventIds = this.#imEventStorage
       ? targetChatIds.map((chatId) => ({
@@ -209,6 +209,7 @@ export class CronScheduler {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[cron:${job.id}] error:`, errMsg);
       setCronReplies(this.#imEventStorage, eventIds, `[ERROR] ${errMsg}`);
+      if (propagateError) throw err;
     }
   }
 }

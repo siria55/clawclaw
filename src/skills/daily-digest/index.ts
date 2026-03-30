@@ -214,43 +214,42 @@ async function extractPageLinks(page: Page, hintCategory: DigestCategory): Promi
       /\d+\s*分钟前/,
       /\d+\s*小时前/,
     ];
+    const items: Array<{
+      text: string;
+      href: string;
+      hintCategory: DigestCategory;
+      publishedAt?: string;
+    }> = [];
 
-    function normalizeText(value: string): string {
-      return value.replace(/\s+/g, " ").trim();
-    }
-
-    function extractPublishedAtFromText(text: string): string | undefined {
-      const normalized = normalizeText(text);
-      for (const pattern of datePatterns) {
-        const match = normalized.match(pattern)?.[0];
-        if (match) return match;
-      }
-      return undefined;
-    }
-
-    function extractPublishedAt(anchor: DomLikeNode): string | undefined {
-      let current: DomLikeNode | null | undefined = anchor;
-      for (let depth = 0; depth < 5 && current; depth += 1) {
-        const publishedAt = extractPublishedAtFromText(current.textContent ?? "");
-        if (publishedAt) return publishedAt;
-        current = current.parentElement;
-      }
-      return undefined;
-    }
-
-    return anchors.flatMap((node) => {
+    for (const node of anchors) {
       const anchor = node as DomLikeNode;
       const href = anchor.href ?? "";
-      const text = normalizeText(anchor.textContent ?? "").slice(0, 120);
-      if (text.length <= 3 || !href.startsWith("http")) return [];
-      const publishedAt = extractPublishedAt(anchor);
-      return [{
+      const text = (anchor.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+      if (text.length <= 3 || !href.startsWith("http")) continue;
+
+      let publishedAt: string | undefined;
+      let current: DomLikeNode | null | undefined = anchor;
+      for (let depth = 0; depth < 5 && current && !publishedAt; depth += 1) {
+        const normalized = (current.textContent ?? "").replace(/\s+/g, " ").trim();
+        for (const pattern of datePatterns) {
+          const match = normalized.match(pattern)?.[0];
+          if (match) {
+            publishedAt = match;
+            break;
+          }
+        }
+        current = current.parentElement;
+      }
+
+      items.push({
         text,
         href,
         hintCategory: category as DigestCategory,
         ...(publishedAt ? { publishedAt } : {}),
-      }];
-    });
+      });
+    }
+
+    return items;
   }, hintCategory);
 }
 

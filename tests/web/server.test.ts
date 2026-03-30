@@ -604,6 +604,41 @@ describe("WebServer", () => {
     }
   });
 
+  it("POST /api/cron/:id/run returns 500 when onCronRun throws", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claw-cron-error-"));
+    try {
+      const cronStorage = new ConfigStorage<CronJobConfig[]>(join(dir, "cron.json"), []);
+      cronStorage.write([{
+        id: "daily-digest-generate",
+        schedule: "0 9 * * *",
+        message: "生成日报",
+        skillId: "daily-digest",
+        chatId: "",
+        platform: "feishu",
+        enabled: true,
+      }]);
+      const agent = makeMockAgent();
+      const server = new WebServer({
+        agent,
+        port: 0,
+        staticDir,
+        cronStorage,
+        onCronRun: vi.fn(async () => { throw new Error("daily digest failed"); }),
+      });
+      await server.start();
+
+      const res = await fetch(`http://localhost:${server.port}/api/cron/daily-digest-generate/run`, { method: "POST" });
+      const body = await res.json() as { ok: boolean; error: string };
+
+      expect(res.status).toBe(500);
+      expect(body.ok).toBe(false);
+      expect(body.error).toContain("daily digest failed");
+      await server.stop();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("emits thinking SSE event for thinking content blocks", async () => {
     const agent = {
       name: "mock",

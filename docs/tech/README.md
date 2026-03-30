@@ -421,6 +421,11 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 其中 HTML 不再由 `index.ts` 直接拼整页结构，而是运行时读取 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 和 `layout.css` 进行模板替换；这样 HTML 模板和 CSS 模板共同成为截图与导出文件的单一版式源。
 截图阶段使用 `browser.newContext({ viewport: { width: 1080, height: 1400 }, deviceScaleFactor: 4 })`，并以 `scale: "device"` 输出 PNG，在不改变版心尺寸的前提下提升清晰度。
+搜索结果链接提取逻辑避免在 Playwright 浏览器上下文中引用打包辅助函数，确保 `daily-digest-generate` 从 Cron 手动执行时也能稳定落盘。
+
+### Cron 手动执行错误传播
+
+`CronScheduler.runNow()` 在手动执行场景下会把 skill 执行失败继续向上抛出；WebUI 的 `POST /api/cron/:id/run` 因此会返回 `500 + error message`，不再把失败的 `daily-digest-generate` 误报成成功。
 
 ### 新闻库数据来源
 

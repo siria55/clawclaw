@@ -207,6 +207,31 @@ describe("CronScheduler cron parsing", () => {
     expect(skillRun).toHaveBeenCalledOnce();
   });
 
+  it("runNow rejects when a skill-only job throws", async () => {
+    const sched = new CronScheduler({
+      skillRegistry: {
+        get: (id: string) => id === "daily-digest"
+          ? {
+              id,
+              description: "日报",
+              run: vi.fn(async () => { throw new Error("daily digest failed"); }),
+            }
+          : undefined,
+      } as unknown as import("../../src/skills/registry.js").SkillRegistry,
+      skillDataRoot: join(tmpdir(), "claw-skill-error"),
+    });
+
+    await expect(sched.runNow({
+      id: "daily-digest-generate",
+      schedule: "0 9 * * *",
+      message: "生成日报",
+      direct: false,
+      msgType: "text",
+      skillId: "daily-digest",
+      agent: makeAgent("unused"),
+    })).rejects.toThrow("daily digest failed");
+  });
+
   it("runNow executes a direct job immediately", async () => {
     const platform = makeMockPlatform();
     const job: CronJob = {

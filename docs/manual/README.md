@@ -291,6 +291,8 @@ PNG 截图当前使用 4x 高清输出，版面宽度不变，但图片更适合
 说明：
 - `skillId: "daily-digest"` 这类“只生成不发送”的 Cron 可以不填发送目标
 - `sendSkillOutput: "daily-digest"` 这类发送型 Cron 需要填写飞书目标，可填 `oc_xxx` 群聊或 `ou_xxx` 用户
+- 手动执行 `daily-digest-generate` 后，生成文件会落到 `data/skills/daily-digest/`
+- 若手动执行失败，页面会直接返回错误，不再出现“执行了但没有文件、接口却显示成功”的情况
 
 ---
 

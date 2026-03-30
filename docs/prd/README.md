@@ -147,6 +147,7 @@ onRunSkill → skill.run(ctx) → SkillResult → 展示日志 + 图片预览
 其中：
 - `skillId` Cron 只负责生成内容，可不配置飞书目标
 - `sendSkillOutput` Cron 负责把最新产物投递到指定 `oc_...` / `ou_...` 飞书目标
+- 手动执行 skill-only Cron（如 `daily-digest-generate`）时，若生成失败，WebUI 应直接返回错误，避免误以为已成功落盘
 
 **SKILL.md 标准：**
 每个 Skill 以子目录形式存放，包含 `SKILL.md`（元数据 + Agent 指令）和 `index.ts`（执行逻辑）。`SKILL.md` 使用简单 YAML frontmatter：

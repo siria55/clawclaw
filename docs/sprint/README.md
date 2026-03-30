@@ -202,6 +202,12 @@
 - `publishedAt` 继续保留原始时间文本，`date` 则尽量归一化为 `YYYY-MM-DD`
 - 对“昨天 / 前天 / 几小时前 / 几分钟前”这类相对时间，系统会按日报生成日期做最佳努力换算
 
+## 第三十三阶段：日报生成落盘修复（Sprint 75）
+
+- 修复 `daily-digest-generate` 在 Playwright 搜索结果提取阶段触发的浏览器上下文错误，恢复正常落盘
+- 手动执行 skill-only Cron 失败时，错误会继续返回给 WebUI，不再被静默吞掉
+- `daily-digest-generate` 生成成功后，文件会落到 `data/skills/daily-digest/`
+
 ---
 
 ## 当前落点
@@ -240,3 +246,4 @@
 - `daily-digest` 的新闻条目现在会显示来源与新闻时间；若搜索结果没带稳定时间，则该条仅显示来源
 - `daily-digest` 现在会优先使用主流媒体和官网来源，百家号等自媒体不会进入最终日报
 - `daily-digest` 的 JSON 现在会额外带上结构化 `date` 字段，便于后续新闻库和自动化链路复用
+- `daily-digest-generate` 的手动执行链路已修复，当前会正常生成 `.html / .md / .png / .json` 到 `data/skills/daily-digest/`
