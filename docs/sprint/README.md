@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`。
 
 ---
 
@@ -178,6 +178,12 @@
 - `skillId` 类型的 skill-only Cron 不再强制要求填写发送目标
 - `dev:web` 与主应用入口统一默认 Cron 种子逻辑，避免两套运行时行为不一致
 
+## 第二十九阶段：IM 身份展示补强（Sprint 71）
+
+- `IM > 消息` 改成直接显示 `用户名 / 群名 + 原始 ID`，不再只露出零散小标签
+- 飞书消息解析会优先把事件体里可直接拿到的用户名落盘，减少页面对额外查询权限的依赖
+- 若飞书身份没解析出来，页面会明确显示“未解析用户名 / 群名”，避免误以为前端没刷新
+
 ---
 
 ## 当前落点
@@ -212,3 +218,4 @@
 - `IM > 配置` 里填写飞书 `Chat ID` 时，会同时显示解析后的用户名 / 群名，减少配错目标的风险
 - 默认 `daily-digest` Cron 现在会自动初始化为 `9:00 生成 / 10:00 发送`
 - Skill-only Cron 允许空发送目标，适合只生成文件、不直接投递的自动化任务
+- `IM > 消息` 现在会直接显示 `会话 群名（oc_xxx）` / `用户 用户名（ou_xxx）`；若当前飞书权限不足，也会明确提示未解析状态

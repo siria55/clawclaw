@@ -22,7 +22,7 @@ function makeMessageEvent(extraMessage: Record<string, unknown> = {}): string {
     schema: "2.0",
     header: { event_type: "im.message.receive_v1" },
     event: {
-      sender: { sender_id: { open_id: "ou_user123" }, sender_type: "user" },
+      sender: { sender_id: { open_id: "ou_user123" }, sender_type: "user", name: "张三" },
       message: {
         chat_id: "oc_chat456",
         chat_name: "产品讨论群",
@@ -110,6 +110,7 @@ describe("FeishuPlatform.parse()", () => {
       sessionId: "oc_chat456",
       continuityId: "feishu:oc_chat456:ou_user123",
       userId: "ou_user123",
+      userName: "张三",
       text: "hello",
       eventType: "message",
     });
@@ -169,6 +170,7 @@ describe("FeishuPlatform.parse()", () => {
       event: {
         chat_id: "oc_newgroup",
         name: "运营群",
+        operator_name: "李四",
         operator_id: { open_id: "ou_admin" },
       },
     }));
@@ -178,6 +180,7 @@ describe("FeishuPlatform.parse()", () => {
       chatId: "oc_newgroup",
       chatName: "运营群",
       userId: "ou_admin",
+      userName: "李四",
       eventType: "bot_added",
       text: "机器人已加入群：运营群",
     });

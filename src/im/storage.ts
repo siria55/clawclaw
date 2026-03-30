@@ -5,6 +5,7 @@ export interface IMEvent {
   id: string;
   platform: string;
   userId: string;
+  userName?: string;
   chatId: string;
   chatName?: string;
   eventType?: "message" | "bot_added" | "bot_removed" | "cron";

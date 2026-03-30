@@ -229,6 +229,7 @@ function ChatSummarySection(props: { overview: StatusOverview | undefined }): Re
 
 function IMEventList(props: { events: IMEvent[]; filter: IMFilter }): React.JSX.Element {
   const filtered = [...props.events].reverse().filter((event) => matchesFilter(event, props.filter));
+  const hasUnresolvedFeishuIdentity = filtered.some((event) => hasUnresolvedFeishuIdentityInfo(event));
 
   if (filtered.length === 0) {
     return <p className={styles.empty}>暂无 IM 消息</p>;
@@ -236,16 +237,21 @@ function IMEventList(props: { events: IMEvent[]; filter: IMFilter }): React.JSX.
 
   return (
     <>
+      {hasUnresolvedFeishuIdentity && (
+        <p className={styles.empty}>部分飞书用户名 / 群名未解析，通常是权限未开通或事件本身未携带名称，原始 ID 仍会保留。</p>
+      )}
       {filtered.map((event) => (
         <div key={event.id} className={styles.imCard}>
           <div className={styles.imMeta}>
             <span className={styles.imPlatform}>{event.platform}</span>
             {event.eventType && <span className={styles.imEventType}>{describeEventType(event.eventType)}</span>}
-            {event.chatName && <span className={styles.imChatName}>群 {event.chatName}</span>}
-            {event.userName && <span className={styles.imChatName}>人 {event.userName}</span>}
+            {event.chatId && <span className={styles.imChatName}>{formatIMIdentity("chat", event.chatName, event.chatId)}</span>}
+            {event.userId && <span className={styles.imChatName}>{formatIMIdentity("user", event.userName, event.userId)}</span>}
+            <span className={styles.imTime}>{formatTime(event.timestamp)}</span>
+          </div>
+          <div className={styles.imMeta}>
             {event.userId && <CopyId prefix="用户" value={event.userId} />}
             {event.chatId && <CopyId prefix="会话" value={event.chatId} />}
-            <span className={styles.imTime}>{formatTime(event.timestamp)}</span>
           </div>
           <p className={styles.imText}>{event.text}</p>
           {event.replyText !== undefined && (
@@ -282,4 +288,19 @@ function matchesFilter(event: IMEvent, filter: IMFilter): boolean {
   if (filter === "group") return event.chatId.startsWith("oc_");
   if (filter === "direct") return event.chatId.startsWith("ou_");
   return true;
+}
+
+function hasUnresolvedFeishuIdentityInfo(event: IMEvent): boolean {
+  if (event.platform !== "feishu") return false;
+  if (event.chatId.startsWith("oc_") && !event.chatName) return true;
+  if (event.userId.startsWith("ou_") && !event.userName) return true;
+  return false;
+}
+
+function formatIMIdentity(kind: "chat" | "user", name: string | undefined, id: string): string {
+  const label = kind === "chat" ? "会话" : "用户";
+  if (name) return `${label} ${name}（${id}）`;
+  if (kind === "chat" && id.startsWith("oc_")) return `${label} 未解析群名（${id}）`;
+  if (kind === "user" && id.startsWith("ou_")) return `${label} 未解析用户名（${id}）`;
+  return `${label} ${id}`;
 }

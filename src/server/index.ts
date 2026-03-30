@@ -155,6 +155,7 @@ export class ClawServer {
     const eventId = this.#config.imEventStorage?.append({
       platform: message.platform,
       userId: message.userId,
+      ...(message.userName ? { userName: message.userName } : {}),
       chatId: message.chatId,
       ...(message.chatName ? { chatName: message.chatName } : {}),
       ...(message.eventType ? { eventType: message.eventType } : {}),

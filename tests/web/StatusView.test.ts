@@ -246,8 +246,8 @@ describe("StatusView", () => {
 
     expect(await screen.findByText("机器人已加入群：运营群")).toBeDefined();
     expect(screen.getByText("IM 消息日志")).toBeDefined();
-    expect(screen.getAllByText("群 运营群").length).toBeGreaterThan(0);
-    expect(screen.getByText("人 张三")).toBeDefined();
+    expect(screen.getByText("会话 运营群（oc_demo）")).toBeDefined();
+    expect(screen.getByText("用户 张三（ou_demo）")).toBeDefined();
     expect(screen.getByText("https://example.com/news")).toBeDefined();
     expect(screen.queryByText("飞书运行状态")).toBeNull();
 
@@ -262,5 +262,33 @@ describe("StatusView", () => {
     expect(screen.getByDisplayValue("cli_saved")).toBeDefined();
     expect(screen.getByDisplayValue("oc_saved")).toBeDefined();
     expect(await screen.findByText("已解析目标：日报群（群聊）")).toBeDefined();
+  });
+
+  it("shows unresolved feishu identities clearly when names are missing", async () => {
+    const fetchMock = vi.fn(async (input: string) => {
+      if (input.startsWith("/api/im-log")) {
+        return makeResponse({
+          events: [{
+            id: "1",
+            platform: "feishu",
+            userId: "ou_demo",
+            chatId: "oc_demo",
+            eventType: "message",
+            text: "你好",
+            replyText: undefined,
+            timestamp: "2026-03-19T08:00:00.000Z",
+          }],
+          total: 1,
+        });
+      }
+      throw new Error(`Unexpected fetch: ${input}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(React.createElement(ControlledIMView, { initialTab: "messages" }));
+
+    expect(await screen.findByText("会话 未解析群名（oc_demo）")).toBeDefined();
+    expect(screen.getByText("用户 未解析用户名（ou_demo）")).toBeDefined();
+    expect(screen.getByText(/部分飞书用户名 \/ 群名未解析/)).toBeDefined();
   });
 });

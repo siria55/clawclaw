@@ -194,11 +194,13 @@ export class FeishuPlatform implements IMPlatform {
     const senderId = asRecord(sender["sender_id"]);
     const chatId = asString(message["chat_id"]);
     const userId = asString(senderId?.["open_id"]);
+    const userName = extractFeishuUserName(eventBody);
     const chatName = await this.#resolveChatName(chatId, eventBody);
 
     return {
       platform: this.name,
       chatId,
+      ...(userName ? { userName } : {}),
       ...(chatName ? { chatName } : {}),
       sessionId: buildFeishuSessionId(message, chatId),
       continuityId: buildContinuityId(this.name, chatId, userId),
@@ -541,11 +543,13 @@ export class FeishuPlatform implements IMPlatform {
 
     const operatorId = asRecord(eventBody?.["operator_id"]);
     const userId = asString(operatorId?.["open_id"]);
+    const userName = extractFeishuUserName(eventBody);
     const chatName = await this.#resolveChatName(chatId, eventBody);
 
     return {
       platform: this.name,
       chatId,
+      ...(userName ? { userName } : {}),
       ...(chatName ? { chatName } : {}),
       sessionId: chatId,
       continuityId: buildContinuityId(this.name, chatId, userId || "system"),
@@ -715,6 +719,31 @@ function extractFeishuChatName(eventBody: Record<string, unknown> | undefined): 
 
   const i18nNames = asRecord(eventBody?.["i18n_names"]) ?? asRecord(chat?.["i18n_names"]);
   return asString(i18nNames?.["zh_cn"]) || asString(i18nNames?.["en_us"]) || undefined;
+}
+
+function extractFeishuUserName(eventBody: Record<string, unknown> | undefined): string | undefined {
+  const sender = asRecord(eventBody?.["sender"]);
+  const operator = asRecord(eventBody?.["operator"]);
+  const senderId = asRecord(sender?.["sender_id"]);
+  const operatorId = asRecord(eventBody?.["operator_id"]);
+
+  const candidates = [
+    asString(eventBody?.["sender_name"]),
+    asString(eventBody?.["user_name"]),
+    asString(eventBody?.["operator_name"]),
+    asString(sender?.["name"]),
+    asString(sender?.["sender_name"]),
+    asString(sender?.["user_name"]),
+    asString(sender?.["display_name"]),
+    asString(sender?.["employee_name"]),
+    asString(senderId?.["name"]),
+    asString(operator?.["name"]),
+    asString(operator?.["user_name"]),
+    asString(operator?.["display_name"]),
+    asString(operatorId?.["name"]),
+  ];
+
+  return candidates.find((candidate) => candidate.length > 0);
 }
 
 function extractFeishuMessagePayload(raw: unknown): Record<string, unknown> | undefined {

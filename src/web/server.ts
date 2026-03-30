@@ -1212,7 +1212,7 @@ export class WebServer {
       return event;
     }
 
-    const userName = await this.#resolveFeishuUserName(platform, event.userId);
+    const userName = event.userName ?? await this.#resolveFeishuUserName(platform, event.userId);
     const chatName = event.chatName ?? await this.#resolveFeishuChatName(platform, event.chatId);
 
     return {
@@ -1309,8 +1309,8 @@ export class WebServer {
       ? (event.chatName ?? await this.#resolveFeishuChatName(platform, event.chatId))
       : event.chatName;
     const userName = event.platform === "feishu" && platform
-      ? await this.#resolveFeishuUserName(platform, event.userId)
-      : undefined;
+      ? (event.userName ?? await this.#resolveFeishuUserName(platform, event.userId))
+      : event.userName;
 
     return {
       platform: event.platform,

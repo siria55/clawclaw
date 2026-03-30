@@ -10,6 +10,8 @@ export interface IMMessage {
   continuityId: string;
   /** ID of the user who sent the message */
   userId: string;
+  /** Optional human-readable sender name */
+  userName?: string;
   /** Optional human-readable chat/group name */
   chatName?: string;
   /** Event kind used by the server to decide whether to invoke the agent */

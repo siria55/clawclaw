@@ -219,10 +219,10 @@ WebServer 新增了一个轻量的飞书目标解析链路：
 
 `GET /api/im-log` 现在会在返回前做一层飞书 enrich：
 
-- 飞书事件先保留原始 `userId` / `chatId` 落盘，避免改变现有 IM 日志结构
-- WebServer 返回日志时，再按需调用 `getUser()` / `getChat()` 补充 `userName` / `chatName`
+- 飞书事件会优先保留原始 `userId` / `chatId`，并尽量把事件体里可直接拿到的 `userName` 一并落盘
+- WebServer 返回日志时，再按需调用 `getUser()` / `getChat()` 补充缺失的 `userName` / `chatName`
 - 查询结果带内存缓存，避免 WebUI 轮询时重复打飞书接口
-- 前端消息卡片会优先展示群名和发言人名称，原始 ID 继续保留为可复制元数据
+- 前端消息卡片会直接展示 `会话 群名（oc_xxx）` / `用户 用户名（ou_xxx）`；若未解析成功，则显示明确的“未解析用户名 / 群名”占位文案
 
 同一套 enrich 逻辑也被复用到：
 
@@ -578,6 +578,7 @@ URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读
 
 - `状态` 子 tab 读取 `GET /api/status`，展示 IM 平台连接、飞书运行信息和群聊摘要
 - `消息` 子 tab 通过 `GET /api/im-log` 首次加载最近事件，再基于 `since=<lastId>` 轮询增量日志；前端只保留最近 50 条，避免单页无限增长
+- IM 日志卡片会固定渲染“会话 / 用户”两组身份标签，不再只在名字存在时显示零散 badge；当飞书名字缺失时，界面会明确提示未解析状态
 - `配置` 子 tab 读取 `GET /api/im-config` 与 `GET /api/status`，展示飞书 IM 凭证表单和当前运行摘要；保存继续写回 `POST /api/im-config`
 - 为兼容旧链接，`#im-status` / `#im-config` 会分别映射到 `IMView` 的 `状态` / `配置` 子 tab
 
