@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Browser, Page } from "playwright";
+import type { Browser } from "playwright";
 import { chromium } from "playwright";
 import { z } from "zod";
 import type { ConfigStorage } from "../../config/storage.js";
@@ -35,10 +35,12 @@ export interface DailyDigestSelection {
   all: DigestArticle[];
 }
 
-interface LinkItem {
+export interface DigestCandidateLink {
   text: string;
   href: string;
   hintCategory: DigestCategory;
+  source?: string;
+  summary?: string;
   publishedAt?: string;
 }
 
@@ -57,6 +59,22 @@ interface LinkHint {
   category: DigestCategory;
   publishedAt?: string;
 }
+
+const BraveNewsResultSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+  description: z.string().optional(),
+  age: z.string().optional(),
+  page_age: z.string().optional(),
+  meta_url: z.object({
+    netloc: z.string().optional(),
+    hostname: z.string().optional(),
+  }).optional(),
+});
+
+const BraveNewsResponseSchema = z.object({
+  results: z.array(BraveNewsResultSchema).default([]),
+});
 
 const ArticleDraftSchema = z.object({
   title: z.string(),
@@ -184,6 +202,9 @@ export const DAILY_DIGEST_SCREENSHOT = {
   deviceScaleFactor: 4,
 } as const;
 
+const BRAVE_NEWS_SEARCH_ENDPOINT = process.env["BRAVE_SEARCH_API_URL"] ?? "https://api.search.brave.com/res/v1/news/search";
+const BRAVE_NEWS_SEARCH_COUNT = 20;
+
 const EXTRACTION_SYSTEM = [
   "你是一个严谨的科技新闻筛选器。",
   "你的任务是从候选链接中挑出真实新闻文章，并返回严格 JSON 数组。",
@@ -198,93 +219,25 @@ const EXTRACTION_SYSTEM = [
   "如果字符串里出现双引号，必须转义。",
 ].join("\n");
 
-/** Extract all anchor links from the current page using Playwright locators (zero LLM calls). */
-async function extractPageLinks(page: Page, hintCategory: DigestCategory): Promise<LinkItem[]> {
-  return page.locator("a[href]").evaluateAll((anchors, category) => {
-    type DomLikeNode = {
-      textContent?: string | null;
-      parentElement?: DomLikeNode | null;
-      href?: string;
-    };
-    const datePatterns = [
-      /\d{4}年\d{1,2}月\d{1,2}日(?:\s*\d{1,2}:\d{2})?/,
-      /\d{4}[./-]\d{1,2}[./-]\d{1,2}(?:\s+\d{1,2}:\d{2})?/,
-      /\d{1,2}月\d{1,2}日(?:\s*\d{1,2}:\d{2})?/,
-      /(?:今天|昨日|昨天|前天)\s*\d{1,2}:\d{2}/,
-      /\d+\s*分钟前/,
-      /\d+\s*小时前/,
-    ];
-    const items: Array<{
-      text: string;
-      href: string;
-      hintCategory: DigestCategory;
-      publishedAt?: string;
-    }> = [];
-
-    for (const node of anchors) {
-      const anchor = node as DomLikeNode;
-      const href = anchor.href ?? "";
-      const text = (anchor.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
-      if (text.length <= 3 || !href.startsWith("http")) continue;
-
-      let publishedAt: string | undefined;
-      let current: DomLikeNode | null | undefined = anchor;
-      for (let depth = 0; depth < 5 && current && !publishedAt; depth += 1) {
-        const normalized = (current.textContent ?? "").replace(/\s+/g, " ").trim();
-        for (const pattern of datePatterns) {
-          const match = normalized.match(pattern)?.[0];
-          if (match) {
-            publishedAt = match;
-            break;
-          }
-        }
-        current = current.parentElement;
-      }
-
-      items.push({
-        text,
-        href,
-        hintCategory: category as DigestCategory,
-        ...(publishedAt ? { publishedAt } : {}),
-      });
-    }
-
-    return items;
-  }, hintCategory);
-}
-
-/**
- * Navigate each search URL with Playwright, collect all links, then make
- * category-targeted LLM calls to filter and structure results as DigestArticle[].
- */
-async function searchNewsWithBrowser(
-  browser: Browser,
+async function searchNewsWithBrave(
   ctx: SkillContext,
   queries: string[],
   maxCandidates: number,
   quota: DigestQuota,
   referenceDate: string,
+  braveSearchApiKey: string | undefined,
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
-  const allLinks: LinkItem[] = [];
+  const allLinks: DigestCandidateLink[] = [];
   const searchPlans = buildDailyDigestSearchPlans(queries);
-  const page = await browser.newPage();
-  try {
-    log(`🧭 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求`);
-    for (const plan of searchPlans) {
-      const url = `https://news.baidu.com/ns?word=${encodeURIComponent(plan.searchText)}&tn=news&cl=2&rn=20&ct=1`;
-      log(`🌐 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
-      try {
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-      } catch {
-        // timeout: continue with whatever content has rendered
-      }
-      const links = await extractPageLinks(page, plan.hintCategory);
-      log(`🔗 获取 ${links.length} 个链接`);
-      allLinks.push(...links);
-    }
-  } finally {
-    await page.close();
+  const apiKey = getBraveSearchApiKey(braveSearchApiKey);
+  log(`🧭 使用 Brave Search API 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求`);
+  for (const plan of searchPlans) {
+    log(`🌐 Brave 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
+    const response = await fetchBraveNewsResponse(plan.searchText, apiKey, maxCandidates);
+    const links = parseBraveNewsSearchResponse(response, plan.hintCategory);
+    log(`🔗 获取 ${links.length} 个候选结果`);
+    allLinks.push(...links);
   }
 
   const uniqueLinks = dedupeLinks(allLinks);
@@ -387,9 +340,9 @@ async function screenshotHtml(browser: Browser, html: string): Promise<Buffer> {
 }
 
 /**
- * Daily digest skill — uses Playwright to directly scrape search result links,
- * then makes targeted LLM calls to filter and structure results.
- * Renders a templated HTML digest, screenshots it, and saves all output files.
+ * Daily digest skill — fetches Brave News candidates, then makes targeted LLM
+ * calls to filter and structure results. Renders a templated HTML digest,
+ * screenshots it, and saves all output files.
  *
  * Output files per run: YYYY-MM-DD.{html,md,png,json}
  */
@@ -419,19 +372,27 @@ export class DailyDigestSkill implements Skill {
   }
 
   async run(ctx: SkillContext): Promise<SkillResult> {
+    const config = this.#configStorage?.read();
+    const queries = resolveDailyDigestQueries(config?.queries, this.#defaultQueries);
+    ctx.log?.(`🧭 使用 ${queries.length} 个搜索主题`);
+    const dateKey = new Date().toLocaleDateString("sv-SE");
+    const articles = await searchNewsWithBrave(
+      ctx,
+      queries,
+      this.#maxCandidates,
+      this.#quota,
+      dateKey,
+      config?.braveSearchApiKey,
+    );
+    const selection = selectDigestArticles(articles, this.#quota);
+    ctx.log?.(`📊 最终入选 ${selection.all.length} 篇文章（国内 ${selection.domestic.length} / 国际 ${selection.international.length}）`);
+    if (selection.domestic.length < this.#quota.domestic || selection.international.length < this.#quota.international) {
+      ctx.log?.(`⚠️ 分类配额未完全满足，目标为国内 ${this.#quota.domestic} / 国际 ${this.#quota.international}`);
+    }
+
+    const dateLabel = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
     const browser = await chromium.launch({ headless: true });
     try {
-      const queries = resolveDailyDigestQueries(this.#configStorage?.read().queries, this.#defaultQueries);
-      ctx.log?.(`🧭 使用 ${queries.length} 个搜索主题`);
-      const dateKey = new Date().toLocaleDateString("sv-SE");
-      const articles = await searchNewsWithBrowser(browser, ctx, queries, this.#maxCandidates, this.#quota, dateKey);
-      const selection = selectDigestArticles(articles, this.#quota);
-      ctx.log?.(`📊 最终入选 ${selection.all.length} 篇文章（国内 ${selection.domestic.length} / 国际 ${selection.international.length}）`);
-      if (selection.domestic.length < this.#quota.domestic || selection.international.length < this.#quota.international) {
-        ctx.log?.(`⚠️ 分类配额未完全满足，目标为国内 ${this.#quota.domestic} / 国际 ${this.#quota.international}`);
-      }
-
-      const dateLabel = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
       const html = renderDailyDigestHtml(selection, dateLabel);
       const imageBuffer = await screenshotHtml(browser, html);
 
@@ -535,7 +496,7 @@ function scopeQuery(query: string, category: DigestCategory): string {
 
 async function extractArticlesFromLinks(
   ctx: SkillContext,
-  links: LinkItem[],
+  links: DigestCandidateLink[],
   category: DigestCategory,
   maxCandidates: number,
   referenceDate: string,
@@ -549,10 +510,10 @@ async function extractArticlesFromLinks(
   log(`📊 ${CATEGORY_LABEL[category]}候选 ${links.length} 个链接，调用 LLM 筛选…`);
   const linkText = links
     .slice(0, 180)
-    .map((link) => `${link.text} | ${link.href}`)
+    .map((link) => formatCandidateLine(link))
     .join("\n");
 
-  const prompt = `以下是${CATEGORY_LABEL[category]}科技新闻候选链接列表（格式：标题 | URL）：
+  const prompt = `以下是${CATEGORY_LABEL[category]}科技新闻候选链接列表（格式：标题 | URL | 来源 | 时间 | 摘要）：
 
 ${linkText}
 
@@ -592,8 +553,8 @@ ${linkText}
   return parsed.map((article) => ({ ...article, category }));
 }
 
-function dedupeLinks(links: LinkItem[]): LinkItem[] {
-  const byUrl = new Map<string, LinkItem>();
+function dedupeLinks(links: DigestCandidateLink[]): DigestCandidateLink[] {
+  const byUrl = new Map<string, DigestCandidateLink>();
   for (const link of links) {
     const key = canonicalizeUrl(link.href);
     if (!byUrl.has(key)) {
@@ -607,17 +568,19 @@ function dedupeLinks(links: LinkItem[]): LinkItem[] {
   return [...byUrl.values()];
 }
 
-function mergeLinkItems(previous: LinkItem, next: LinkItem): LinkItem {
+function mergeLinkItems(previous: DigestCandidateLink, next: DigestCandidateLink): DigestCandidateLink {
   return {
     ...previous,
     ...(previous.hintCategory === "domestic" && next.hintCategory === "international"
       ? { hintCategory: next.hintCategory }
       : {}),
+    ...(!previous.source && next.source ? { source: next.source } : {}),
+    ...(!previous.summary && next.summary ? { summary: next.summary } : {}),
     ...(!previous.publishedAt && next.publishedAt ? { publishedAt: next.publishedAt } : {}),
   };
 }
 
-function buildLinkHintMap(links: LinkItem[]): ReadonlyMap<string, LinkHint> {
+function buildLinkHintMap(links: DigestCandidateLink[]): ReadonlyMap<string, LinkHint> {
   const hints = new Map<string, LinkHint>();
   for (const link of links) {
     const hint: LinkHint = {
@@ -992,9 +955,140 @@ function resolveDigestArticleDate(
   return undefined;
 }
 
-function isBlockedLink(link: LinkItem): boolean {
+function isBlockedLink(link: DigestCandidateLink): boolean {
   const hostname = getHostname(link.href);
   return hostname ? isBlockedHostname(hostname) : false;
+}
+
+function formatCandidateLine(link: DigestCandidateLink): string {
+  const fields = [
+    link.text,
+    link.href,
+    link.source ? `来源: ${link.source}` : "",
+    link.publishedAt ? `时间: ${link.publishedAt}` : "",
+    link.summary ? `摘要: ${truncateText(link.summary, 96)}` : "",
+  ].filter(Boolean);
+  return fields.join(" | ");
+}
+
+function getBraveSearchApiKey(configuredKey: string | undefined): string {
+  const apiKey = configuredKey?.trim() || process.env["BRAVE_SEARCH_API_KEY"]?.trim();
+  if (!apiKey) {
+    throw new Error("BRAVE_SEARCH_API_KEY is required for daily-digest");
+  }
+  return apiKey;
+}
+
+async function fetchBraveNewsResponse(query: string, apiKey: string, maxCandidates: number): Promise<unknown> {
+  const params = new URLSearchParams({
+    q: query,
+    count: String(Math.min(maxCandidates, BRAVE_NEWS_SEARCH_COUNT)),
+    spellcheck: "0",
+  });
+  const response = await fetch(`${BRAVE_NEWS_SEARCH_ENDPOINT}?${params.toString()}`, {
+    headers: {
+      Accept: "application/json",
+      "X-Subscription-Token": apiKey,
+    },
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Brave Search API ${response.status}: ${body.slice(0, 240)}`);
+  }
+  return response.json() as Promise<unknown>;
+}
+
+export function parseBraveNewsSearchResponse(
+  payload: unknown,
+  hintCategory: DigestCategory,
+): DigestCandidateLink[] {
+  const parsed = BraveNewsResponseSchema.safeParse(payload);
+  if (!parsed.success) return [];
+  return parsed.data.results.flatMap((result) => {
+    const href = result.url.trim();
+    const text = result.title.trim();
+    if (!href.startsWith("http") || text.length === 0) return [];
+    const source = normalizeBraveSource(result.meta_url?.netloc, result.meta_url?.hostname, href);
+    const summary = result.description?.trim() ?? "";
+    const publishedAt = normalizeBravePublishedAt(result.page_age, result.age);
+    return [{
+      text,
+      href,
+      hintCategory,
+      ...(source ? { source } : {}),
+      ...(summary ? { summary } : {}),
+      ...(publishedAt ? { publishedAt } : {}),
+    }];
+  });
+}
+
+function normalizeBraveSource(netloc: string | undefined, hostname: string | undefined, href: string): string | undefined {
+  const preferred = netloc?.trim() || hostname?.trim();
+  if (preferred) return preferred;
+  return getHostname(href);
+}
+
+function normalizeBravePublishedAt(pageAge: string | undefined, age: string | undefined): string | undefined {
+  const absolute = formatBraveAbsoluteTime(pageAge);
+  if (absolute) return absolute;
+  return humanizeBraveAge(age);
+}
+
+function formatBraveAbsoluteTime(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const formatter = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return formatter.format(date).replace(",", "");
+}
+
+function humanizeBraveAge(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const match = value.trim().match(/^(\d+)\s*([a-zA-Z]+)$/);
+  if (!match) return value.trim();
+  const [, amount, unit] = match;
+  const labels: Record<string, string> = {
+    s: "秒前",
+    sec: "秒前",
+    second: "秒前",
+    seconds: "秒前",
+    m: "分钟前",
+    min: "分钟前",
+    mins: "分钟前",
+    minute: "分钟前",
+    minutes: "分钟前",
+    h: "小时前",
+    hr: "小时前",
+    hrs: "小时前",
+    hour: "小时前",
+    hours: "小时前",
+    d: "天前",
+    day: "天前",
+    days: "天前",
+    w: "周前",
+    wk: "周前",
+    week: "周前",
+    weeks: "周前",
+    mo: "个月前",
+    mon: "个月前",
+    month: "个月前",
+    months: "个月前",
+    y: "年前",
+    yr: "年前",
+    year: "年前",
+    years: "年前",
+  };
+  if (!amount || !unit) return value.trim();
+  const label = labels[unit.toLowerCase()];
+  return label ? `${amount}${label}` : value.trim();
 }
 
 function isBlockedHostname(hostname: string): boolean {

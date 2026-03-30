@@ -11,6 +11,7 @@
  *   ANTHROPIC_BASE_URL       可选，自定义 Anthropic API 地址
  *   OPENAI_API_KEY           使用 OpenAI 时填写
  *   OPENAI_BASE_URL          可选，自定义 OpenAI API 地址
+ *   BRAVE_SEARCH_API_KEY     Daily Digest 使用 Brave Search API 时填写；若 WebUI 已保存 Brave Key，则运行时优先使用 WebUI 配置
  *   HTTPS_PROXY              可选，代理
  *   FEISHU_APP_ID            飞书 App ID（接入飞书时填写）
  *   FEISHU_APP_SECRET        飞书 App Secret

@@ -1507,8 +1507,12 @@ function mergeDailyDigestConfig(
   const queries = incomingQueries !== undefined
     ? (incomingQueries.length > 0 ? incomingQueries : baseQueries)
     : normalizeStringList(incoming.queries ?? defaults.queries);
+  const braveSearchApiKey = incoming.braveSearchApiKey !== undefined
+    ? (incoming.braveSearchApiKey.trim() || undefined)
+    : defaults.braveSearchApiKey;
   return {
     ...(queries.length > 0 && { queries }),
+    ...(braveSearchApiKey !== undefined && { braveSearchApiKey }),
   };
 }
 

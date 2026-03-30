@@ -21,11 +21,16 @@ interface MountedDocFields {
   excerpt?: string;
 }
 
+interface BraveSearchFields {
+  braveSearchApiKey: string;
+}
+
 /** Full-page settings view. All config is saved server-side. */
 export function SettingsView(): React.JSX.Element {
   const tocItems = [
     { id: "settings-agent", label: "Agent", hint: "名称、提示词、allowedPaths" },
     { id: "settings-docs", label: "飞书文档", hint: "挂载、同步、缓存" },
+    { id: "settings-search", label: "搜索", hint: "Brave Search API Key" },
     { id: "settings-llm", label: "模型", hint: "API Key、代理、模型名" },
   ];
 
@@ -36,6 +41,7 @@ export function SettingsView(): React.JSX.Element {
           <h2 className={styles.title}>设置</h2>
           <AgentSection />
           <MountedDocsSection />
+          <BraveSearchSection />
           <LLMSection />
         </div>
         <SectionToc items={tocItems} />
@@ -298,6 +304,75 @@ function MountedDocsSection(): React.JSX.Element {
   );
 }
 
+function BraveSearchSection(): React.JSX.Element {
+  const [fields, setFields] = useState<BraveSearchFields>({ braveSearchApiKey: "" });
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/config/daily-digest")
+      .then((r) => r.json() as Promise<{ braveSearchApiKey?: string }>)
+      .then((data) => {
+        setFields({ braveSearchApiKey: data.braveSearchApiKey ?? "" });
+      })
+      .catch(() => { /* no config yet */ });
+
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+
+  const save = (): void => {
+    setSaving(true);
+    fetch("/api/config/daily-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        braveSearchApiKey: fields.braveSearchApiKey,
+      }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        setStatus({ type: "ok", msg: "已保存 Brave Search 配置" });
+      })
+      .catch((e: unknown) => {
+        setStatus({ type: "err", msg: e instanceof Error ? e.message : String(e) });
+      })
+      .finally(() => {
+        setSaving(false);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setStatus(null), 4000);
+      });
+  };
+
+  return (
+    <section id="settings-search" className={styles.section}>
+      <div className={styles.sectionTitle}>搜索（Brave Search）</div>
+      <div className={styles.sectionHint}>
+        配置保存在服务端 `data/skills/daily-digest/config.json`，保存后下一次运行 `daily-digest` 即生效。<br />
+        若这里留空，运行时会回退到环境变量 `BRAVE_SEARCH_API_KEY`。
+      </div>
+      <div className={styles.fields}>
+        <Field
+          id="settings-brave-search-api-key"
+          label="Brave Search API Key"
+          type="password"
+          placeholder="BSA..."
+          value={fields.braveSearchApiKey}
+          onChange={(value) => setFields({ braveSearchApiKey: value })}
+        />
+      </div>
+      <div className={styles.saveRow}>
+        <button className={styles.saveBtn} onClick={save} disabled={saving}>
+          {saving ? "保存中…" : "保存 Brave Search 配置"}
+        </button>
+        {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
+      </div>
+    </section>
+  );
+}
+
 /** LLM provider configuration — saved server-side to data/agent/llm-config.json. */
 function LLMSection(): React.JSX.Element {
   const [fields, setFields] = useState<LLMFields>({
@@ -432,6 +507,7 @@ function SelectField({ label, value, onChange, options }: SelectFieldProps): Rea
 }
 
 interface FieldProps {
+  id?: string;
   label: string;
   placeholder: string;
   value: string;
@@ -439,15 +515,16 @@ interface FieldProps {
   type?: string;
 }
 
-function Field({ label, placeholder, value, onChange, type = "text" }: FieldProps): React.JSX.Element {
+function Field({ id, label, placeholder, value, onChange, type = "text" }: FieldProps): React.JSX.Element {
   const [show, setShow] = useState(false);
   const isPassword = type === "password";
 
   return (
     <div className={styles.field}>
-      <label className={styles.fieldLabel}>{label}</label>
+      <label className={styles.fieldLabel} htmlFor={id}>{label}</label>
       <div className={styles.fieldRow}>
         <input
+          id={id}
           className={styles.fieldInput}
           type={isPassword && !show ? "password" : "text"}
           placeholder={placeholder}

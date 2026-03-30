@@ -48,4 +48,6 @@ export interface AgentMetaConfig {
 export interface DailyDigestConfig {
   /** Search topics used by the skill. One query per search request. */
   queries?: string[];
+  /** Brave Search API key used by daily-digest when configured from WebUI. */
+  braveSearchApiKey?: string;
 }

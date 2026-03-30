@@ -403,16 +403,16 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 `loadSkillDef(skillDir)` 解析 SKILL.md，返回 `SkillDef`（含 `instructions` 字段为 frontmatter 之后的 markdown body）。
 其中 `max-candidates` 用于抽取阶段的候选上限，`domestic-articles` / `international-articles` 用于最终日报配额。
-`DailyDigestSkill` 运行时还可从 `ConfigStorage<DailyDigestConfig>` 读取覆盖配置，目前支持在 WebUI 动态修改搜索主题。
+`DailyDigestSkill` 运行时还可从 `ConfigStorage<DailyDigestConfig>` 读取覆盖配置，目前支持在 WebUI 动态修改搜索主题和 Brave Search API Key。
 
 ### DailyDigestSkill 执行流程
 
 1. 读取 `SKILL.md` 获得默认搜索词、候选上限和国内/国际配额；若 `data/skills/daily-digest/config.json` 中存在自定义主题，则运行时覆盖默认搜索词
 2. 启动 Playwright chromium（headless）
-3. 依次导航各关键词的百度新闻搜索页，用 Playwright locator 提取所有链接（零 LLM 调用），并为链接打上国内/国际查询提示，同时尽量从结果卡片文本里提取新闻时间
-4. 跨关键词去重后，先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际各调用一次 `ctx.agent.llm.complete()`，筛选为结构化 JSON（`DigestArticle[]`，含 `category`）
+3. 依次请求 Brave Search API 的 `news/search` 接口，获取候选新闻结果；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
+4. 将 Brave 返回的标题、URL、来源、摘要与时间字段归一化为候选链接，跨关键词去重后先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际各调用一次 `ctx.agent.llm.complete()`，筛选为结构化 JSON（`DigestArticle[]`，含 `category`）
 5. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
-6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；同时把搜索结果里的新闻时间 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`
+6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；同时把 Brave 返回的时间 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`
 7. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML
 8. 条目元信息显示为“来源 + 新闻时间”；若未提取到时间则仅显示来源
 9. Playwright 截图为 PNG，写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
@@ -421,7 +421,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 其中 HTML 不再由 `index.ts` 直接拼整页结构，而是运行时读取 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 和 `layout.css` 进行模板替换；这样 HTML 模板和 CSS 模板共同成为截图与导出文件的单一版式源。
 截图阶段使用 `browser.newContext({ viewport: { width: 1080, height: 1400 }, deviceScaleFactor: 4 })`，并以 `scale: "device"` 输出 PNG，在不改变版心尺寸的前提下提升清晰度。
-搜索结果链接提取逻辑避免在 Playwright 浏览器上下文中引用打包辅助函数，确保 `daily-digest-generate` 从 Cron 手动执行时也能稳定落盘。
+`daily-digest` 现在不再依赖浏览器打开新闻搜索页获取候选链接，而是直接调用 Brave 官方新闻搜索 API；Playwright 浏览器只保留在最终 HTML 截图阶段使用。
 
 ### Cron 手动执行错误传播
 
@@ -445,7 +445,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 - `new ConfigStorage<LLMConfig>("./data/agent/llm-config.json")` — LLM 配置（provider / apiKey / baseURL / httpsProxy / model）
 - `new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json")` — Agent 名称和系统提示词
 - `new ConfigStorage<MountedDocConfig>("./data/agent/feishu-docs/config.json", { docs: [] })` — 挂载飞书文档配置
-- `new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json")` — DailyDigest 搜索主题
+- `new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json")` — DailyDigest 搜索主题与 Brave Search API Key
 - `new ConfigStorage<CronJobConfig[]>("./data/cron/cron-config.json", [])` — Cron 任务配置
 
 ConversationStorage 负责短期 session 历史；MemoryStorage 负责长期共享记忆，两者不会自动互相镜像。也就是说，IM 多轮对话会持久化到 `conversations.json`，但不会自动沉淀到 `memory.json`。各配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。`LLM_PROVIDER` 环境变量可在未持久化配置时决定默认使用 `anthropic` 还是 `openai`。
@@ -515,7 +515,7 @@ defineTool({
 | `/api/im-config` | GET/POST | 飞书等 IM 凭证（读写 `data/im/im-config.json`） |
 | `/api/config/llm` | GET/POST | LLM 配置（读写 `data/agent/llm-config.json`） |
 | `/api/config/agent` | GET/POST | Agent 配置（读写 `data/agent/agent-config.json`） |
-| `/api/config/daily-digest` | GET/POST | DailyDigest 搜索主题（读写 `data/skills/daily-digest/config.json`） |
+| `/api/config/daily-digest` | GET/POST | DailyDigest 搜索主题与 Brave Search API Key（读写 `data/skills/daily-digest/config.json`） |
 | `/api/config/feishu-docs` | GET/POST | 挂载飞书文档配置（读写 `data/agent/feishu-docs/config.json`） |
 | `/api/config/feishu-docs/sync` | POST | 用 Playwright 同步飞书文档正文到本地缓存 |
 | `/api/cron` | GET/POST/DELETE | Cron 任务 CRUD |
@@ -570,7 +570,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | IM | 状态 | `#im-status` | `IMView` | 展示 IM 平台连接、飞书运行摘要、群聊列表，并带右侧 TOC |
 | IM | 配置 | `#im-config` | `IMView` | 展示飞书 IM 凭证表单和运行摘要 |
 | 系统 | 状态 | `#status` | `StatusView` | 运行概览、最近 IM 活动、配置文件，并带停靠在页面右侧的页内 TOC |
-| 系统 | 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / LLM 配置，并带停靠在页面右侧的页内 TOC |
+| 系统 | 设置 | `#settings` | `SettingsView` | Agent 配置 / 飞书文档挂载 / Brave Search / LLM 配置，并带停靠在页面右侧的页内 TOC |
 
 URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读 `window.location.hash`，将其解析为 `view + subtab` 路由状态；切换一级 tab 时跳到该组默认 hash，切换二级 tab 时更新对应子页 hash，监听 `hashchange` 支持浏览器前进/后退。
 

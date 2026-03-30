@@ -3,12 +3,62 @@ import {
   buildDailyDigestSearchPlans,
   DAILY_DIGEST_SCREENSHOT,
   parseArticlesFromLLMOutput,
+  parseBraveNewsSearchResponse,
   renderDailyDigestHtml,
   resolveDailyDigestQueries,
   selectDigestArticles,
   type DailyDigestSelection,
   type DigestArticle,
 } from "../../src/skills/daily-digest/index.js";
+
+describe("parseBraveNewsSearchResponse", () => {
+  it("maps Brave results into digest candidate links", () => {
+    const links = parseBraveNewsSearchResponse({
+      results: [
+        {
+          title: "OpenAI 发布新模型",
+          url: "https://www.reuters.com/technology/openai-model",
+          description: "Reuters summary",
+          age: "2h",
+          meta_url: {
+            netloc: "Reuters",
+            hostname: "www.reuters.com",
+          },
+        },
+      ],
+    }, "international");
+
+    expect(links).toEqual([
+      {
+        text: "OpenAI 发布新模型",
+        href: "https://www.reuters.com/technology/openai-model",
+        hintCategory: "international",
+        source: "Reuters",
+        summary: "Reuters summary",
+        publishedAt: "2小时前",
+      },
+    ]);
+  });
+
+  it("prefers page_age as a normalized published time", () => {
+    const links = parseBraveNewsSearchResponse({
+      results: [
+        {
+          title: "教育 AI 新进展",
+          url: "https://www.thepaper.cn/newsDetail_forward_123",
+          description: "desc",
+          age: "2h",
+          page_age: "2026-03-30T01:12:00Z",
+          meta_url: {
+            netloc: "澎湃新闻",
+          },
+        },
+      ],
+    }, "domestic");
+
+    expect(links[0]?.publishedAt).toBe("2026-03-30 09:12");
+  });
+});
 
 describe("parseArticlesFromLLMOutput", () => {
   it("parses anthropic text blocks and normalizes category values", () => {

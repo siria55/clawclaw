@@ -208,6 +208,18 @@
 - 手动执行 skill-only Cron 失败时，错误会继续返回给 WebUI，不再被静默吞掉
 - `daily-digest-generate` 生成成功后，文件会落到 `data/skills/daily-digest/`
 
+## 第三十四阶段：日报切换 Brave Search（Sprint 76）
+
+- `daily-digest` 候选新闻搜索改用 Brave Search API 的新闻接口，不再依赖百度新闻页面抓取
+- Brave 返回的来源、摘要、时间元信息会继续接入后续的过滤、时间展示和 `date` 推导链路
+- 运行 `daily-digest` 时需要提供 `BRAVE_SEARCH_API_KEY`
+
+## 第三十五阶段：Brave Key WebUI 配置（Sprint 77）
+
+- `系统 > 设置` 新增 `Brave Search API Key` 配置区块
+- Brave Key 会保存到 `data/skills/daily-digest/config.json`
+- `daily-digest` 运行时优先读取 WebUI 保存的 key，未配置时回退到环境变量 `BRAVE_SEARCH_API_KEY`
+
 ---
 
 ## 当前落点
@@ -247,3 +259,5 @@
 - `daily-digest` 现在会优先使用主流媒体和官网来源，百家号等自媒体不会进入最终日报
 - `daily-digest` 的 JSON 现在会额外带上结构化 `date` 字段，便于后续新闻库和自动化链路复用
 - `daily-digest-generate` 的手动执行链路已修复，当前会正常生成 `.html / .md / .png / .json` 到 `data/skills/daily-digest/`
+- `daily-digest` 的候选新闻搜索现已切到 Brave Search API，浏览器只保留给最终截图使用
+- Brave Search API Key 现在可直接在 WebUI 中配置，不再只能依赖环境变量

@@ -1087,6 +1087,29 @@ describe("WebServer", () => {
     rmSync(configDir, { recursive: true, force: true });
   });
 
+  it("GET /api/config/daily-digest returns stored Brave Search API key", async () => {
+    const agent = makeMockAgent();
+    const configDir = join(tmpdir(), `clawclaw-daily-digest-brave-get-${Date.now()}`);
+    mkdirSync(configDir, { recursive: true });
+    const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>(join(configDir, "config.json"), {
+      queries: ["国内AI科技"],
+    });
+    dailyDigestConfigStorage.write({
+      queries: ["国内AI科技"],
+      braveSearchApiKey: "brave_test_key",
+    });
+
+    const server = new WebServer({ agent, port: 0, staticDir, dailyDigestConfigStorage });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/daily-digest`);
+    const body = await res.json() as DailyDigestConfig;
+    expect(body.braveSearchApiKey).toBe("brave_test_key");
+
+    await server.stop();
+    rmSync(configDir, { recursive: true, force: true });
+  });
+
   it("POST /api/config/daily-digest saves normalized queries", async () => {
     const agent = makeMockAgent();
     const configDir = join(tmpdir(), `clawclaw-daily-digest-post-${Date.now()}`);
@@ -1105,6 +1128,33 @@ describe("WebServer", () => {
     });
     expect(res.status).toBe(200);
     expect(dailyDigestConfigStorage.read().queries).toEqual(["国内AI科技", "国际AI科技"]);
+
+    await server.stop();
+    rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it("POST /api/config/daily-digest saves Brave Search API key and preserves queries", async () => {
+    const agent = makeMockAgent();
+    const configDir = join(tmpdir(), `clawclaw-daily-digest-brave-post-${Date.now()}`);
+    mkdirSync(configDir, { recursive: true });
+    const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>(join(configDir, "config.json"), {
+      queries: ["默认主题"],
+    });
+    dailyDigestConfigStorage.write({ queries: ["默认主题"] });
+
+    const server = new WebServer({ agent, port: 0, staticDir, dailyDigestConfigStorage });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/daily-digest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ braveSearchApiKey: "brave_saved_key" }),
+    });
+    expect(res.status).toBe(200);
+    expect(dailyDigestConfigStorage.read()).toEqual({
+      queries: ["默认主题"],
+      braveSearchApiKey: "brave_saved_key",
+    });
 
     await server.stop();
     rmSync(configDir, { recursive: true, force: true });
