@@ -30,6 +30,7 @@ import { CronScheduler } from "../cron/scheduler.js";
 import { cronJobRequiresDelivery, normalizeCronChatIds } from "../cron/types.js";
 import type { CronJob, CronJobConfig } from "../cron/types.js";
 import { ensureDefaultDailyDigestCronJobs } from "../cron/default-jobs.js";
+import { buildAgentSystemPrompt } from "../runtime/agent-system-prompt.js";
 
 mkdirSync("./data/agent", { recursive: true });
 mkdirSync("./data/agent/feishu-docs", { recursive: true });
@@ -62,19 +63,19 @@ function buildLLM(): LLMProvider {
 const llm = buildLLM();
 type FeishuRuntimeSource = "storage" | "none";
 
-function buildSystemPrompt(systemPrompt: string | undefined): string {
-  return [
-    systemPrompt ?? DEFAULT_SYSTEM,
-    "若上下文中提供了挂载文档资料，优先依据文档内容回答；文档未覆盖的细节要明确说明，不要编造。",
-    "如需查询飞书部门、部门人数、直属成员等组织信息，优先调用飞书工具，不要凭空猜测。",
-  ].join("\n");
+function resolveAgentSystemPrompt(config: AgentMetaConfig | undefined): string {
+  return buildAgentSystemPrompt(config, {
+    defaultName: "debug-agent",
+    defaultSystem: DEFAULT_SYSTEM,
+    currentDate: new Date().toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" }),
+  });
 }
 
 let feishu: FeishuPlatform | undefined;
 
 const agentConfig = {
   name: "debug-agent",
-  system: (): string => buildSystemPrompt(agentConfigStorage.read().systemPrompt),
+  system: (): string => resolveAgentSystemPrompt(agentConfigStorage.read()),
   llm,
   tools: [
     ...createMemoryTools(memoryStorage),
@@ -206,8 +207,8 @@ const server = new WebServer({
   onLLMConfig: (config: LLMConfig): void => {
     agent.updateLLM(createLLMFromConfig(config));
   },
-  onAgentConfig: (config: AgentMetaConfig): void => {
-    agent.updateSystem(() => buildSystemPrompt(config.systemPrompt));
+  onAgentConfig: (_config: AgentMetaConfig): void => {
+    agent.updateSystem(() => resolveAgentSystemPrompt(agentConfigStorage.read()));
   },
   getStatus: (): SystemStatus => ({
     cronJobs: cron.list().map((j) => ({ ...j, timezone: "Asia/Shanghai" })),

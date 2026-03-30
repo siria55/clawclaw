@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`。
 
 ---
 
@@ -238,6 +238,24 @@
 - 默认搜索范围从“过去 24 小时”调整为“过去一周”
 - 运行日志、测试和文档说明统一改为“过去一周”口径
 
+## 第三十九阶段：日报筛选切向教育优先（Sprint 81）
+
+- `daily-digest` 的 LLM 筛选口径调整为优先保留教育、教育科技、AI 教育、教育公司内容
+- 泛科技新闻只有在与教育行业、教育场景、教育产品或教育公司明显相关时才保留
+- 搜索词、Brave 接口、自媒体过滤和 JSON 输出链路保持不变
+
+## 第四十阶段：国内搜索明确收敛到中国（Sprint 82）
+
+- `daily-digest` 国内搜索的查询文本由模糊“国内…”口径收敛为明确“中国…”
+- Brave 的国内新闻请求增加 `country=CN` 与 `search_lang=zh-hans`
+- 这样即使用户配置里仍写 `国内AI科技`，运行时也会按中国语境搜索
+
+## 第四十一阶段：身份类问答优先读 Agent 配置（Sprint 83）
+
+- 运行时 system prompt 会显式注入 Agent 名称与自定义身份设定
+- 当用户问“你谁 / 你叫什么 / 你是做什么的”时，模型被明确要求优先依据这些配置回答
+- `app.ts` 与 `src/web/dev.ts` 共用同一套 system prompt 组装逻辑
+
 ---
 
 ## 当前落点
@@ -281,3 +299,6 @@
 - Brave Search API Key 现在可直接在 WebUI 中配置，不再只能依赖环境变量
 - `daily-digest` 现在默认只检索过去一周内的新闻，兼顾时效性和候选覆盖面
 - `daily-digest` 生成结果现在只显示来源，不再显示新闻时间；JSON 仍保留 `publishedAt` / `date`
+- `daily-digest` 现在会优先筛出教育、教育科技、AI 教育、教育公司内容，同时保留与教育强相关的科技动态
+- `daily-digest` 的国内搜索现在会明确使用中国语境，不再把“国内”交给 Brave 自行歧义解释；国内请求会附带 `country=CN` 与 `search_lang=zh-hans`
+- Agent 现在会优先按 WebUI 中配置的名称和系统提示词回答“你谁 / 你叫什么 / 你是做什么的”

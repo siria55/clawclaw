@@ -392,7 +392,7 @@ frontmatter 字段（简化 YAML，无额外依赖）：
 ---
 id: daily-digest
 description: 浏览器搜索科技新闻，按国内 10 / 国际 5 生成 HTML 日报截图
-queries: 国内AI科技,中国创业投资,中国互联网平台,美国OpenAI,美国英伟达AI,硅谷创投,海外互联网监管,全球科技公司
+queries: 中国AI科技,中国创业投资,中国互联网平台,美国OpenAI,美国英伟达AI,硅谷创投,海外互联网监管,全球科技公司
 domestic-articles: 10
 international-articles: 5
 max-articles: 15
@@ -409,8 +409,8 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 1. 读取 `SKILL.md` 获得默认搜索词、候选上限和国内/国际配额；若 `data/skills/daily-digest/config.json` 中存在自定义主题，则运行时覆盖默认搜索词
 2. 启动 Playwright chromium（headless）
-3. 依次请求 Brave Search API 的 `news/search` 接口，使用 `freshness=pw` 限制在过去一周内获取候选新闻结果；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
-4. 将 Brave 返回的标题、URL、来源、摘要与时间字段归一化为候选链接，跨关键词去重后先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际各调用一次 `ctx.agent.llm.complete()`，筛选为结构化 JSON（`DigestArticle[]`，含 `category`）
+3. 依次请求 Brave Search API 的 `news/search` 接口，使用 `freshness=pw` 限制在过去一周内获取候选新闻结果；国内搜索会额外附带 `country=CN` 与 `search_lang=zh-hans`，并将“国内…”规范化为“中国…”搜索文本；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
+4. 将 Brave 返回的标题、URL、来源、摘要与时间字段归一化为候选链接，跨关键词去重后先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际各调用一次 `ctx.agent.llm.complete()`，优先筛出教育、教育科技、AI 教育、教育公司内容，同时保留与教育场景强相关的科技动态，输出为结构化 JSON（`DigestArticle[]`，含 `category`）
 5. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
 6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；同时把 Brave 返回的时间 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`
 7. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML
@@ -449,6 +449,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 - `new ConfigStorage<CronJobConfig[]>("./data/cron/cron-config.json", [])` — Cron 任务配置
 
 ConversationStorage 负责短期 session 历史；MemoryStorage 负责长期共享记忆，两者不会自动互相镜像。也就是说，IM 多轮对话会持久化到 `conversations.json`，但不会自动沉淀到 `memory.json`。各配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。`LLM_PROVIDER` 环境变量可在未持久化配置时决定默认使用 `anthropic` 还是 `openai`。
+运行时通过统一的 `buildAgentSystemPrompt()` 将 `name + systemPrompt + 默认能力说明 + 身份类问答规则` 组装成最终 system prompt，`app.ts` 与 `src/web/dev.ts` 共用同一逻辑。
 
 ---
 

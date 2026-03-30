@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildDailyDigestSearchPlans,
   buildBraveNewsSearchUrl,
+  buildDailyDigestExtractionPrompt,
   DAILY_DIGEST_SCREENSHOT,
+  DAILY_DIGEST_EXTRACTION_SYSTEM,
   parseArticlesFromLLMOutput,
   parseBraveNewsSearchResponse,
   renderDailyDigestHtml,
@@ -279,16 +281,17 @@ describe("resolveDailyDigestQueries", () => {
 describe("buildDailyDigestSearchPlans", () => {
   it("expands neutral queries into domestic and international searches", () => {
     expect(buildDailyDigestSearchPlans(["AI", "教育"])).toEqual([
-      { query: "AI", searchText: "国内AI", hintCategory: "domestic" },
+      { query: "AI", searchText: "中国AI", hintCategory: "domestic" },
       { query: "AI", searchText: "国际AI", hintCategory: "international" },
-      { query: "教育", searchText: "国内教育", hintCategory: "domestic" },
+      { query: "教育", searchText: "中国教育", hintCategory: "domestic" },
       { query: "教育", searchText: "国际教育", hintCategory: "international" },
     ]);
   });
 
-  it("keeps explicitly scoped queries as single-category searches", () => {
-    expect(buildDailyDigestSearchPlans(["国内AI", "国际AI", "OpenAI"])).toEqual([
-      { query: "国内AI", searchText: "国内AI", hintCategory: "domestic" },
+  it("normalizes explicitly scoped domestic queries to China-focused search text", () => {
+    expect(buildDailyDigestSearchPlans(["国内AI", "中国教育", "国际AI", "OpenAI"])).toEqual([
+      { query: "国内AI", searchText: "中国AI", hintCategory: "domestic" },
+      { query: "中国教育", searchText: "中国教育", hintCategory: "domestic" },
       { query: "国际AI", searchText: "国际AI", hintCategory: "international" },
       { query: "OpenAI", searchText: "OpenAI", hintCategory: "international" },
     ]);
@@ -296,13 +299,44 @@ describe("buildDailyDigestSearchPlans", () => {
 });
 
 describe("buildBraveNewsSearchUrl", () => {
-  it("restricts Brave News Search to the past week", () => {
-    const url = new URL(buildBraveNewsSearchUrl("OpenAI", 50));
+  it("restricts domestic Brave News Search to China and Chinese in the past week", () => {
+    const url = new URL(buildBraveNewsSearchUrl("中国AI", 50, "domestic"));
 
-    expect(url.searchParams.get("q")).toBe("OpenAI");
+    expect(url.searchParams.get("q")).toBe("中国AI");
     expect(url.searchParams.get("count")).toBe("20");
     expect(url.searchParams.get("spellcheck")).toBe("0");
     expect(url.searchParams.get("freshness")).toBe("pw");
+    expect(url.searchParams.get("country")).toBe("CN");
+    expect(url.searchParams.get("search_lang")).toBe("zh-hans");
+  });
+
+  it("keeps international Brave News Search free of China-only filters", () => {
+    const url = new URL(buildBraveNewsSearchUrl("OpenAI", 50, "international"));
+
+    expect(url.searchParams.get("q")).toBe("OpenAI");
+    expect(url.searchParams.get("freshness")).toBe("pw");
+    expect(url.searchParams.get("country")).toBeNull();
+    expect(url.searchParams.get("search_lang")).toBeNull();
+  });
+});
+
+describe("buildDailyDigestExtractionPrompt", () => {
+  it("prioritizes education-focused news while keeping education-related tech", () => {
+    const prompt = buildDailyDigestExtractionPrompt("domestic", [
+      {
+        text: "AI 教育公司发布新产品",
+        href: "https://example.com/edu-ai",
+        hintCategory: "domestic",
+        source: "Example",
+        summary: "summary",
+        publishedAt: "2小时前",
+      },
+    ], 8);
+
+    expect(DAILY_DIGEST_EXTRACTION_SYSTEM).toContain("教育科技新闻筛选器");
+    expect(prompt).toContain("教育 / 教育科技 / AI 教育 / 教育公司");
+    expect(prompt).toContain("优先保留教育、教育科技、AI 教育、教育公司、教育平台、教育政策、教育产品相关内容");
+    expect(prompt).toContain("只有在它与教育行业、教育场景、教育产品或教育公司明显相关时才保留");
   });
 });
 

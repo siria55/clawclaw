@@ -1,7 +1,7 @@
 ---
 id: daily-digest
-description: 通过 Brave Search API 搜索过去一周科技新闻，按国内 10 / 国际 5 生成 HTML 日报并截图保存
-queries: 国内AI科技,中国创业投资,中国互联网平台,美国OpenAI,美国英伟达AI,硅谷创投,海外互联网监管,全球科技公司
+description: 通过 Brave Search API 搜索过去一周教育与教育科技相关新闻，按国内 10 / 国际 5 生成 HTML 日报并截图保存
+queries: 中国AI科技,中国创业投资,中国互联网平台,美国OpenAI,美国英伟达AI,硅谷创投,海外互联网监管,全球科技公司
 domestic-articles: 10
 international-articles: 5
 max-articles: 15
@@ -11,9 +11,9 @@ max-candidates: 36
 ## 执行流程
 
 1. 默认使用本文件里的 `queries`；若 `data/skills/daily-digest/config.json` 中配置了自定义主题，则运行时优先使用配置值
-2. 通过 Brave Search API 的 `news/search` 接口检索各关键词在过去一周内的候选新闻（优先使用 WebUI 保存的 Brave Key，未配置时回退到 `BRAVE_SEARCH_API_KEY` 环境变量）
+2. 通过 Brave Search API 的 `news/search` 接口检索各关键词在过去一周内的候选新闻；国内搜索会明确使用中国口径（如 `中国AI`）并带 `country=CN` / `search_lang=zh-hans`（优先使用 WebUI 保存的 Brave Key，未配置时回退到 `BRAVE_SEARCH_API_KEY` 环境变量）
 3. 将 Brave 返回的标题、URL、来源、摘要与时间元信息整理为候选链接，并打上国内/国际查询提示
-4. 跨关键词去重后，先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际分别调用 LLM 筛选真实新闻文章并结构化为 JSON（含 `category`）；新闻时间继续沿用 Brave 返回的时间 hint，并最佳努力推导结构化 `date`
+4. 跨关键词去重后，先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际分别调用 LLM 优先筛选教育、教育科技、AI 教育、教育公司，以及与教育场景强相关的科技动态，并结构化为 JSON（含 `category`）；新闻时间继续沿用 Brave 返回的时间 hint，并最佳努力推导结构化 `date`
 5. 按国内 10 / 国际 5 的配额裁剪
 6. 将内容填入 HTML 模板，读取 `layout.css` 渲染日报并截图为 PNG；生成结果只展示来源，不展示新闻时间
 7. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`

@@ -205,18 +205,22 @@ export const DAILY_DIGEST_SCREENSHOT = {
 const BRAVE_NEWS_SEARCH_ENDPOINT = process.env["BRAVE_SEARCH_API_URL"] ?? "https://api.search.brave.com/res/v1/news/search";
 const BRAVE_NEWS_SEARCH_COUNT = 20;
 const BRAVE_NEWS_SEARCH_FRESHNESS = "pw";
+const BRAVE_DOMESTIC_COUNTRY = "CN";
+const BRAVE_DOMESTIC_SEARCH_LANG = "zh-hans";
+const DAILY_DIGEST_FOCUS = "教育 / 教育科技 / AI 教育 / 教育公司";
 
-const EXTRACTION_SYSTEM = [
-  "你是一个严谨的科技新闻筛选器。",
+export const DAILY_DIGEST_EXTRACTION_SYSTEM = [
+  "你是一个严谨的教育科技新闻筛选器。",
   "你的任务是从候选链接中挑出真实新闻文章，并返回严格 JSON 数组。",
   "不要聊天，不要解释，不要使用 markdown，除了 JSON 数组不要输出任何别的内容。",
   "只保留新闻文章页，排除搜索页、导航页、专题页、广告页、下载页和纯视频页。",
+  `优先保留 ${DAILY_DIGEST_FOCUS}、教育平台、教育政策、教育产品相关内容，同时保留与教育场景强相关的科技、创投和互联网动态。`,
   "优先原创媒体、主流媒体、官网和权威发布。",
   "不要返回百家号、搜狐号、网易号、企鹅号、头条号、一点号、大鱼号等自媒体或聚合号内容。",
   "如果同一事件同时有主流媒体、公司官网和自媒体版本，只保留主流媒体或官网版本。",
   "category 只允许 domestic 或 international。",
-  "domestic 表示中国公司、政策、市场、机构或中国互联网/创投动态为主。",
-  "international 表示海外公司、政策、市场、机构或全球科技/创投动态为主。",
+  "domestic 表示中国教育、教育科技、AI 教育、教育公司、教育政策、教育平台，或与中国教育场景强相关的科技/创投动态为主。",
+  "international 表示海外教育、教育科技、AI 教育、教育公司、教育政策、教育平台，或与全球教育场景强相关的科技/创投动态为主。",
   "如果字符串里出现双引号，必须转义。",
 ].join("\n");
 
@@ -235,7 +239,7 @@ async function searchNewsWithBrave(
   log(`🧭 使用 Brave Search API 搜索过去一周内的主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求`);
   for (const plan of searchPlans) {
     log(`🌐 Brave 搜索（过去一周）: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
-    const response = await fetchBraveNewsResponse(plan.searchText, apiKey, maxCandidates);
+    const response = await fetchBraveNewsResponse(plan.searchText, apiKey, maxCandidates, plan.hintCategory);
     const links = parseBraveNewsSearchResponse(response, plan.hintCategory);
     log(`🔗 获取 ${links.length} 个候选结果`);
     allLinks.push(...links);
@@ -477,7 +481,7 @@ export function buildDailyDigestSearchPlans(queries: string[]): Array<{
 function buildSearchPlansForQuery(query: string): SearchPlan[] {
   const scope = classifyQueryScope(query);
   if (scope === "domestic" || scope === "international") {
-    return [{ query, searchText: query, hintCategory: scope }];
+    return [{ query, searchText: normalizeScopedSearchText(query, scope), hintCategory: scope }];
   }
   return [
     { query, searchText: scopeQuery(query, "domestic"), hintCategory: "domestic" },
@@ -491,8 +495,14 @@ function classifyQueryScope(query: string): DigestCategory | "neutral" {
 }
 
 function scopeQuery(query: string, category: DigestCategory): string {
-  const prefix = category === "domestic" ? "国内" : "国际";
+  const prefix = category === "domestic" ? "中国" : "国际";
   return `${prefix}${query}`.trim();
+}
+
+function normalizeScopedSearchText(query: string, category: DigestCategory): string {
+  const trimmed = query.trim();
+  if (category !== "domestic") return trimmed;
+  return trimmed.replace(/^(国内|本土|本地)/, "中国");
 }
 
 async function extractArticlesFromLinks(
@@ -509,31 +519,10 @@ async function extractArticlesFromLinks(
   }
 
   log(`📊 ${CATEGORY_LABEL[category]}候选 ${links.length} 个链接，调用 LLM 筛选…`);
-  const linkText = links
-    .slice(0, 180)
-    .map((link) => formatCandidateLine(link))
-    .join("\n");
-
-  const prompt = `以下是${CATEGORY_LABEL[category]}科技新闻候选链接列表（格式：标题 | URL | 来源 | 时间 | 摘要）：
-
-${linkText}
-
-请只筛选出真正属于${CATEGORY_LABEL[category]}科技、创投或互联网动态的新闻正文页，满足这些要求：
-- 只保留新闻正文页，不要搜索结果、专题页、导航链接、下载页、广告页
-- 优先原创媒体、主流媒体、公司官网和权威发布
-- 不要百家号、搜狐号、网易号、企鹅号、头条号、一点号、大鱼号等自媒体或聚合号内容
-- 如果同一事件既有主流媒体 / 官网版本，也有自媒体版本，只保留前者
-- 尽量覆盖不同主题，避免同题反复
-- summary 尽量用一句中文短句概括；如果从标题无法可靠概括，可留空字符串
-- category 固定返回 ${category}
-
-最多返回 ${maxCandidates} 篇，按质量、相关性和时效性排序。
-
-只返回 JSON 数组，不要其他文字：
-[{"title":"文章标题","url":"文章完整URL","summary":"一句话摘要","source":"来源媒体","category":"${category}"}]`;
+  const prompt = buildDailyDigestExtractionPrompt(category, links.slice(0, 180), maxCandidates);
 
   const response = await ctx.agent.llm.complete({
-    system: EXTRACTION_SYSTEM,
+    system: DAILY_DIGEST_EXTRACTION_SYSTEM,
     messages: [{ role: "user", content: prompt }],
   });
   const text = extractText(response.message.content);
@@ -552,6 +541,36 @@ ${linkText}
   }
 
   return parsed.map((article) => ({ ...article, category }));
+}
+
+export function buildDailyDigestExtractionPrompt(
+  category: DigestCategory,
+  links: DigestCandidateLink[],
+  maxCandidates: number,
+): string {
+  const linkText = links
+    .map((link) => formatCandidateLine(link))
+    .join("\n");
+
+  return `以下是${CATEGORY_LABEL[category]}新闻候选链接列表（格式：标题 | URL | 来源 | 时间 | 摘要）：
+
+${linkText}
+
+请只筛选出真正属于${CATEGORY_LABEL[category]}${DAILY_DIGEST_FOCUS}，以及与教育场景强相关的科技、创投或互联网动态的新闻正文页，满足这些要求：
+- 只保留新闻正文页，不要搜索结果、专题页、导航链接、下载页、广告页
+- 优先保留教育、教育科技、AI 教育、教育公司、教育平台、教育政策、教育产品相关内容
+- 如果是泛科技新闻，只有在它与教育行业、教育场景、教育产品或教育公司明显相关时才保留
+- 优先原创媒体、主流媒体、公司官网和权威发布
+- 不要百家号、搜狐号、网易号、企鹅号、头条号、一点号、大鱼号等自媒体或聚合号内容
+- 如果同一事件既有主流媒体 / 官网版本，也有自媒体版本，只保留前者
+- 尽量覆盖不同主题，避免同题反复
+- summary 尽量用一句中文短句概括；如果从标题无法可靠概括，可留空字符串
+- category 固定返回 ${category}
+
+最多返回 ${maxCandidates} 篇，按质量、相关性和时效性排序。
+
+只返回 JSON 数组，不要其他文字：
+[{"title":"文章标题","url":"文章完整URL","summary":"一句话摘要","source":"来源媒体","category":"${category}"}]`;
 }
 
 function dedupeLinks(links: DigestCandidateLink[]): DigestCandidateLink[] {
@@ -976,18 +995,31 @@ function getBraveSearchApiKey(configuredKey: string | undefined): string {
   return apiKey;
 }
 
-export function buildBraveNewsSearchUrl(query: string, maxCandidates: number): string {
+export function buildBraveNewsSearchUrl(
+  query: string,
+  maxCandidates: number,
+  hintCategory: DigestCategory | undefined = undefined,
+): string {
   const params = new URLSearchParams({
     q: query,
     count: String(Math.min(maxCandidates, BRAVE_NEWS_SEARCH_COUNT)),
     spellcheck: "0",
     freshness: BRAVE_NEWS_SEARCH_FRESHNESS,
   });
+  if (hintCategory === "domestic") {
+    params.set("country", BRAVE_DOMESTIC_COUNTRY);
+    params.set("search_lang", BRAVE_DOMESTIC_SEARCH_LANG);
+  }
   return `${BRAVE_NEWS_SEARCH_ENDPOINT}?${params.toString()}`;
 }
 
-async function fetchBraveNewsResponse(query: string, apiKey: string, maxCandidates: number): Promise<unknown> {
-  const response = await fetch(buildBraveNewsSearchUrl(query, maxCandidates), {
+async function fetchBraveNewsResponse(
+  query: string,
+  apiKey: string,
+  maxCandidates: number,
+  hintCategory: DigestCategory,
+): Promise<unknown> {
+  const response = await fetch(buildBraveNewsSearchUrl(query, maxCandidates, hintCategory), {
     headers: {
       Accept: "application/json",
       "X-Subscription-Token": apiKey,

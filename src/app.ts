@@ -44,6 +44,7 @@ import { cronJobRequiresDelivery, normalizeCronChatIds } from "./cron/types.js";
 import type { CronJob, CronJobConfig } from "./cron/types.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "./config/types.js";
 import { ensureDefaultDailyDigestCronJobs } from "./cron/default-jobs.js";
+import { buildAgentSystemPrompt } from "./runtime/agent-system-prompt.js";
 
 // ── 存储 ──────────────────────────────────────────────────────────────────────
 
@@ -82,24 +83,23 @@ function buildLLM(): LLMProvider {
 const llm = buildLLM();
 type FeishuRuntimeSource = "storage" | "env" | "none";
 
-function buildSystemPrompt(systemPrompt: string | undefined): string {
-  return [
-    systemPrompt ?? DEFAULT_SYSTEM,
-    "若上下文中提供了挂载文档资料，优先依据文档内容回答；文档未覆盖的细节要明确说明，不要编造。",
-    "如需查询飞书部门、部门人数、直属成员等组织信息，优先调用飞书工具，不要凭空猜测。",
-    `当前日期：${new Date().toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })}`,
-  ].join("\n");
+function resolveAgentSystemPrompt(config: AgentMetaConfig | undefined): string {
+  return buildAgentSystemPrompt(config, {
+    defaultName: "clawclaw",
+    defaultSystem: DEFAULT_SYSTEM,
+    currentDate: new Date().toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" }),
+  });
 }
 
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
 let feishu: FeishuPlatform | undefined;
 
-const agent = new Agent({
+const baseAgentConfig = {
   name: "clawclaw",
 
   // 动态 system prompt：每轮调用前注入当前日期 + 用户自定义提示词（若有）
-  system: (): string => buildSystemPrompt(agentConfigStorage.read().systemPrompt),
+  system: (): string => resolveAgentSystemPrompt(agentConfigStorage.read()),
 
   llm,
 
@@ -128,7 +128,9 @@ const agent = new Agent({
   },
 
   compressor: undefined,
-});
+};
+
+const agent = new Agent(baseAgentConfig);
 
 // ── ClawServer（IM 接入，24/7 常驻）─────────────────────────────────────────
 
@@ -230,6 +232,7 @@ async function runCronJob(cfg: CronJobConfig): Promise<void> {
 
 const webServer = new WebServer({
   agent,
+  agentConfig: baseAgentConfig,
   port: 3001,
   routes: feishu ? { "/feishu": { platform: feishu, agent, onMessage: handleNewsRequest } } : {},
   skillDataRoot: "./data/skills",
@@ -260,8 +263,8 @@ const webServer = new WebServer({
   onLLMConfig: (config: LLMConfig): void => {
     agent.updateLLM(createLLMFromConfig(config));
   },
-  onAgentConfig: (config: AgentMetaConfig): void => {
-    agent.updateSystem(() => buildSystemPrompt(config.systemPrompt));
+  onAgentConfig: (_config: AgentMetaConfig): void => {
+    agent.updateSystem(() => resolveAgentSystemPrompt(agentConfigStorage.read()));
   },
   getStatus: (): SystemStatus => ({
     cronJobs: cron.list().map((j) => ({ ...j, timezone: "Asia/Shanghai" })),
