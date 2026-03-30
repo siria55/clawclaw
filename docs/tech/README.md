@@ -10,6 +10,7 @@ src/index.ts（公共入口）
 │   └── core/compressor.ts ← 历史压缩
 │
 ├── llm/anthropic.ts       ← Anthropic 适配器
+├── llm/openai.ts          ← OpenAI Chat Completions 适配器
 │   └── llm/types.ts       ← LLMProvider 接口
 │
 ├── tools/
@@ -146,12 +147,41 @@ getContext?: (messages: Message[]) => Message[] | Promise<Message[]>
 - `listDepartmentChildren(parentDepartmentId)` 拉取子部门，可选递归拉全树
 - `findDepartmentsByName(keyword)` 基于部门树做本地名称匹配
 - `listDepartmentUsers(openDepartmentId)` 拉取直属成员
+- `getUser(openId)` 按用户 `open_id` 读取单个飞书用户，用于配置页目标名称解析
 
 Agent 工具层 `createFeishuOrgTools(() => feishu)` 使用闭包读取当前运行时的 `FeishuPlatform` 实例，因此：
 
 - 主应用 `app.ts` 和开发入口 `web/dev.ts` 共用同一套工具定义
 - WebUI 热更新飞书配置后，无需重建 Agent；工具下一次执行时自动读取新实例
 - Web 对话与 IM 对话会得到相同的飞书组织查询能力
+
+## Web Chat 可复制回复
+
+`ChatView` 中的 assistant 气泡现在带有独立复制按钮：
+
+- 仅 assistant 消息显示复制入口，用户消息不显示
+- 复制内容直接使用 `message.content` 原始文本，避免把 Markdown 渲染产生的额外 UI 文案一并复制
+- 复制成功后短暂显示“已复制”，不影响流式渲染和自动滚动
+
+这让 WebUI 更适合作为调试台和内容中转页，尤其适合把日报、总结或提示词快速粘贴到其他工具中。
+
+## 飞书目标名称解析接口
+
+WebServer 新增了一个轻量的飞书目标解析链路：
+
+- `GET /api/im-config/feishu-target?chatId=...`
+- 优先使用已保存的飞书配置构建 `FeishuPlatform`
+- 未保存时回退到环境变量里的飞书凭证
+- `oc_...` 目标调用 `getChat()` 返回群聊名称
+- `ou_...` 目标调用 `getUser()` 返回用户名
+- 其他前缀返回 `unknown`，前端仍保留原始 ID 展示
+
+前端 `FeishuConfigSection` 分别解析：
+
+- 表单里正在编辑的 `Chat ID`
+- 当前运行摘要里的 `chatId`
+
+这样既能在输入时即时确认目标，也能在保存后复核运行态实际指向。
 
 ---
 
@@ -208,6 +238,25 @@ Cron 直发链路也同步支持 `msgType: "markdown"`：
 - `AnthropicProvider` 在发送前把这层内部结构转换成 `{ type: "tool_result", tool_use_id, content, is_error? }`
 
 这样可以避免代理或 Anthropic API 返回 `invalid_request_error: ... type: Field required`，也就是飞书里“触发了工具后整段对话没回复”的根因。
+
+---
+
+## OpenAI Chat Completions 适配
+
+OpenAI provider 复用同一套内部 `Message` / `ToolCallResult` 结构，但在发请求前需要做两层转换：
+
+- `system` 参数会被转成首条 `developer` message，兼容 OpenAI 最新 Chat Completions 约定
+- 内部 `tool` 消息会展开成多条 `role: "tool"` 消息，每条都带 `tool_call_id`
+
+返回阶段则做反向转换：
+
+- OpenAI assistant 文本被标准化为 `{ type: "text", text }` block
+- OpenAI `tool_calls` 被标准化为 `{ type: "tool_use", id, name, input }` block
+
+这样做的目的有两个：
+
+- 保持 Agent 编排层完全不知道底层是 Anthropic 还是 OpenAI
+- 即使中途切换 provider，历史消息仍能继续复用，不需要做额外迁移
 
 ---
 
@@ -339,13 +388,13 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 - `new MemoryStorage("./data/agent/memory.json")` — 长期记忆，仅保存 `memory_save` 写入的条目
 - `new ConversationStorage("./data/im/conversations.json")` — IM session 历史
 - `new ConfigStorage<IMConfig>("./data/im/im-config.json")` — IM 凭证
-- `new ConfigStorage<LLMConfig>("./data/agent/llm-config.json")` — LLM 配置
+- `new ConfigStorage<LLMConfig>("./data/agent/llm-config.json")` — LLM 配置（provider / apiKey / baseURL / httpsProxy / model）
 - `new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json")` — Agent 名称和系统提示词
 - `new ConfigStorage<MountedDocConfig>("./data/agent/feishu-docs/config.json", { docs: [] })` — 挂载飞书文档配置
 - `new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json")` — DailyDigest 搜索主题
 - `new ConfigStorage<CronJobConfig[]>("./data/cron/cron-config.json", [])` — Cron 任务配置
 
-ConversationStorage 负责短期 session 历史；MemoryStorage 负责长期共享记忆，两者不会自动互相镜像。也就是说，IM 多轮对话会持久化到 `conversations.json`，但不会自动沉淀到 `memory.json`。各配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。
+ConversationStorage 负责短期 session 历史；MemoryStorage 负责长期共享记忆，两者不会自动互相镜像。也就是说，IM 多轮对话会持久化到 `conversations.json`，但不会自动沉淀到 `memory.json`。各配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。`LLM_PROVIDER` 环境变量可在未持久化配置时决定默认使用 `anthropic` 还是 `openai`。
 
 ---
 

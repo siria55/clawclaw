@@ -209,6 +209,26 @@ describe("StatusView", () => {
           },
         });
       }
+      if (input === "/api/im-config/feishu-target?chatId=oc_saved") {
+        return makeResponse({
+          ok: true,
+          target: {
+            chatId: "oc_saved",
+            targetType: "group",
+            name: "日报群",
+          },
+        });
+      }
+      if (input === "/api/im-config/feishu-target?chatId=oc_demo") {
+        return makeResponse({
+          ok: true,
+          target: {
+            chatId: "oc_demo",
+            targetType: "group",
+            name: "运营群",
+          },
+        });
+      }
       throw new Error(`Unexpected fetch: ${input}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -231,5 +251,6 @@ describe("StatusView", () => {
     expect(await screen.findByText("飞书 IM 配置")).toBeDefined();
     expect(screen.getByDisplayValue("cli_saved")).toBeDefined();
     expect(screen.getByDisplayValue("oc_saved")).toBeDefined();
+    expect(await screen.findByText("已解析目标：日报群（群聊）")).toBeDefined();
   });
 });

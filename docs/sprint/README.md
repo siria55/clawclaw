@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`。
 
 ---
 
@@ -129,6 +129,19 @@
 - `data/` 改回本地运行态目录，不再作为 Git 仓库内容同步
 - 删除 `package-lock.json`，统一只保留 `pnpm-lock.yaml`
 
+## 第二十一阶段：OpenAI ChatGPT 接入（Sprint 63）
+
+- 新增 OpenAI Chat Completions provider，支持 API Key、Base URL、HTTPS Proxy、模型名配置
+- WebUI `系统 > 设置 > 模型` 可直接切换 `Anthropic Claude` / `OpenAI ChatGPT`
+- 运行时热更新和 `X-Claw-Config` 临时覆盖均兼容 provider 切换
+- `.env` 新增 `LLM_PROVIDER`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`
+
+## 第二十二阶段：对话复制与飞书目标名展示（Sprint 64）
+
+- `对话` 页中的 assistant 回复新增一键复制按钮，复制内容为原始文本
+- `IM > 配置` 中的飞书 `Chat ID` 会自动解析目标名称，支持显示群名或用户名
+- 飞书运行摘要也会补充当前目标名称，便于确认配置是否指向正确的私聊或群聊
+
 ---
 
 ## 当前落点
@@ -136,6 +149,8 @@
 - WebUI 一级导航为 5 个大 tab：`对话` / `内容` / `自动化` / `IM` / `系统`
 - 仓库根目录已提供 GitHub 友好的 `README.md` 和新机器启动步骤
 - 运行态数据统一保存在本地 `data/`，不再跟随仓库提交
+- LLM 现已支持 `Anthropic Claude` 和 `OpenAI ChatGPT` 两条接入路径
+- `对话` 页里的 AI 回复现已支持一键复制
 - `内容` 内部为 `新闻库` / `记忆库`
 - `自动化` 内部为 `Cron` / `Skills`
 - `IM` 内部为 `状态` / `消息` / `配置`
@@ -152,3 +167,4 @@
 - 今日日报长图已收紧版式并移除高风险滤镜层，同花顺来源不会进入最终结果
 - 今日日报支持回复数字获取原文链接，编号与当天 JSON 输出顺序一致，返回内容为单独链接
 - 飞书群聊里带 mention 的数字回复和新闻快捷指令也已兼容
+- `IM > 配置` 里填写飞书 `Chat ID` 时，会同时显示解析后的用户名 / 群名，减少配错目标的风险

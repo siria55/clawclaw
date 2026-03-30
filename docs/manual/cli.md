@@ -21,7 +21,7 @@ corepack pnpm playwright:install
 
 适合调试 Agent 行为、查看工具调用过程、浏览新闻库。
 
-前提：`.env` 中已设置 `ANTHROPIC_API_KEY`。
+前提：`.env` 中已设置对应 provider 的 API Key。
 
 ---
 
@@ -133,7 +133,8 @@ corepack enable
 corepack pnpm install
 corepack pnpm playwright:install
 cp .env.example .env
-# 编辑 .env 填入 ANTHROPIC_API_KEY
+# 如用 Anthropic：填写 ANTHROPIC_API_KEY
+# 如用 OpenAI：填写 LLM_PROVIDER=openai 和 OPENAI_API_KEY
 corepack pnpm dev:web
 # 访问 http://localhost:5173
 ```

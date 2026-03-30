@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebServer } from "../../src/web/server.js";
@@ -8,7 +9,7 @@ import { ConfigStorage } from "../../src/config/storage.js";
 import { ConversationStorage } from "../../src/im/conversations.js";
 import { IMEventStorage } from "../../src/im/storage.js";
 import { MountedDocLibrary } from "../../src/docs/library.js";
-import type { IMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "../../src/config/types.js";
+import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "../../src/config/types.js";
 import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";
@@ -60,6 +61,38 @@ async function startWebServer(
   const server = new WebServer({ agent, agentConfig, port: 0, staticDir });
   await server.start();
   return { server, url: `http://localhost:${server.port}` };
+}
+
+function httpGetJson<T>(port: number, path: string): Promise<{ status: number; body: T }> {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({
+      hostname: "127.0.0.1",
+      port,
+      path,
+      method: "GET",
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => {
+        const bodyText = Buffer.concat(chunks).toString("utf8");
+        resolve({
+          status: res.statusCode ?? 0,
+          body: JSON.parse(bodyText) as T,
+        });
+      });
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+function makeFetchResponse(body: unknown, ok = true): Response {
+  return {
+    ok,
+    json: async () => body,
+    text: async () => typeof body === "string" ? body : JSON.stringify(body),
+  } as Response;
 }
 
 describe("WebServer", () => {
@@ -581,6 +614,56 @@ describe("WebServer", () => {
     rmSync(imDir, { recursive: true, force: true });
   });
 
+  it("GET /api/im-config/feishu-target resolves configured group name", async () => {
+    const originalFetch = global.fetch;
+    const agent = makeMockAgent();
+    const imDir = join(tmpdir(), `clawclaw-im-target-${Date.now()}`);
+    mkdirSync(imDir, { recursive: true });
+    const imConfigStorage = new ConfigStorage<IMConfig>(join(imDir, "im-config.json"));
+    imConfigStorage.write({
+      feishu: {
+        appId: "cli_demo",
+        appSecret: "secret",
+        verificationToken: "token",
+        chatId: "oc_demo",
+      },
+    });
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(makeFetchResponse({ tenant_access_token: "tenant-token" }))
+      .mockResolvedValueOnce(makeFetchResponse({
+        code: 0,
+        data: {
+          chat: {
+            name: "运营群",
+          },
+        },
+      }));
+    global.fetch = fetchMock as typeof fetch;
+
+    const server = new WebServer({ agent, port: 0, staticDir, imConfigStorage });
+    await server.start();
+
+    const response = await httpGetJson<{
+      ok: boolean;
+      target: { chatId: string; targetType: string; name?: string };
+    }>(server.port, "/api/im-config/feishu-target?chatId=oc_demo");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      ok: true,
+      target: {
+        chatId: "oc_demo",
+        targetType: "group",
+        name: "运营群",
+      },
+    });
+
+    await server.stop();
+    global.fetch = originalFetch;
+    rmSync(imDir, { recursive: true, force: true });
+  });
+
   it("GET /api/config/agent returns empty object when no agentConfigStorage", async () => {
     const agent = makeMockAgent();
     const { server, url } = await startWebServer(agent);
@@ -613,6 +696,61 @@ describe("WebServer", () => {
 
     await server.stop();
     rmSync(agentDir, { recursive: true, force: true });
+  });
+
+  it("GET /api/config/llm returns saved provider config", async () => {
+    const agent = makeMockAgent();
+    const llmDir = join(tmpdir(), `clawclaw-llm-get-${Date.now()}`);
+    mkdirSync(llmDir, { recursive: true });
+    const llmConfigStorage = new ConfigStorage<LLMConfig>(join(llmDir, "llm-config.json"));
+    llmConfigStorage.write({ provider: "openai", model: "gpt-5.2-chat-latest" });
+
+    const server = new WebServer({ agent, port: 0, staticDir, llmConfigStorage });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/llm`);
+    const body = await res.json() as LLMConfig;
+    expect(body.provider).toBe("openai");
+    expect(body.model).toBe("gpt-5.2-chat-latest");
+
+    await server.stop();
+    rmSync(llmDir, { recursive: true, force: true });
+  });
+
+  it("POST /api/config/llm saves provider config and calls onLLMConfig", async () => {
+    const agent = makeMockAgent();
+    const llmDir = join(tmpdir(), `clawclaw-llm-post-${Date.now()}`);
+    mkdirSync(llmDir, { recursive: true });
+    const llmConfigStorage = new ConfigStorage<LLMConfig>(join(llmDir, "llm-config.json"));
+    const onLLMConfig = vi.fn();
+
+    const server = new WebServer({ agent, port: 0, staticDir, llmConfigStorage, onLLMConfig });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/llm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: "openai",
+        apiKey: "sk_test",
+        baseURL: "https://api.openai.com/v1",
+        model: "gpt-5.2-chat-latest",
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(onLLMConfig).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "openai",
+      model: "gpt-5.2-chat-latest",
+    }));
+    expect(llmConfigStorage.read()).toEqual({
+      provider: "openai",
+      apiKey: "sk_test",
+      baseURL: "https://api.openai.com/v1",
+      model: "gpt-5.2-chat-latest",
+    });
+
+    await server.stop();
+    rmSync(llmDir, { recursive: true, force: true });
   });
 
   it("GET /api/config/agent returns saved config", async () => {

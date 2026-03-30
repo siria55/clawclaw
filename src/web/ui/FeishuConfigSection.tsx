@@ -24,6 +24,12 @@ interface FeishuStatusSnapshot {
   permissionsHint: string;
 }
 
+interface FeishuTargetSnapshot {
+  chatId: string;
+  targetType: "group" | "user" | "unknown";
+  name?: string;
+}
+
 export function FeishuConfigSection(props: { id: string; title?: string; reloadToken?: number }): React.JSX.Element {
   const [fields, setFields] = useState<FeishuFields>({
     appId: "",
@@ -35,6 +41,8 @@ export function FeishuConfigSection(props: { id: string; title?: string; reloadT
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [snapshot, setSnapshot] = useState<FeishuStatusSnapshot | null>(null);
+  const [resolvedFieldTarget, setResolvedFieldTarget] = useState<FeishuTargetSnapshot | null>(null);
+  const [resolvedRuntimeTarget, setResolvedRuntimeTarget] = useState<FeishuTargetSnapshot | null>(null);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -57,6 +65,57 @@ export function FeishuConfigSection(props: { id: string; title?: string; reloadT
       .then((data) => setSnapshot(data.overview?.feishu ?? null))
       .catch(() => { /* ignore status load failure */ });
   }, [props.reloadToken]);
+
+  useEffect(() => {
+    const chatId = fields.chatId.trim();
+    if (!chatId) {
+      setResolvedFieldTarget(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      fetch(`/api/im-config/feishu-target?chatId=${encodeURIComponent(chatId)}`)
+        .then((response) => response.ok
+          ? response.json() as Promise<{ ok: boolean; target?: FeishuTargetSnapshot }>
+          : Promise.resolve({ ok: false }))
+        .then((data) => {
+          if (!cancelled) setResolvedFieldTarget(data.ok ? data.target ?? null : null);
+        })
+        .catch(() => {
+          if (!cancelled) setResolvedFieldTarget(null);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [fields.chatId]);
+
+  useEffect(() => {
+    const chatId = snapshot?.chatId?.trim();
+    if (!chatId) {
+      setResolvedRuntimeTarget(null);
+      return;
+    }
+
+    let cancelled = false;
+    void fetch(`/api/im-config/feishu-target?chatId=${encodeURIComponent(chatId)}`)
+      .then((response) => response.ok
+        ? response.json() as Promise<{ ok: boolean; target?: FeishuTargetSnapshot }>
+        : Promise.resolve({ ok: false }))
+      .then((data) => {
+        if (!cancelled) setResolvedRuntimeTarget(data.ok ? data.target ?? null : null);
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedRuntimeTarget(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [snapshot?.chatId]);
 
   const setField = (key: keyof FeishuFields, value: string): void => {
     setFields((prev) => ({ ...prev, [key]: value }));
@@ -113,6 +172,7 @@ export function FeishuConfigSection(props: { id: string; title?: string; reloadT
             <RuntimeItem label="Webhook" value={snapshot.runtime.webhookPath} mono />
             <RuntimeItem label="App ID" value={snapshot.appId ?? "-"} mono />
             <RuntimeItem label="Chat ID" value={snapshot.chatId ?? "-"} mono />
+            <RuntimeItem label="目标名称" value={formatFeishuTarget(resolvedRuntimeTarget)} />
             <RuntimeItem label="App Secret" value={snapshot.hasAppSecret ? "已配置" : "未配置"} />
             <RuntimeItem label="Verification Token" value={snapshot.hasVerificationToken ? "已配置" : "未配置"} />
             <RuntimeItem label="Encrypt Key" value={snapshot.hasEncryptKey ? "已配置" : "未配置"} />
@@ -126,6 +186,11 @@ export function FeishuConfigSection(props: { id: string; title?: string; reloadT
         <Field label="Verification Token" type="password" placeholder="xxxxxxxxxxxxxxxx" value={fields.verificationToken} onChange={(value) => setField("verificationToken", value)} />
         <Field label="Encrypt Key（可选）" type="password" placeholder="留空则不启用签名验证" value={fields.encryptKey} onChange={(value) => setField("encryptKey", value)} />
         <Field label="Chat ID（Cron 推送目标，可选）" placeholder="oc_xxxxxxxxxx" value={fields.chatId} onChange={(value) => setField("chatId", value)} />
+        {fields.chatId.trim() && (
+          <span className={settingsStyles.fieldHint}>
+            {resolvedFieldTarget ? `已解析目标：${formatFeishuTarget(resolvedFieldTarget)}` : "正在解析目标名称…"}
+          </span>
+        )}
       </div>
       <div className={settingsStyles.saveRow}>
         <button className={settingsStyles.saveBtn} onClick={save} disabled={!canSave}>
@@ -183,4 +248,12 @@ function Field(props: {
       </div>
     </div>
   );
+}
+
+function formatFeishuTarget(target: FeishuTargetSnapshot | null): string {
+  if (!target) return "-";
+  if (!target.name) return target.chatId;
+  if (target.targetType === "group") return `${target.name}（群聊）`;
+  if (target.targetType === "user") return `${target.name}（用户）`;
+  return `${target.name}（${target.chatId}）`;
 }

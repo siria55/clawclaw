@@ -2,6 +2,7 @@
 
 OpenClaw 的增强版 AI Agent 框架，TypeScript 实现，支持：
 
+- Anthropic Claude / OpenAI ChatGPT 等 LLM 接入
 - 飞书 / 企业微信等 IM 接入
 - `daily-digest` 今日日报生成与定时投递
 - WebUI 调试、配置、状态查看和内容浏览
@@ -16,7 +17,7 @@ corepack pnpm playwright:install
 cp .env.example .env
 ```
 
-然后按需填写 `.env`，或者启动后直接在 WebUI 里配置。
+然后按需填写 `.env`，或者启动后直接在 WebUI 里配置。默认 provider 为 `anthropic`；如需切到 OpenAI，可把 `LLM_PROVIDER=openai`，或在 WebUI 的 `系统 > 设置 > 模型` 中切换。
 
 启动调试环境：
 

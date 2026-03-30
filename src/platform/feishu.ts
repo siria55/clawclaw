@@ -291,6 +291,20 @@ export class FeishuPlatform implements IMPlatform {
     };
   }
 
+  /** Fetch one user by `open_id`. */
+  async getUser(userId: string): Promise<FeishuDepartmentUser> {
+    const data = await this.#request<{ user?: FeishuDepartmentUser }>(
+      `/contact/v3/users/${encodeURIComponent(userId)}`,
+      {
+        user_id_type: "open_id",
+      },
+    );
+    if (!data.user) {
+      throw new Error(`Feishu user ${userId} not found`);
+    }
+    return data.user;
+  }
+
   /** Fetch one chat's basic metadata by `chat_id`. */
   async getChat(chatId: string): Promise<FeishuChat> {
     const data = await this.#request<{ chat?: Omit<FeishuChat, "chat_id"> }>(

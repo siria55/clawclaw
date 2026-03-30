@@ -6,8 +6,11 @@
  *   corepack pnpm start  生产模式（node dist/app.js）
  *
  * 环境变量（.env 文件）：
- *   ANTHROPIC_API_KEY        必填
- *   ANTHROPIC_BASE_URL       可选，自定义 API 地址
+ *   LLM_PROVIDER             可选，anthropic | openai
+ *   ANTHROPIC_API_KEY        使用 Anthropic 时填写
+ *   ANTHROPIC_BASE_URL       可选，自定义 Anthropic API 地址
+ *   OPENAI_API_KEY           使用 OpenAI 时填写
+ *   OPENAI_BASE_URL          可选，自定义 OpenAI API 地址
  *   HTTPS_PROXY              可选，代理
  *   FEISHU_APP_ID            飞书 App ID（接入飞书时填写）
  *   FEISHU_APP_SECRET        飞书 App Secret
@@ -18,10 +21,11 @@
 
 import { mkdirSync } from "node:fs";
 import { Agent } from "./core/agent.js";
-import { AnthropicProvider } from "./llm/anthropic.js";
+import { createLLMFromConfig } from "./llm/index.js";
 import { FeishuPlatform } from "./platform/feishu.js";
 import { ClawServer } from "./server/index.js";
 import { WebServer } from "./web/server.js";
+import type { SystemStatus } from "./web/server.js";
 import { CronScheduler } from "./cron/scheduler.js";
 import { MemoryStorage } from "./memory/storage.js";
 import { IMEventStorage } from "./im/storage.js";
@@ -34,7 +38,7 @@ import { createReadFileTool } from "./tools/read-file.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { DEFAULT_DAILY_DIGEST_QUERIES, DailyDigestSkill } from "./skills/daily-digest/index.js";
 import { MountedDocLibrary } from "./docs/library.js";
-import type { Message } from "./llm/types.js";
+import type { LLMProvider, Message } from "./llm/types.js";
 import { normalizeCronChatIds, normalizeCronJobConfig } from "./cron/types.js";
 import type { CronJob, CronJobConfig } from "./cron/types.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "./config/types.js";
@@ -69,14 +73,8 @@ const DEFAULT_ALLOWED_PATHS = ["./data/skills", "./data/agent/feishu-docs"];
 
 // ── LLM ───────────────────────────────────────────────────────────────────────
 
-function buildLLM(): AnthropicProvider {
-  const saved: LLMConfig = llmConfigStorage.read();
-  return new AnthropicProvider({
-    ...(saved.apiKey !== undefined && { apiKey: saved.apiKey }),
-    ...(saved.baseURL !== undefined && { baseURL: saved.baseURL }),
-    ...(saved.httpsProxy !== undefined && { httpsProxy: saved.httpsProxy }),
-    ...(saved.model !== undefined && { model: saved.model }),
-  });
+function buildLLM(): LLMProvider {
+  return createLLMFromConfig(llmConfigStorage.read());
 }
 
 const llm = buildLLM();
@@ -99,7 +97,7 @@ const agent = new Agent({
   name: "clawclaw",
 
   // 动态 system prompt：每轮调用前注入当前日期 + 用户自定义提示词（若有）
-  system: () => buildSystemPrompt(agentConfigStorage.read().systemPrompt),
+  system: (): string => buildSystemPrompt(agentConfigStorage.read().systemPrompt),
 
   llm,
 
@@ -110,7 +108,7 @@ const agent = new Agent({
   ],
 
   // getContext：每轮调用前，根据用户最新消息自动检索相关记忆
-  getContext: (messages: Message[]) => {
+  getContext: (messages: Message[]): Message[] => {
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
     if (!lastUser || typeof lastUser.content !== "string") return [];
     const sections: string[] = [];
@@ -228,7 +226,7 @@ const webServer = new WebServer({
   agentConfigStorage,
   mountedDocConfigStorage,
   dailyDigestConfigStorage,
-  onIMConfig: (config: IMConfig) => {
+  onIMConfig: (config: IMConfig): void => {
     feishuSource = resolveFeishuSource(config);
     const newFeishu = config.feishu?.appId && config.feishu.appSecret && config.feishu.verificationToken
       ? new FeishuPlatform(config.feishu)
@@ -244,18 +242,13 @@ const webServer = new WebServer({
       webServer.removeRoute("/feishu");
     }
   },
-  onLLMConfig: (config) => {
-    agent.updateLLM(new AnthropicProvider({
-      ...(config.apiKey !== undefined && { apiKey: config.apiKey }),
-      ...(config.baseURL !== undefined && { baseURL: config.baseURL }),
-      ...(config.httpsProxy !== undefined && { httpsProxy: config.httpsProxy }),
-      ...(config.model !== undefined && { model: config.model }),
-    }));
+  onLLMConfig: (config: LLMConfig): void => {
+    agent.updateLLM(createLLMFromConfig(config));
   },
-  onAgentConfig: (config) => {
+  onAgentConfig: (config: AgentMetaConfig): void => {
     agent.updateSystem(() => buildSystemPrompt(config.systemPrompt));
   },
-  getStatus: () => ({
+  getStatus: (): SystemStatus => ({
     cronJobs: cron.list().map((j) => ({ ...j, timezone: "Asia/Shanghai" })),
     connections: [
       { platform: "feishu", label: "飞书 Bot", connected: !!feishu },
@@ -270,9 +263,9 @@ const webServer = new WebServer({
     },
   }),
   cronStorage,
-  onCronAdd: (cfg) => registerCronJob(cfg),
-  onCronDelete: (id) => cron.remove(id),
-  onCronRun: async (cfg) => runCronJob(cfg),
+  onCronAdd: (cfg: CronJobConfig): void => registerCronJob(cfg),
+  onCronDelete: (id: string): void => cron.remove(id),
+  onCronRun: async (cfg: CronJobConfig): Promise<void> => runCronJob(cfg),
   mountedDocLibrary,
   skillRegistry,
 });

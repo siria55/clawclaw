@@ -1,5 +1,5 @@
 export { Agent } from "./core/agent.js";
-export { createLLM } from "./llm/index.js";
+export { createLLM, createLLMFromConfig, resolveLLMProvider } from "./llm/index.js";
 export { ClawServer } from "./server/index.js";
 export { WebServer } from "./web/server.js";
 export type { WebServerConfig } from "./web/server.js";
@@ -9,7 +9,7 @@ export { CronScheduler } from "./cron/index.js";
 export type { CronJob, CronSchedulerOptions } from "./cron/index.js";
 export { LLMContextCompressor, estimateTokens } from "./core/compressor.js";
 export type { ContextCompressor, ContextCompressorOptions } from "./core/compressor.js";
-export type { LLMProvider, LLMConfig, Message } from "./llm/types.js";
+export type { LLMProvider, LLMConfig, LLMProviderName, Message } from "./llm/types.js";
 export type { Tool, ToolResult } from "./tools/types.js";
 export type { IMPlatform, IMMessage } from "./platform/types.js";
 export type { AgentConfig, AgentOptions } from "./core/types.js";

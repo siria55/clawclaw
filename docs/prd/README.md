@@ -17,7 +17,7 @@ IM 平台 (飞书 / 企业微信 / ...)
     ↓ 路由到对应 Agent
   Agent
     ↓ 动态组装上下文（system / getContext）
-  LLM (Anthropic / ...)
+  LLM (Anthropic / OpenAI / ...)
     ↓ 工具调用
   Tool × N                ← 记忆、新闻、浏览器等
     ↓ 执行结果
@@ -230,6 +230,7 @@ Agent 可挂载一组飞书文档来源（名称 + URL），由服务端使用 P
 | `POST /api/skills/:id/run` | 手动触发 Skill（SSE 流式日志） |
 | `GET /api/skills/:id/latest-image` | 返回该 Skill 最新 PNG 截图 |
 | `GET/POST /api/im-config` | 飞书等 IM 凭证 |
+| `GET /api/im-config/feishu-target` | 解析飞书 Chat ID，返回群名 / 用户名 |
 | `GET/POST /api/config/llm` | LLM 配置 |
 | `GET/POST /api/config/agent` | Agent 配置 |
 | `GET/POST /api/config/daily-digest` | DailyDigest 搜索主题配置 |
@@ -252,12 +253,13 @@ Web UI 现已收敛为 5 个一级能力域：
 - 点击一级 tab 会落到该能力域的默认二级页：`对话 -> #chat`、`内容 -> #news`、`自动化 -> #cron`、`IM -> #im`、`系统 -> #status`
 - `IM > 状态` 展示 IM 平台连接、飞书运行摘要、飞书群聊列表
 - `IM > 消息` 展示实时 IM 消息日志，支持群聊 / 直发筛选
-- `IM > 配置` 展示飞书 IM 凭证、运行摘要、默认 Chat ID 配置
+- `IM > 配置` 展示飞书 IM 凭证、运行摘要、默认 Chat ID 配置，并在界面中解析展示目标用户名 / 群名
 - `系统 > 状态`、`系统 > 设置` 以及 `IM > 状态` 的长页面内置页内 TOC，并固定在页面外侧，减少遮挡主内容
 - 旧 hash 仍兼容：`#im-status` 会映射到 `IM > 状态`，`#im-config` 会映射到 `IM > 配置`
 - `#cron` 的直发模式支持 `text` / `markdown` / `image`
 - `#cron` 的发送目标支持多行配置，一个任务可同时发给多个 chatId
 - 飞书 IM 对“今天的新闻”类请求支持直接回图片 / 文本，不必先配置 Cron
+- `对话` 页左侧的 assistant 回复支持一键复制，便于把生成内容转发到其他工具
 
 ---
 
@@ -275,7 +277,8 @@ src/
 ├── llm/
 │   ├── types.ts        LLMProvider 接口、Message、ToolCall 等
 │   ├── anthropic.ts    Anthropic Claude 适配器（含代理支持）
-│   └── index.ts        createLLM() 工厂
+│   ├── openai.ts       OpenAI Chat Completions 适配器（兼容工具调用）
+│   └── index.ts        createLLM() / createLLMFromConfig() 工厂
 ├── platform/
 │   ├── types.ts        IMPlatform 接口、IMMessage 类型
 │   ├── feishu.ts       飞书适配器（含 sendImage / sendImageBuffer）
@@ -320,6 +323,6 @@ src/
 - **接口优于实现** — `LLMProvider`、`Tool`、`IMPlatform` 均为接口，不锁定具体实现
 - **错误不崩溃** — 工具异常、IM 发送失败均捕获处理，不影响其他会话
 - **可测试** — 核心逻辑不依赖网络，Mock LLM 和 IMPlatform 即可单元测试
-- **最小依赖** — 运行时只需 `@anthropic-ai/sdk`、`zod` 和 `playwright`
+- **最小依赖** — 运行时只需 `@anthropic-ai/sdk`、`openai`、`zod` 和 `playwright`
 - **按需加载上下文** — 记忆和知识不预置在 system prompt，通过工具检索或 getContext 钩子按需注入
 - **Skill 职责单一** — Skill 只负责生成内容和保存文件，IM 投递由 CronScheduler 统一处理

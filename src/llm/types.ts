@@ -1,6 +1,8 @@
 import type { Tool } from "../tools/types.js";
 import type { ToolResult } from "../tools/types.js";
 
+export type LLMProviderName = "anthropic" | "openai";
+
 export type MessageRole = "user" | "assistant" | "tool";
 
 export interface Message {

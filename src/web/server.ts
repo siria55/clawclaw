@@ -3,11 +3,10 @@ import { readFileSync, existsSync, readdirSync, createReadStream, statSync } fro
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "../core/agent.js";
-import { AnthropicProvider } from "../llm/anthropic.js";
-import { FeishuChallenge } from "../platform/feishu.js";
+import { createLLMFromConfig, isLLMProviderName } from "../llm/index.js";
+import { FeishuChallenge, FeishuPlatform } from "../platform/feishu.js";
 import { WecomEcho } from "../platform/wecom.js";
 import type { AgentConfig } from "../core/types.js";
-import type { IMPlatform } from "../platform/types.js";
 import type { IMEventStorage } from "../im/storage.js";
 import type { ConversationStorage } from "../im/conversations.js";
 import { buildIMRunContext, persistIMRunContext } from "../im/context.js";
@@ -17,6 +16,7 @@ import type { CronJobConfig } from "../cron/types.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "../config/types.js";
+import type { Message } from "../llm/types.js";
 import type { SkillRegistry } from "../skills/registry.js";
 import type { SkillResult } from "../skills/types.js";
 import { findLatestSkillPng } from "../skills/loader.js";
@@ -76,6 +76,12 @@ export interface LastIMEventSummary {
   userId: string;
   timestamp: string;
   textPreview: string;
+}
+
+interface FeishuTargetInfo {
+  chatId: string;
+  targetType: "group" | "user" | "unknown";
+  name?: string;
 }
 
 export interface StatusOverview {
@@ -172,6 +178,7 @@ export interface WebServerConfig {
 
 /** Config passed from browser via X-Claw-Config header */
 interface ClawConfig {
+  provider?: "anthropic" | "openai";
   apiKey?: string;
   baseURL?: string;
   httpsProxy?: string;
@@ -186,7 +193,7 @@ interface ClawConfig {
  *   POST /api/chat  → SSE stream of agent events
  *
  * The browser may send an `X-Claw-Config` header (JSON) to override
- * API key, base URL, proxy, and model for that request.
+ * provider、API key、base URL、proxy 和 model for that request.
  */
 export class WebServer {
   readonly #config: Required<Omit<WebServerConfig, "agentConfig" | "getStatus" | "skillDataRoot" | "memoryStorage" | "imConfigStorage" | "onIMConfig" | "llmConfigStorage" | "onLLMConfig" | "agentConfigStorage" | "onAgentConfig" | "dailyDigestConfigStorage" | "mountedDocConfigStorage" | "routes" | "imEventStorage" | "conversationStorage" | "cronStorage" | "onCronAdd" | "onCronDelete" | "onCronRun" | "mountedDocLibrary" | "skillRegistry" | "onRunSkill">> & {
@@ -255,7 +262,6 @@ export class WebServer {
 
   /** Remove an IM webhook route at runtime. */
   removeRoute(path: string): void {
-    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete this.#routes[path];
   }
 
@@ -348,6 +354,11 @@ export class WebServer {
 
     if (req.method === "GET" && path === "/api/im-config") {
       this.#handleGetIMConfig(res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/im-config/feishu-target") {
+      await this.#handleGetFeishuTarget(req, res);
       return;
     }
 
@@ -553,7 +564,7 @@ export class WebServer {
         "llm_config",
         "LLM 配置",
         this.#config.llmConfigStorage.filePath,
-        `模型 ${llmConfig?.model || "默认"}；${llmConfig?.baseURL ? "已设置 Base URL" : "默认 API 地址"}；${llmConfig?.httpsProxy ? "已设置代理" : "无代理"}`,
+        `Provider ${llmConfig?.provider || "anthropic"}；模型 ${llmConfig?.model || "默认"}；${llmConfig?.baseURL ? "已设置 Base URL" : "默认 API 地址"}；${llmConfig?.httpsProxy ? "已设置代理" : "无代理"}`,
       ));
     }
     if (this.#config.agentConfigStorage) {
@@ -779,6 +790,32 @@ export class WebServer {
     const config = this.#config.imConfigStorage?.read() ?? {};
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(config));
+  }
+
+  async #handleGetFeishuTarget(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const chatId = new URL(req.url ?? "/", "http://localhost").searchParams.get("chatId")?.trim();
+    if (!chatId) {
+      res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: false, error: "chatId is required" }));
+      return;
+    }
+
+    const platform = this.#buildFeishuLookupPlatform();
+    if (!platform) {
+      res.writeHead(503, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: false, error: "Feishu is not configured" }));
+      return;
+    }
+
+    try {
+      const target = await resolveFeishuTargetInfo(platform, chatId);
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: true, target }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.writeHead(500, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: false, error: message }));
+    }
   }
 
   async #handlePostIMConfig(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -1043,7 +1080,7 @@ export class WebServer {
       .run(runContext.input, { history: runContext.history })
       .then(async (result) => {
         const lastMsg = result.messages.findLast(
-          (m: import("../llm/types.js").Message) => m.role === "assistant",
+          (m: Message) => m.role === "assistant",
         );
         const reply = extractText(lastMsg?.content);
         persistIMRunContext(this.#config.conversationStorage, message, result.messages);
@@ -1116,16 +1153,24 @@ export class WebServer {
       return this.#config.agent;
     }
 
-    const hasOverride = clawConfig.apiKey ?? clawConfig.baseURL ?? clawConfig.httpsProxy ?? clawConfig.model;
+    const hasOverride = clawConfig.provider ?? clawConfig.apiKey ?? clawConfig.baseURL ?? clawConfig.httpsProxy ?? clawConfig.model;
     if (!hasOverride) return this.#config.agent;
 
-    const llmConfig: import("../llm/anthropic.js").AnthropicConfig = {};
-    if (clawConfig.apiKey) llmConfig.apiKey = clawConfig.apiKey;
-    if (clawConfig.baseURL) llmConfig.baseURL = clawConfig.baseURL;
-    if (clawConfig.model) llmConfig.model = clawConfig.model;
-    const llm = new AnthropicProvider(llmConfig);
+    const baseConfig = this.#config.llmConfigStorage?.read() ?? {};
+    const llm = createLLMFromConfig(mergeLLMConfig(baseConfig, clawConfig));
 
     return new Agent({ ...this.#config.agentConfig, llm });
+  }
+
+  #buildFeishuLookupPlatform(): FeishuPlatform | undefined {
+    const saved = this.#config.imConfigStorage?.read().feishu;
+    if (saved?.appId && saved.appSecret && saved.verificationToken) {
+      return new FeishuPlatform(saved);
+    }
+    if (process.env["FEISHU_APP_ID"] && process.env["FEISHU_APP_SECRET"] && process.env["FEISHU_VERIFICATION_TOKEN"]) {
+      return new FeishuPlatform();
+    }
+    return undefined;
   }
 }
 
@@ -1242,47 +1287,16 @@ function limitStatusText(text: string, limit: number): string {
   return text.length > limit ? `${text.slice(0, limit)}...` : text;
 }
 
-/** Mask sensitive string: show first 4 chars + "****". */
-function mask(value: string): string {
-  return value.length > 4 ? value.slice(0, 4) + "****" : "****";
-}
-
-/** Returns true if the value was left as a masked sentinel (ends with "****"). */
-function isMasked(value: string): boolean {
-  return value.endsWith("****");
-}
-
-/** Replace sensitive fields with masked values for safe GET response. */
-function maskIMConfig(config: IMConfig): IMConfig {
-  if (!config.feishu) return config;
-  const { feishu } = config;
-  return {
-    feishu: {
-      appId: feishu.appId ? mask(feishu.appId) : "",
-      appSecret: feishu.appSecret ? mask(feishu.appSecret) : "",
-      verificationToken: feishu.verificationToken ? mask(feishu.verificationToken) : "",
-      ...(feishu.encryptKey !== undefined && { encryptKey: mask(feishu.encryptKey) }),
-      ...(feishu.chatId !== undefined && { chatId: feishu.chatId }),
-    },
-  };
-}
-
-function maskLLMConfig(config: LLMConfig): LLMConfig {
-  return {
-    ...(config.apiKey !== undefined && { apiKey: mask(config.apiKey) }),
-    ...(config.baseURL !== undefined && { baseURL: config.baseURL }),
-    ...(config.httpsProxy !== undefined && { httpsProxy: config.httpsProxy }),
-    ...(config.model !== undefined && { model: config.model }),
-  };
-}
-
 function mergeLLMConfig(existing: LLMConfig, incoming: LLMConfig): LLMConfig {
-  // Empty string = user cleared the field
+  const provider = incoming.provider !== undefined
+    ? (isLLMProviderName(incoming.provider) ? incoming.provider : existing.provider)
+    : existing.provider;
   const apiKey = incoming.apiKey !== undefined ? (incoming.apiKey || undefined) : existing.apiKey;
   const baseURL = incoming.baseURL !== undefined ? (incoming.baseURL || undefined) : existing.baseURL;
   const httpsProxy = incoming.httpsProxy !== undefined ? (incoming.httpsProxy || undefined) : existing.httpsProxy;
   const model = incoming.model !== undefined ? (incoming.model || undefined) : existing.model;
   return {
+    ...(provider !== undefined && { provider }),
     ...(apiKey !== undefined && { apiKey }),
     ...(baseURL !== undefined && { baseURL }),
     ...(httpsProxy !== undefined && { httpsProxy }),
@@ -1336,4 +1350,29 @@ function normalizeStringList(values: string[] | undefined): string[] {
     normalized.push(trimmed);
   }
   return normalized;
+}
+
+async function resolveFeishuTargetInfo(platform: FeishuPlatform, chatId: string): Promise<FeishuTargetInfo> {
+  if (chatId.startsWith("oc_")) {
+    const chat = await platform.getChat(chatId);
+    return {
+      chatId,
+      targetType: "group",
+      ...(chat.name ? { name: chat.name } : {}),
+    };
+  }
+
+  if (chatId.startsWith("ou_")) {
+    const user = await platform.getUser(chatId);
+    return {
+      chatId,
+      targetType: "user",
+      ...(user.name ? { name: user.name } : {}),
+    };
+  }
+
+  return {
+    chatId,
+    targetType: "unknown",
+  };
 }

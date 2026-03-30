@@ -11,6 +11,7 @@ export interface FeishuConfig {
 
 /** LLM provider configuration saved server-side. */
 export interface LLMConfig {
+  provider?: "anthropic" | "openai";
   apiKey?: string;
   baseURL?: string;
   httpsProxy?: string;

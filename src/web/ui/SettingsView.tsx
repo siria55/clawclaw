@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { SectionToc } from "./SectionToc";
 import styles from "./SettingsView.module.css";
 
+type LLMProviderField = "anthropic" | "openai";
+
 interface LLMFields {
+  provider: LLMProviderField;
   apiKey: string;
   baseURL: string;
   httpsProxy: string;
@@ -297,16 +300,37 @@ function MountedDocsSection(): React.JSX.Element {
 
 /** LLM provider configuration — saved server-side to data/agent/llm-config.json. */
 function LLMSection(): React.JSX.Element {
-  const [fields, setFields] = useState<LLMFields>({ apiKey: "", baseURL: "", httpsProxy: "", model: "" });
+  const [fields, setFields] = useState<LLMFields>({
+    provider: "anthropic",
+    apiKey: "",
+    baseURL: "",
+    httpsProxy: "",
+    model: "",
+  });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const providerMeta = fields.provider === "openai"
+    ? {
+      apiKeyPlaceholder: "sk-proj-...",
+      baseURLPlaceholder: "https://api.openai.com/v1",
+      modelPlaceholder: "gpt-5.2-chat-latest",
+      hint: "OpenAI ChatGPT / API，建议配合 `LLM_PROVIDER=openai` 使用纯 `.env` 启动。",
+    }
+    : {
+      apiKeyPlaceholder: "sk-ant-...",
+      baseURLPlaceholder: "https://api.anthropic.com",
+      modelPlaceholder: "claude-sonnet-4-6",
+      hint: "Anthropic Claude，保持现有默认兼容。",
+    };
 
   useEffect(() => {
     fetch("/api/config/llm")
       .then((r) => r.json() as Promise<Partial<LLMFields>>)
       .then((data) => {
         setFields((f) => ({
+          provider: data.provider === "openai" ? "openai" : data.provider === "anthropic" ? "anthropic" : f.provider,
           apiKey: data.apiKey ?? f.apiKey,
           baseURL: data.baseURL ?? f.baseURL,
           httpsProxy: data.httpsProxy ?? f.httpsProxy,
@@ -326,6 +350,7 @@ function LLMSection(): React.JSX.Element {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        provider: fields.provider,
         apiKey: fields.apiKey,
         baseURL: fields.baseURL,
         httpsProxy: fields.httpsProxy,
@@ -351,12 +376,22 @@ function LLMSection(): React.JSX.Element {
       <div className={styles.sectionTitle}>模型（LLM）</div>
       <div className={styles.sectionHint}>
         配置保存在服务端 `data/agent/llm-config.json`，保存后立即生效，无需重启。<br />
+        {providerMeta.hint}
       </div>
       <div className={styles.fields}>
-        <Field label="API Key" type="password" placeholder="sk-ant-..." value={fields.apiKey} onChange={(v) => setField("apiKey", v)} />
-        <Field label="Base URL" placeholder="https://api.anthropic.com" value={fields.baseURL} onChange={(v) => setField("baseURL", v)} />
+        <SelectField
+          label="Provider"
+          value={fields.provider}
+          onChange={(value) => setField("provider", value)}
+          options={[
+            { value: "anthropic", label: "Anthropic Claude" },
+            { value: "openai", label: "OpenAI ChatGPT" },
+          ]}
+        />
+        <Field label="API Key" type="password" placeholder={providerMeta.apiKeyPlaceholder} value={fields.apiKey} onChange={(v) => setField("apiKey", v)} />
+        <Field label="Base URL" placeholder={providerMeta.baseURLPlaceholder} value={fields.baseURL} onChange={(v) => setField("baseURL", v)} />
         <Field label="HTTPS Proxy" placeholder="http://127.0.0.1:7890" value={fields.httpsProxy} onChange={(v) => setField("httpsProxy", v)} />
-        <Field label="Model" placeholder="claude-sonnet-4-6" value={fields.model} onChange={(v) => setField("model", v)} />
+        <Field label="Model" placeholder={providerMeta.modelPlaceholder} value={fields.model} onChange={(v) => setField("model", v)} />
       </div>
       <div className={styles.saveRow}>
         <button className={styles.saveBtn} onClick={save} disabled={saving}>
@@ -365,6 +400,34 @@ function LLMSection(): React.JSX.Element {
         {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
       </div>
     </section>
+  );
+}
+
+interface SelectFieldProps {
+  label: string;
+  value: string;
+  onChange: (v: LLMProviderField) => void;
+  options: Array<{ value: LLMProviderField; label: string }>;
+}
+
+function SelectField({ label, value, onChange, options }: SelectFieldProps): React.JSX.Element {
+  return (
+    <div className={styles.field}>
+      <label className={styles.fieldLabel}>{label}</label>
+      <div className={styles.fieldRow}>
+        <select
+          className={styles.fieldInput}
+          value={value}
+          onChange={(e) => onChange(e.target.value as LLMProviderField)}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
   );
 }
 

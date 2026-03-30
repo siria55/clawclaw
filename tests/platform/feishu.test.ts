@@ -246,6 +246,32 @@ describe("FeishuPlatform org APIs", () => {
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("department_id=od_rnd");
   });
 
+  it("fetches one user by open_id", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
+      .mockResolvedValueOnce(jsonResponse({
+        code: 0,
+        data: {
+          user: {
+            name: "张三",
+            open_id: "ou_1",
+            email: "zhangsan@example.com",
+          },
+        },
+      }));
+    global.fetch = fetchMock as typeof fetch;
+
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    const user = await platform.getUser("ou_1");
+
+    expect(user).toMatchObject({
+      name: "张三",
+      open_id: "ou_1",
+    });
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/contact/v3/users/ou_1");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("user_id_type=open_id");
+  });
+
   it("finds departments by name across paginated results", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
