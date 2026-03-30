@@ -25,6 +25,7 @@ export interface DigestArticle {
   summary: string;
   source: string;
   publishedAt?: string;
+  date?: string;
   category: DigestCategory;
 }
 
@@ -263,6 +264,7 @@ async function searchNewsWithBrowser(
   queries: string[],
   maxCandidates: number,
   quota: DigestQuota,
+  referenceDate: string,
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   const allLinks: LinkItem[] = [];
@@ -306,12 +308,14 @@ async function searchNewsWithBrowser(
     domesticLinks,
     "domestic",
     getExtractionLimit("domestic", quota, maxCandidates),
+    referenceDate,
   );
   const internationalArticles = await extractArticlesFromLinks(
     ctx,
     internationalLinks,
     "international",
     getExtractionLimit("international", quota, maxCandidates),
+    referenceDate,
   );
 
   const articles = dedupeArticles([...domesticArticles, ...internationalArticles]);
@@ -420,14 +424,14 @@ export class DailyDigestSkill implements Skill {
     try {
       const queries = resolveDailyDigestQueries(this.#configStorage?.read().queries, this.#defaultQueries);
       ctx.log?.(`🧭 使用 ${queries.length} 个搜索主题`);
-      const articles = await searchNewsWithBrowser(browser, ctx, queries, this.#maxCandidates, this.#quota);
+      const dateKey = new Date().toLocaleDateString("sv-SE");
+      const articles = await searchNewsWithBrowser(browser, ctx, queries, this.#maxCandidates, this.#quota, dateKey);
       const selection = selectDigestArticles(articles, this.#quota);
       ctx.log?.(`📊 最终入选 ${selection.all.length} 篇文章（国内 ${selection.domestic.length} / 国际 ${selection.international.length}）`);
       if (selection.domestic.length < this.#quota.domestic || selection.international.length < this.#quota.international) {
         ctx.log?.(`⚠️ 分类配额未完全满足，目标为国内 ${this.#quota.domestic} / 国际 ${this.#quota.international}`);
       }
 
-      const dateKey = new Date().toLocaleDateString("sv-SE");
       const dateLabel = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
       const html = renderDailyDigestHtml(selection, dateLabel);
       const imageBuffer = await screenshotHtml(browser, html);
@@ -451,6 +455,7 @@ export class DailyDigestSkill implements Skill {
 export function parseArticlesFromLLMOutput(
   content: unknown,
   urlHints: ReadonlyMap<string, LinkHint> = new Map(),
+  referenceDate?: string,
 ): DigestArticle[] | undefined {
   const text = extractText(content);
   const jsonText = extractJsonArray(text);
@@ -459,7 +464,7 @@ export function parseArticlesFromLLMOutput(
   const drafts = parseArticleDrafts(jsonText);
   if (!drafts) return undefined;
 
-  const articles = validateArticles(drafts, urlHints);
+  const articles = validateArticles(drafts, urlHints, referenceDate);
   return articles.length > 0 ? dedupeArticles(articles) : undefined;
 }
 
@@ -534,6 +539,7 @@ async function extractArticlesFromLinks(
   links: LinkItem[],
   category: DigestCategory,
   maxCandidates: number,
+  referenceDate: string,
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   if (links.length === 0) {
@@ -577,7 +583,7 @@ ${linkText}
     return [];
   }
 
-  const parsed = parseArticlesFromLLMOutput(response.message.content, buildLinkHintMap(links));
+  const parsed = parseArticlesFromLLMOutput(response.message.content, buildLinkHintMap(links), referenceDate);
   if (!parsed) {
     log(`⚠️ ${CATEGORY_LABEL[category]} JSON 解析失败`);
     log(`🪵 ${CATEGORY_LABEL[category]} LLM 原始输出: ${text.slice(0, 200)}`);
@@ -686,25 +692,31 @@ function isTextBlock(value: unknown): value is { type: "text"; text: string } {
 function validateArticles(
   items: ArticleDraft[],
   urlHints: ReadonlyMap<string, LinkHint>,
+  referenceDate?: string,
 ): DigestArticle[] {
   return items.flatMap((item) => {
     const result = ArticleDraftSchema.safeParse(item);
     if (!result.success) return [];
-    return [normalizeArticle(result.data, urlHints)];
+    const article = normalizeArticle(result.data, urlHints, referenceDate);
+    return isBlockedArticle(article) ? [] : [article];
   });
 }
 
 function normalizeArticle(
   article: ArticleDraft,
   urlHints: ReadonlyMap<string, LinkHint>,
+  referenceDate?: string,
 ): DigestArticle {
   const hint = urlHints.get(article.url) ?? urlHints.get(canonicalizeUrl(article.url));
+  const publishedAt = hint?.publishedAt;
+  const date = resolveDigestArticleDate(publishedAt, referenceDate);
   return {
     title: article.title.trim(),
     url: article.url.trim(),
     summary: article.summary.trim(),
     source: article.source.trim(),
-    ...(hint?.publishedAt ? { publishedAt: hint.publishedAt } : {}),
+    ...(publishedAt ? { publishedAt } : {}),
+    ...(date ? { date } : {}),
     category: normalizeCategory(article, urlHints),
   };
 }
@@ -947,6 +959,40 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function resolveDigestArticleDate(
+  publishedAt: string | undefined,
+  referenceDate: string | undefined,
+): string | undefined {
+  if (!publishedAt || !referenceDate) return undefined;
+  const normalized = publishedAt.replace(/\s+/g, " ").trim();
+
+  const fullCn = normalized.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (fullCn) {
+    const [, year, month, day] = fullCn;
+    if (year && month && day) return formatDateKey(year, month, day);
+  }
+
+  const fullNumeric = normalized.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})/);
+  if (fullNumeric) {
+    const [, year, month, day] = fullNumeric;
+    if (year && month && day) return formatDateKey(year, month, day);
+  }
+
+  const monthDay = normalized.match(/^(\d{1,2})月(\d{1,2})日/);
+  if (monthDay) {
+    const [, month, day] = monthDay;
+    if (month && day) return formatDateKey(referenceDate.slice(0, 4), month, day);
+  }
+
+  if (/^(今天)\b|^今天/.test(normalized) || /^\d+\s*(分钟前|小时前)$/.test(normalized)) {
+    return referenceDate;
+  }
+  if (/^(昨日|昨天)/.test(normalized)) return shiftDateKey(referenceDate, -1);
+  if (/^前天/.test(normalized)) return shiftDateKey(referenceDate, -2);
+
+  return undefined;
+}
+
 function isBlockedLink(link: LinkItem): boolean {
   const hostname = getHostname(link.href);
   return hostname ? isBlockedHostname(hostname) : false;
@@ -989,6 +1035,23 @@ function canonicalizeUrl(value: string): string {
   } catch {
     return value;
   }
+}
+
+function shiftDateKey(referenceDate: string, days: number): string | undefined {
+  const match = referenceDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return undefined;
+  const [, year, month, day] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatDateKey(
+    String(date.getUTCFullYear()),
+    String(date.getUTCMonth() + 1),
+    String(date.getUTCDate()),
+  );
+}
+
+function formatDateKey(year: string, month: string, day: string): string {
+  return `${year.padStart(4, "0")}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 }
 
 function formatIsoDate(date: string): string {

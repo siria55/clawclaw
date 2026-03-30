@@ -412,7 +412,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 3. 依次导航各关键词的百度新闻搜索页，用 Playwright locator 提取所有链接（零 LLM 调用），并为链接打上国内/国际查询提示，同时尽量从结果卡片文本里提取新闻时间
 4. 跨关键词去重后，先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际各调用一次 `ctx.agent.llm.complete()`，筛选为结构化 JSON（`DigestArticle[]`，含 `category`）
 5. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
-6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；同时把搜索结果里的新闻时间 merge 回最终文章对象
+6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；同时把搜索结果里的新闻时间 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`
 7. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML
 8. 条目元信息显示为“来源 + 新闻时间”；若未提取到时间则仅显示来源
 9. Playwright 截图为 PNG，写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`

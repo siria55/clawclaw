@@ -83,11 +83,54 @@ describe("parseArticlesFromLLMOutput", () => {
       },
     ], new Map([
       ["https://example.com/a", { category: "domestic" as const, publishedAt: "2小时前" }],
-    ]));
+    ]), "2026-03-30");
 
     expect(articles).toEqual([
-      { title: "A", url: "https://example.com/a", summary: "", source: "S1", publishedAt: "2小时前", category: "domestic" },
+      { title: "A", url: "https://example.com/a", summary: "", source: "S1", publishedAt: "2小时前", date: "2026-03-30", category: "domestic" },
     ]);
+  });
+
+  it("derives a normalized date from explicit day text", () => {
+    const articles = parseArticlesFromLLMOutput([
+      {
+        type: "text",
+        text: `[
+  {"title":"A","url":"https://example.com/a","summary":"","source":"S1","category":"domestic"}
+]`,
+      },
+    ], new Map([
+      ["https://example.com/a", { category: "domestic" as const, publishedAt: "3月30日 09:12" }],
+    ]), "2026-03-31");
+
+    expect(articles?.[0]?.date).toBe("2026-03-30");
+  });
+
+  it("derives a normalized date from relative day text", () => {
+    const articles = parseArticlesFromLLMOutput([
+      {
+        type: "text",
+        text: `[
+  {"title":"A","url":"https://example.com/a","summary":"","source":"S1","category":"domestic"}
+]`,
+      },
+    ], new Map([
+      ["https://example.com/a", { category: "domestic" as const, publishedAt: "昨天 09:12" }],
+    ]), "2026-03-31");
+
+    expect(articles?.[0]?.date).toBe("2026-03-30");
+  });
+
+  it("drops self-media articles during parsing", () => {
+    const articles = parseArticlesFromLLMOutput([
+      {
+        type: "text",
+        text: `[
+  {"title":"A","url":"https://baijiahao.baidu.com/s?id=123","summary":"","source":"某某百家号","category":"domestic"}
+]`,
+      },
+    ], new Map(), "2026-03-31");
+
+    expect(articles).toBeUndefined();
   });
 });
 
@@ -257,6 +300,7 @@ function createArticle(
     summary: `${seed} summary`,
     source: `${seed} source`,
     publishedAt: `${seed} time`,
+    date: "2026-03-30",
     category,
     ...overrides,
   };
