@@ -42,11 +42,20 @@ export function ChatView({ entries, streaming }: Props): React.JSX.Element {
             className={`${styles.bubble} ${
               isUser ? styles.user : styles.assistant
             } ${message.streaming ? styles.streaming : ""}`}
+            data-message-role={message.role}
+            style={isUser ? undefined : {
+              userSelect: "text",
+              WebkitUserSelect: "text",
+            }}
           >
             {!isUser && <CopyAssistantButton content={message.content} />}
             {isUser
               ? message.content
-              : <ReactMarkdown className={styles.md}>{message.content}</ReactMarkdown>
+              : (
+                <div className={styles.md} data-selectable-content="assistant">
+                  <ReactMarkdown>{message.content}</ReactMarkdown>
+                </div>
+              )
             }
           </div>
         );

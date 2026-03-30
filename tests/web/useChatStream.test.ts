@@ -27,6 +27,7 @@ function mockFetch(chunks: string[]): void {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({
+      ok: true,
       body: makeStream(chunks),
     })),
   );
@@ -147,6 +148,31 @@ describe("useChatStream", () => {
     );
     expect(err).toBeDefined();
     expect(err?.kind === "event" && err.event.data).toBe("network error");
+  });
+
+  it("includes HTTP status and response detail on non-ok responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        text: async () => JSON.stringify({ error: "invalid api key" }),
+      })),
+    );
+
+    const { result } = renderHook(() => useChatStream());
+
+    await act(async () => {
+      await result.current.send("hi");
+    });
+
+    const err = result.current.entries.find(
+      (e) => e.kind === "event" && e.event.type === "error",
+    );
+    expect(err?.kind === "event" && err.event.data).toBe(
+      "HTTP 401 Unauthorized: invalid api key",
+    );
   });
 
   it("appends thinking item on thinking SSE event", async () => {

@@ -39,6 +39,23 @@ describe("ChatView", () => {
     expect(screen.getByText("已复制")).toBeDefined();
   });
 
+  it("marks assistant bubbles as selectable text", () => {
+    const entries: ChatEntry[] = [{
+      kind: "message",
+      message: {
+        id: "assistant-2",
+        role: "assistant",
+        content: "这段内容应该可以直接选中复制",
+      },
+    }];
+
+    render(React.createElement(ChatView, { entries, streaming: false }));
+
+    const bubble = screen.getByText("这段内容应该可以直接选中复制")
+      .closest('[data-message-role="assistant"]');
+    expect(bubble?.style.userSelect).toBe("text");
+  });
+
   it("does not show copy button for user messages", () => {
     const entries: ChatEntry[] = [{
       kind: "message",

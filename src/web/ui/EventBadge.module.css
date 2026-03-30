@@ -49,6 +49,25 @@
   white-space: nowrap;
 }
 
+.copyBtn {
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.copyBtn:hover {
+  background: var(--bg);
+  color: var(--text-primary);
+  border-color: var(--border-focus);
+}
+
 .toggle {
   margin-left: auto;
   color: var(--text-muted);
@@ -68,4 +87,6 @@
   max-height: 240px;
   overflow-y: auto;
   line-height: 1.55;
+  user-select: text;
+  -webkit-user-select: text;
 }

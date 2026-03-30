@@ -25,6 +25,6 @@
 
 ## 结果
 
-- Chat 页中的 assistant 回复已支持一键复制，复制内容为原始文本
+- Chat 页中的 assistant 回复已支持直接选中文本复制，也支持一键复制原始文本
 - IM 配置页中的飞书 `Chat ID` 会自动解析并显示对应群名 / 用户名
 - WebServer 新增 `GET /api/im-config/feishu-target?chatId=...`，前端可按需解析飞书目标展示名

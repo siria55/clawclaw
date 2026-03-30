@@ -53,12 +53,17 @@
   color: var(--text-primary);
   align-self: flex-start;
   border-bottom-left-radius: 4px;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .assistantActions {
   display: flex;
   justify-content: flex-end;
   margin-bottom: 6px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .copyBtn {
@@ -85,6 +90,13 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.md * {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .md p { margin: 0; }

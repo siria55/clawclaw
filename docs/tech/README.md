@@ -160,8 +160,29 @@ Agent 工具层 `createFeishuOrgTools(() => feishu)` 使用闭包读取当前运
 `ChatView` 中的 assistant 气泡现在带有独立复制按钮：
 
 - 仅 assistant 消息显示复制入口，用户消息不显示
+- assistant 气泡显式启用文本选择，可直接拖拽选中复制
 - 复制内容直接使用 `message.content` 原始文本，避免把 Markdown 渲染产生的额外 UI 文案一并复制
 - 复制成功后短暂显示“已复制”，不影响流式渲染和自动滚动
+
+渲染实现上，assistant Markdown 现在包裹在独立的 `.md` 容器中，再把 `ReactMarkdown` 挂进去：
+
+- 避开 `react-markdown` 当前版本对顶层 `className` 透传的不兼容行为
+- 让 `user-select: text` 只作用于正文区域，不影响复制按钮
+- 真实浏览器中可稳定拖拽选中文本，适用于段落、列表和代码块
+
+## Chat 错误复制与 HTTP 错误透出
+
+`useChatStream` 现在会在读取流之前先检查 `/api/chat` 的 HTTP 状态：
+
+- `resp.ok === false` 时不再继续按 SSE 解析
+- 前端会优先读取响应体文本，并尝试从 JSON 里提取 `error` 或 `message`
+- 最终错误文案格式为 `HTTP 401 Unauthorized: ...` 这类可读字符串
+
+`EventBadge` 对错误事件做了额外处理：
+
+- 错误卡片头部新增复制按钮
+- 复制内容使用完整错误文案，不截断
+- 展开后的 `pre` 详情区允许原生文本选择，适合复制长错误或网关返回
 
 这让 WebUI 更适合作为调试台和内容中转页，尤其适合把日报、总结或提示词快速粘贴到其他工具中。
 

@@ -6,6 +6,44 @@ function nextId(): string {
   return String(++_idCounter);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseErrorDetail(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (typeof parsed === "string") return parsed;
+    if (isRecord(parsed)) {
+      const error = parsed["error"];
+      if (typeof error === "string") return error;
+      const message = parsed["message"];
+      if (typeof message === "string") return message;
+      return JSON.stringify(parsed);
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+}
+
+async function readErrorResponse(response: Response): Promise<string> {
+  const status = response.statusText.trim()
+    ? `HTTP ${response.status} ${response.statusText.trim()}`
+    : `HTTP ${response.status}`;
+  const raw = await response.text().catch(() => "");
+  const detail = parseErrorDetail(raw);
+  return detail ? `${status}: ${detail}` : status;
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function useChatStream(): {
   entries: ChatEntry[];
   streaming: boolean;
@@ -39,6 +77,9 @@ export function useChatStream(): {
         body: JSON.stringify({ message: text }),
         signal: ctrl.signal,
       });
+      if (!resp.ok) {
+        throw new Error(await readErrorResponse(resp));
+      }
 
       const reader = resp.body?.getReader();
       if (!reader) throw new Error("No response body");
@@ -142,7 +183,7 @@ export function useChatStream(): {
       if ((err as Error).name !== "AbortError") {
         setEntries((prev) => [
           ...prev,
-          { kind: "event", event: { id: nextId(), type: "error", data: (err as Error).message } },
+          { kind: "event", event: { id: nextId(), type: "error", data: toErrorMessage(err) } },
         ]);
       }
     } finally {

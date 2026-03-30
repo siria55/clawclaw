@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`。
 
 ---
 
@@ -142,6 +142,18 @@
 - `IM > 配置` 中的飞书 `Chat ID` 会自动解析目标名称，支持显示群名或用户名
 - 飞书运行摘要也会补充当前目标名称，便于确认配置是否指向正确的私聊或群聊
 
+## 第二十三阶段：对话复制浏览器修复（Sprint 65）
+
+- 修复 Chat 页左侧 assistant 回复在真实浏览器中无法拖拽选中复制的问题
+- assistant Markdown 改为包裹在独立正文容器中渲染，兼容当前 `react-markdown` 运行时约束
+- 复制按钮继续保留，但不再影响正文区的原生文本选择
+
+## 第二十四阶段：错误复制与 HTTP 状态展示（Sprint 66）
+
+- Chat 页中的错误卡片新增复制按钮，方便直接带走 `401` 等失败信息
+- `/api/chat` 的非 2xx 响应会显示 `HTTP 状态码 + 服务端返回内容`
+- 错误详情区允许原生选中复制，便于排查认证或网关问题
+
 ---
 
 ## 当前落点
@@ -151,6 +163,8 @@
 - 运行态数据统一保存在本地 `data/`，不再跟随仓库提交
 - LLM 现已支持 `Anthropic Claude` 和 `OpenAI ChatGPT` 两条接入路径
 - `对话` 页里的 AI 回复现已支持一键复制
+- `对话` 页里的 AI 回复现已支持直接拖拽选中复制，浏览器原生复制链路已修复
+- `对话` 页里的错误卡片现已支持复制，`401` 等报错会保留状态码与服务端错误内容
 - `内容` 内部为 `新闻库` / `记忆库`
 - `自动化` 内部为 `Cron` / `Skills`
 - `IM` 内部为 `状态` / `消息` / `配置`

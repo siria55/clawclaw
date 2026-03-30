@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ToolEvent } from "./types";
 import styles from "./EventBadge.module.css";
 
@@ -8,6 +8,8 @@ interface Props {
 
 export function EventBadge({ event }: Props): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isCall = event.type === "tool_call";
   const isResult = event.type === "tool_result";
@@ -34,6 +36,20 @@ export function EventBadge({ event }: Props): React.JSX.Element {
 
   const short = preview.length > 60 ? preview.slice(0, 60) + "…" : preview;
 
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  const handleCopy = (): void => {
+    void navigator.clipboard.writeText(preview).then(() => {
+      setCopied(true);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {
+      setCopied(false);
+    });
+  };
+
   return (
     <div
       className={`${styles.badge} ${accentClass}`}
@@ -47,6 +63,19 @@ export function EventBadge({ event }: Props): React.JSX.Element {
         <span className={styles.icon}>{icon}</span>
         <span className={styles.label}>{label}</span>
         {!expanded && <span className={styles.preview}>{short}</span>}
+        {isError && (
+          <button
+            type="button"
+            className={styles.copyBtn}
+            aria-label="复制错误内容"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleCopy();
+            }}
+          >
+            {copied ? "已复制" : "复制"}
+          </button>
+        )}
         <span className={styles.toggle}>{expanded ? "▲" : "▼"}</span>
       </div>
       {expanded && (
