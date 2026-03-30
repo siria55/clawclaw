@@ -240,7 +240,8 @@ function IMEventList(props: { events: IMEvent[]; filter: IMFilter }): React.JSX.
           <div className={styles.imMeta}>
             <span className={styles.imPlatform}>{event.platform}</span>
             {event.eventType && <span className={styles.imEventType}>{describeEventType(event.eventType)}</span>}
-            {event.chatName && <span className={styles.imChatName}>{event.chatName}</span>}
+            {event.chatName && <span className={styles.imChatName}>群 {event.chatName}</span>}
+            {event.userName && <span className={styles.imChatName}>人 {event.userName}</span>}
             {event.userId && <CopyId prefix="用户" value={event.userId} />}
             {event.chatId && <CopyId prefix="会话" value={event.chatId} />}
             <span className={styles.imTime}>{formatTime(event.timestamp)}</span>

@@ -11,14 +11,16 @@ import { ConversationStorage } from "../../src/im/conversations.js";
 import { IMEventStorage } from "../../src/im/storage.js";
 import type { ConversationStorage } from "../../src/im/conversations.js";
 
-function makeMockPlatform(overrides: Partial<IMPlatform> = {}): IMPlatform {
+function makeMockPlatform<TExtra extends object = Record<string, never>>(
+  overrides: Partial<IMPlatform> & TExtra = {} as Partial<IMPlatform> & TExtra,
+): IMPlatform & TExtra {
   return {
     name: "mock",
     verify: vi.fn(async () => {}),
     parse: vi.fn(async () => null),
     send: vi.fn(async () => {}),
     ...overrides,
-  };
+  } as IMPlatform & TExtra;
 }
 
 function makeMockAgent(reply = "pong"): Agent {
@@ -110,6 +112,79 @@ describe("ClawServer", () => {
       expect.stringContaining("ping"),
       expect.objectContaining({ history: expect.any(Array) }),
     );
+    await server.stop();
+  });
+
+  it("skips feishu group messages when the bot is not mentioned", async () => {
+    const agent = makeMockAgent();
+    const onMessage = vi.fn(async () => ({ handled: true, replyText: "不该触发" }));
+    const platform = makeMockPlatform<{ getBotOpenId: () => Promise<string | undefined> }>({
+      name: "feishu",
+      getBotOpenId: vi.fn(async () => "ou_bot"),
+      parse: vi.fn(async () => ({
+        platform: "feishu",
+        chatId: "oc_group",
+        sessionId: "oc_group",
+        continuityId: "feishu:oc_group:ou_user",
+        userId: "ou_user",
+        eventType: "message",
+        text: "@同事 帮我看一下",
+        raw: {
+          event: {
+            message: {
+              chat_type: "group",
+              mentions: [{ id: { open_id: "ou_other" } }],
+            },
+          },
+        },
+      })),
+    });
+
+    const { server, url } = await startServer({ "/hook": { platform, agent, onMessage } });
+    const res = await fetch(`${url}/hook`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(onMessage).not.toHaveBeenCalled();
+    expect(vi.mocked(agent.run)).not.toHaveBeenCalled();
+
+    await server.stop();
+  });
+
+  it("continues handling feishu group messages when the bot is mentioned", async () => {
+    const agent = makeMockAgent("收到");
+    const platform = makeMockPlatform<{ getBotOpenId: () => Promise<string | undefined> }>({
+      name: "feishu",
+      getBotOpenId: vi.fn(async () => "ou_bot"),
+      parse: vi.fn(async () => ({
+        platform: "feishu",
+        chatId: "oc_group",
+        sessionId: "oc_group",
+        continuityId: "feishu:oc_group:ou_user",
+        userId: "ou_user",
+        eventType: "message",
+        text: "@机器人 帮我看一下",
+        raw: {
+          event: {
+            message: {
+              chat_type: "group",
+              mentions: [{ id: { open_id: "ou_bot" } }],
+            },
+          },
+        },
+      })),
+    });
+
+    const { server, url } = await startServer({ "/hook": { platform, agent } });
+    const res = await fetch(`${url}/hook`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(vi.mocked(agent.run)).toHaveBeenCalledWith(
+      expect.stringContaining("@机器人 帮我看一下"),
+      expect.objectContaining({ history: expect.any(Array) }),
+    );
+
     await server.stop();
   });
 
@@ -226,9 +301,9 @@ describe("ClawServer", () => {
     const platform = makeMockPlatform({
       parse: vi.fn(async () => ({
         platform: "feishu",
-        chatId: "oc_daily",
-        sessionId: "oc_daily",
-        continuityId: "feishu:oc_daily:ou_user",
+        chatId: "ou_user",
+        sessionId: "ou_user",
+        continuityId: "feishu:ou_user:ou_user",
         userId: "ou_user",
         text: "给我今天的新闻",
         raw: {},

@@ -154,6 +154,7 @@ describe("StatusView", () => {
             id: "1",
             platform: "feishu",
             userId: "ou_demo",
+            userName: "张三",
             chatId: "oc_demo",
             chatName: "运营群",
             eventType: "bot_added",
@@ -237,7 +238,8 @@ describe("StatusView", () => {
 
     expect(await screen.findByText("机器人已加入群：运营群")).toBeDefined();
     expect(screen.getByText("IM 消息日志")).toBeDefined();
-    expect(screen.getAllByText("运营群").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("群 运营群").length).toBeGreaterThan(0);
+    expect(screen.getByText("人 张三")).toBeDefined();
     expect(screen.getByText("https://example.com/news")).toBeDefined();
     expect(screen.queryByText("飞书运行状态")).toBeNull();
 

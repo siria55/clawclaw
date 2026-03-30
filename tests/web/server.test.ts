@@ -14,6 +14,7 @@ import type { Agent } from "../../src/core/agent.js";
 import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";
 import type { CronJobConfig } from "../../src/cron/types.js";
+import type { IMPlatform } from "../../src/platform/types.js";
 
 /** Temp directory with a fake index.html for static serving tests */
 let staticDir: string;
@@ -52,6 +53,18 @@ function makeMockAgent(reply = "hello"): Agent {
       };
     }),
   } as unknown as Agent;
+}
+
+function makeMockPlatform<TExtra extends object = Record<string, never>>(
+  overrides: Partial<IMPlatform> & TExtra = {} as Partial<IMPlatform> & TExtra,
+): IMPlatform & TExtra {
+  return {
+    name: "mock",
+    verify: vi.fn(async () => undefined),
+    parse: vi.fn(async () => null),
+    send: vi.fn(async () => undefined),
+    ...overrides,
+  } as IMPlatform & TExtra;
 }
 
 async function startWebServer(
@@ -337,6 +350,74 @@ describe("WebServer", () => {
     }
   });
 
+  it("GET /api/im-log enriches feishu user and chat names", async () => {
+    const originalFetch = global.fetch;
+    const dir = mkdtempSync(join(tmpdir(), "claw-im-log-"));
+    try {
+      const agent = makeMockAgent();
+      const imEventStorage = new IMEventStorage();
+      imEventStorage.append({
+        platform: "feishu",
+        userId: "ou_demo",
+        chatId: "oc_demo",
+        text: "请发今天的日报",
+        replyText: undefined,
+      });
+
+      const imConfigStorage = new ConfigStorage<IMConfig>(join(dir, "im-config.json"));
+      imConfigStorage.write({
+        feishu: {
+          appId: "cli_demo",
+          appSecret: "secret",
+          verificationToken: "token",
+        },
+      });
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(makeFetchResponse({ tenant_access_token: "tenant-token" }))
+        .mockResolvedValueOnce(makeFetchResponse({
+          code: 0,
+          data: {
+            user: {
+              name: "张三",
+            },
+          },
+        }))
+        .mockResolvedValueOnce(makeFetchResponse({ tenant_access_token: "tenant-token" }))
+        .mockResolvedValueOnce(makeFetchResponse({
+          code: 0,
+          data: {
+            chat: {
+              name: "运营群",
+            },
+          },
+        }));
+      global.fetch = fetchMock as typeof fetch;
+
+      const server = new WebServer({ agent, port: 0, staticDir, imEventStorage, imConfigStorage });
+      await server.start();
+
+      const response = await httpGetJson<{
+        events: Array<{ chatName?: string; userName?: string }>;
+        total: number;
+      }>(server.port, "/api/im-log");
+
+      expect(response.status).toBe(200);
+      expect(response.body.total).toBe(1);
+      expect(response.body.events).toEqual([
+        expect.objectContaining({
+          chatName: "运营群",
+          userName: "张三",
+        }),
+      ]);
+
+      await server.stop();
+    } finally {
+      global.fetch = originalFetch;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("POST /api/cron/:id/run calls onCronRun with stored config", async () => {
     const dir = mkdtempSync(join(tmpdir(), "claw-cron-run-"));
     try {
@@ -555,9 +636,9 @@ describe("WebServer", () => {
       verify: vi.fn(async () => undefined),
       parse: vi.fn(async () => ({
         platform: "feishu",
-        chatId: "oc_daily",
-        sessionId: "oc_daily",
-        continuityId: "feishu:oc_daily:ou_user",
+        chatId: "ou_user",
+        sessionId: "ou_user",
+        continuityId: "feishu:ou_user:ou_user",
         userId: "ou_user",
         text: "今天新闻文本版",
         raw: {},
@@ -581,6 +662,49 @@ describe("WebServer", () => {
     expect(onMessage).toHaveBeenCalledOnce();
     expect(vi.mocked(agent.run)).not.toHaveBeenCalled();
     expect(imEventStorage.since(undefined)[0]?.replyText).toBe("[日报文本] 2026-03-19");
+
+    await server.stop();
+  });
+
+  it("skips feishu group messages on IM routes when the bot is not mentioned", async () => {
+    const agent = makeMockAgent();
+    const onMessage = vi.fn(async () => ({ handled: true, replyText: "不该触发" }));
+    const platform = makeMockPlatform<{ getBotOpenId: () => Promise<string | undefined> }>({
+      name: "feishu",
+      getBotOpenId: vi.fn(async () => "ou_bot"),
+      parse: vi.fn(async () => ({
+        platform: "feishu",
+        chatId: "oc_daily",
+        sessionId: "oc_daily",
+        continuityId: "feishu:oc_daily:ou_user",
+        userId: "ou_user",
+        eventType: "message",
+        text: "@同事 今天新闻文本版",
+        raw: {
+          event: {
+            message: {
+              chat_type: "group",
+              mentions: [{ id: { open_id: "ou_other" } }],
+            },
+          },
+        },
+      })),
+    });
+
+    const server = new WebServer({
+      agent,
+      port: 0,
+      staticDir,
+      routes: { "/hook": { platform, agent, onMessage } },
+    });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/hook`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(onMessage).not.toHaveBeenCalled();
+    expect(vi.mocked(agent.run)).not.toHaveBeenCalled();
 
     await server.stop();
   });

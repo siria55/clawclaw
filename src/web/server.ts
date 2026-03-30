@@ -4,10 +4,15 @@ import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "../core/agent.js";
 import { createLLMFromConfig, isLLMProviderName } from "../llm/index.js";
-import { FeishuChallenge, FeishuPlatform } from "../platform/feishu.js";
+import {
+  FeishuChallenge,
+  FeishuPlatform,
+  shouldHandleFeishuIncomingMessage,
+  supportsFeishuBotLookup,
+} from "../platform/feishu.js";
 import { WecomEcho } from "../platform/wecom.js";
 import type { AgentConfig } from "../core/types.js";
-import type { IMEventStorage } from "../im/storage.js";
+import type { IMEventStorage, IMEvent as StoredIMEvent } from "../im/storage.js";
 import type { ConversationStorage } from "../im/conversations.js";
 import { buildIMRunContext, persistIMRunContext } from "../im/context.js";
 import type { IMRoute } from "../im/route.js";
@@ -82,6 +87,10 @@ interface FeishuTargetInfo {
   chatId: string;
   targetType: "group" | "user" | "unknown";
   name?: string;
+}
+
+interface IMLogEvent extends StoredIMEvent {
+  userName?: string;
 }
 
 export interface StatusOverview {
@@ -221,6 +230,8 @@ export class WebServer {
   };
   readonly #routes: Record<string, IMRoute>;
   readonly #server: ReturnType<typeof createServer>;
+  readonly #feishuUserNameCache = new Map<string, string | null>();
+  readonly #feishuChatNameCache = new Map<string, string | null>();
 
   constructor(config: WebServerConfig) {
     this.#config = {
@@ -309,7 +320,7 @@ export class WebServer {
     }
 
     if (req.method === "GET" && path === "/api/im-log") {
-      this.#handleIMLog(req, res);
+      await this.#handleIMLog(req, res);
       return;
     }
 
@@ -656,11 +667,12 @@ export class WebServer {
     res.end(JSON.stringify({ entries, total, page, pageSize }));
   }
 
-  #handleIMLog(req: IncomingMessage, res: ServerResponse): void {
+  async #handleIMLog(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const qs = new URL(req.url ?? "/", "http://localhost").searchParams;
     const since = qs.get("since") ?? undefined;
     const storage = this.#config.imEventStorage;
-    const events = storage ? storage.since(since) : [];
+    const storedEvents = storage ? storage.since(since) : [];
+    const events = await this.#enrichIMLogEvents(storedEvents);
     const total = storage ? storage.total : 0;
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ events, total }));
@@ -1057,6 +1069,13 @@ export class WebServer {
       return;
     }
 
+    if (!await shouldHandleFeishuIncomingMessage(
+      message,
+      supportsFeishuBotLookup(route.platform) ? route.platform : undefined,
+    )) {
+      return;
+    }
+
     if (route.onMessage) {
       try {
         const handled = await route.onMessage(message);
@@ -1171,6 +1190,66 @@ export class WebServer {
       return new FeishuPlatform();
     }
     return undefined;
+  }
+
+  async #enrichIMLogEvents(events: StoredIMEvent[]): Promise<IMLogEvent[]> {
+    const platform = this.#buildFeishuLookupPlatform();
+    if (!platform) {
+      return events;
+    }
+
+    return Promise.all(events.map(async (event) => this.#enrichIMLogEvent(event, platform)));
+  }
+
+  async #enrichIMLogEvent(event: StoredIMEvent, platform: FeishuPlatform): Promise<IMLogEvent> {
+    if (event.platform !== "feishu") {
+      return event;
+    }
+
+    const userName = await this.#resolveFeishuUserName(platform, event.userId);
+    const chatName = event.chatName ?? await this.#resolveFeishuChatName(platform, event.chatId);
+
+    return {
+      ...event,
+      ...(chatName ? { chatName } : {}),
+      ...(userName ? { userName } : {}),
+    };
+  }
+
+  async #resolveFeishuUserName(platform: FeishuPlatform, userId: string): Promise<string | undefined> {
+    if (!userId.startsWith("ou_")) {
+      return undefined;
+    }
+    if (this.#feishuUserNameCache.has(userId)) {
+      return this.#feishuUserNameCache.get(userId) ?? undefined;
+    }
+
+    try {
+      const name = (await platform.getUser(userId)).name?.trim() || null;
+      this.#feishuUserNameCache.set(userId, name);
+      return name ?? undefined;
+    } catch {
+      this.#feishuUserNameCache.set(userId, null);
+      return undefined;
+    }
+  }
+
+  async #resolveFeishuChatName(platform: FeishuPlatform, chatId: string): Promise<string | undefined> {
+    if (!chatId.startsWith("oc_")) {
+      return undefined;
+    }
+    if (this.#feishuChatNameCache.has(chatId)) {
+      return this.#feishuChatNameCache.get(chatId) ?? undefined;
+    }
+
+    try {
+      const name = (await platform.getChat(chatId)).name?.trim() || null;
+      this.#feishuChatNameCache.set(chatId, name);
+      return name ?? undefined;
+    } catch {
+      this.#feishuChatNameCache.set(chatId, null);
+      return undefined;
+    }
   }
 }
 

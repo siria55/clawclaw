@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FeishuPlatform, FeishuChallenge, computeFeishuSignature } from "../../src/platform/feishu.js";
+import {
+  FeishuPlatform,
+  FeishuChallenge,
+  computeFeishuSignature,
+  mentionsFeishuBot,
+} from "../../src/platform/feishu.js";
 
 const BASE_CONFIG = {
   appId: "app_id",
@@ -194,6 +199,26 @@ describe("computeFeishuSignature()", () => {
 });
 
 describe("FeishuPlatform org APIs", () => {
+  it("fetches the bot open_id for mention matching", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
+      .mockResolvedValueOnce(jsonResponse({
+        code: 0,
+        bot: {
+          open_id: "ou_bot_123",
+          app_name: "clawclaw",
+        },
+      }));
+    global.fetch = fetchMock as typeof fetch;
+
+    const platform = new FeishuPlatform(BASE_CONFIG);
+    const openId = await platform.getBotOpenId();
+
+    expect(openId).toBe("ou_bot_123");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/bot/v3/info");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("app_id=app_id");
+  });
+
   it("fetches one department by open_department_id", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ tenant_access_token: "tenant-token" }))
@@ -304,6 +329,27 @@ describe("FeishuPlatform org APIs", () => {
     expect(matches.map((item) => item.open_department_id)).toEqual(["od_rnd", "od_platform"]);
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("parent_department_id=0");
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("fetch_child=true");
+  });
+});
+
+describe("Feishu mention matching", () => {
+  it("matches group mentions against the bot open_id", () => {
+    const message = {
+      platform: "feishu",
+      chatId: "oc_chat456",
+      text: "@机器人 hello",
+      raw: {
+        event: {
+          message: {
+            chat_type: "group",
+            mentions: [{ id: { open_id: "ou_bot_123" } }],
+          },
+        },
+      },
+    } as const;
+
+    expect(mentionsFeishuBot(message, "ou_bot_123")).toBe(true);
+    expect(mentionsFeishuBot(message, "ou_other")).toBe(false);
   });
 });
 

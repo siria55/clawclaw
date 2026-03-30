@@ -1,6 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Agent } from "../core/agent.js";
-import { FeishuChallenge } from "../platform/feishu.js";
+import {
+  FeishuChallenge,
+  shouldHandleFeishuIncomingMessage,
+  supportsFeishuBotLookup,
+} from "../platform/feishu.js";
 import { WecomEcho } from "../platform/wecom.js";
 import type { IMPlatform } from "../platform/types.js";
 import type { IMEventStorage } from "../im/storage.js";
@@ -159,6 +163,13 @@ export class ClawServer {
     });
 
     if (message.eventType && message.eventType !== "message") {
+      return;
+    }
+
+    if (!await shouldHandleFeishuIncomingMessage(
+      message,
+      supportsFeishuBotLookup(route.platform) ? route.platform : undefined,
+    )) {
       return;
     }
 

@@ -26,6 +26,21 @@ interface FeishuOpenApiResponse<TData> {
   data?: TData;
 }
 
+interface FeishuBotInfoResponse {
+  code?: number;
+  msg?: string;
+  bot?: {
+    open_id?: string;
+    app_name?: string;
+  };
+  data?: {
+    bot?: {
+      open_id?: string;
+      app_name?: string;
+    };
+  };
+}
+
 /** Department record returned by Feishu Contact v3 APIs. */
 export interface FeishuDepartment {
   name: string;
@@ -69,6 +84,10 @@ export interface FeishuChat {
   description?: string;
 }
 
+export interface FeishuBotLookup {
+  getBotOpenId(): Promise<string | undefined>;
+}
+
 interface FeishuPostContent {
   zh_cn: {
     title?: string;
@@ -88,6 +107,8 @@ const MAX_TIMESTAMP_AGE_MS = 5 * 60 * 1000;
 export class FeishuPlatform implements IMPlatform {
   readonly name = "feishu";
   readonly #config: FeishuConfig;
+  #botOpenId: string | null | undefined = undefined;
+  #botOpenIdPromise: Promise<string | undefined> | undefined = undefined;
 
   constructor(config?: Partial<FeishuConfig>) {
     this.#config = {
@@ -320,6 +341,26 @@ export class FeishuPlatform implements IMPlatform {
     };
   }
 
+  /** Fetch the current bot's open_id for mention matching in group chats. */
+  async getBotOpenId(): Promise<string | undefined> {
+    if (this.#botOpenId !== undefined) {
+      return this.#botOpenId ?? undefined;
+    }
+    if (this.#botOpenIdPromise) {
+      return this.#botOpenIdPromise;
+    }
+
+    this.#botOpenIdPromise = this.#fetchBotOpenId()
+      .then((openId) => {
+        this.#botOpenId = openId ?? null;
+        return openId;
+      })
+      .finally(() => {
+        this.#botOpenIdPromise = undefined;
+      });
+    return this.#botOpenIdPromise;
+  }
+
   async #uploadImageBuffer(token: string, buffer: Buffer): Promise<string> {
     const form = new FormData();
     form.append("image_type", "message");
@@ -450,6 +491,27 @@ export class FeishuPlatform implements IMPlatform {
       throw new Error("Feishu access token missing from response");
     }
     return data.tenant_access_token;
+  }
+
+  async #fetchBotOpenId(): Promise<string | undefined> {
+    const token = await this.#getAccessToken();
+    const url = new URL("https://open.feishu.cn/open-apis/bot/v3/info");
+    url.searchParams.set("app_id", this.#config.appId);
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Feishu bot info failed: ${response.status} ${body}`);
+    }
+
+    const data = (await response.json()) as FeishuBotInfoResponse;
+    if (data.code !== undefined && data.code !== 0) {
+      throw new Error(`Feishu bot info error: ${data.msg ?? "unknown error"}`);
+    }
+
+    return asString(data.data?.bot?.open_id) || asString(data.bot?.open_id) || undefined;
   }
 
   async #listAllDepartments(): Promise<FeishuDepartment[]> {
@@ -584,6 +646,52 @@ function buildContinuityId(platform: string, chatId: string, userId: string): st
   return `${platform}:${chatId}:${userId || "anonymous"}`;
 }
 
+export function isFeishuGroupMessage(message: Pick<IMMessage, "platform" | "chatId" | "raw">): boolean {
+  if (message.platform !== "feishu") return false;
+
+  const payload = extractFeishuMessagePayload(message.raw);
+  const chatType = asString(payload?.["chat_type"]);
+  if (chatType) {
+    return chatType === "group";
+  }
+
+  return message.chatId.startsWith("oc_");
+}
+
+export function supportsFeishuBotLookup(platform: unknown): platform is FeishuBotLookup {
+  return typeof (platform as { getBotOpenId?: unknown } | undefined)?.getBotOpenId === "function";
+}
+
+export function mentionsFeishuBot(
+  message: Pick<IMMessage, "platform" | "chatId" | "text" | "raw">,
+  botOpenId?: string,
+): boolean {
+  if (!isFeishuGroupMessage(message)) return true;
+
+  const mentions = extractFeishuMentions(message.raw);
+  if (mentions.length === 0) {
+    return hasLeadingFeishuMention(message.text);
+  }
+  if (botOpenId) {
+    return mentions.some((mention) => mention === botOpenId);
+  }
+  return hasLeadingFeishuMention(message.text);
+}
+
+export async function shouldHandleFeishuIncomingMessage(
+  message: Pick<IMMessage, "platform" | "chatId" | "text" | "raw">,
+  platform?: FeishuBotLookup,
+): Promise<boolean> {
+  if (!isFeishuGroupMessage(message)) return true;
+
+  try {
+    const botOpenId = platform ? await platform.getBotOpenId() : undefined;
+    return mentionsFeishuBot(message, botOpenId);
+  } catch {
+    return mentionsFeishuBot(message);
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   return value as Record<string, unknown>;
@@ -607,6 +715,30 @@ function extractFeishuChatName(eventBody: Record<string, unknown> | undefined): 
 
   const i18nNames = asRecord(eventBody?.["i18n_names"]) ?? asRecord(chat?.["i18n_names"]);
   return asString(i18nNames?.["zh_cn"]) || asString(i18nNames?.["en_us"]) || undefined;
+}
+
+function extractFeishuMessagePayload(raw: unknown): Record<string, unknown> | undefined {
+  const root = asRecord(raw);
+  const event = asRecord(root?.["event"]);
+  return asRecord(event?.["message"]) ?? asRecord(root?.["message"]);
+}
+
+function extractFeishuMentions(raw: unknown): string[] {
+  const payload = extractFeishuMessagePayload(raw);
+  const mentions = payload?.["mentions"];
+  if (!Array.isArray(mentions)) return [];
+
+  return mentions
+    .map((item) => {
+      const mention = asRecord(item);
+      const id = asRecord(mention?.["id"]);
+      return asString(id?.["open_id"]);
+    })
+    .filter((openId) => openId.length > 0);
+}
+
+function hasLeadingFeishuMention(text: string): boolean {
+  return /^\s*@[^@\s\u3000,:：，]+/u.test(text);
 }
 
 function clampPageSize(value: number | undefined): number {
