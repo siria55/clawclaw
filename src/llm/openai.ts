@@ -32,6 +32,12 @@ export interface OpenAIConfig extends Partial<LLMConfig> {
   httpsProxy?: string;
 }
 
+interface OpenAIResponseShape {
+  choices?: unknown;
+  error?: unknown;
+  message?: unknown;
+}
+
 /**
  * OpenAI Chat Completions adapter.
  *
@@ -78,8 +84,9 @@ export class OpenAIProvider implements LLMProvider {
       ...(tools && tools.length > 0 ? { tools, parallel_tool_calls: true } : {}),
     });
 
-    const choice = response.choices[0];
-    if (!choice) throw new Error("OpenAI returned no completion choices");
+    const choice = Array.isArray(response.choices) ? response.choices[0] : undefined;
+    if (!choice) throw new Error(buildInvalidResponseError(response));
+    if (!choice.message) throw new Error(buildInvalidResponseError(response));
 
     const toolCalls = (choice.message.tool_calls ?? [])
       .filter(isFunctionToolCall)
@@ -216,6 +223,37 @@ function parseToolCallArguments(argumentsText: string): unknown {
   } catch {
     return argumentsText;
   }
+}
+
+function buildInvalidResponseError(response: OpenAIResponseShape): string {
+  const detail = extractOpenAIErrorDetail(response);
+  return detail
+    ? `OpenAI returned an invalid response: ${detail}`
+    : "OpenAI returned an invalid response";
+}
+
+function extractOpenAIErrorDetail(response: OpenAIResponseShape): string | undefined {
+  if (typeof response.message === "string" && response.message.trim()) {
+    return response.message.trim();
+  }
+
+  if (typeof response.error === "string" && response.error.trim()) {
+    return response.error.trim();
+  }
+
+  if (response.error && typeof response.error === "object" && !Array.isArray(response.error)) {
+    const record = response.error as Record<string, unknown>;
+    if (typeof record["message"] === "string" && record["message"].trim()) {
+      return record["message"].trim();
+    }
+    return JSON.stringify(response.error);
+  }
+
+  if (response.choices !== undefined) {
+    return JSON.stringify({ choices: response.choices });
+  }
+
+  return undefined;
 }
 
 function isFunctionToolCall(call: unknown): call is ChatCompletionMessageFunctionToolCall {

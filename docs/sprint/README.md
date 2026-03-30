@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`。
 
 ---
 
@@ -154,6 +154,12 @@
 - `/api/chat` 的非 2xx 响应会显示 `HTTP 状态码 + 服务端返回内容`
 - 错误详情区允许原生选中复制，便于排查认证或网关问题
 
+## 第二十五阶段：OpenAI 异常响应兜底（Sprint 67）
+
+- 修复 OpenAI provider 在异常响应里直接读取 `choices[0]` 导致的 `reading '0'` 报错
+- 当上游网关返回非标准成功体或错误 JSON 时，优先透出其中的 `message` / `error`
+- Chat 页继续沿用错误复制能力，可直接复制真实上游错误
+
 ---
 
 ## 当前落点
@@ -165,6 +171,7 @@
 - `对话` 页里的 AI 回复现已支持一键复制
 - `对话` 页里的 AI 回复现已支持直接拖拽选中复制，浏览器原生复制链路已修复
 - `对话` 页里的错误卡片现已支持复制，`401` 等报错会保留状态码与服务端错误内容
+- OpenAI / 代理网关返回异常 JSON 时，不再退化成 `Cannot read properties of undefined (reading '0')`
 - `内容` 内部为 `新闻库` / `记忆库`
 - `自动化` 内部为 `Cron` / `Skills`
 - `IM` 内部为 `状态` / `消息` / `配置`

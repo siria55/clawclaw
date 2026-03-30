@@ -184,6 +184,16 @@ Agent 工具层 `createFeishuOrgTools(() => feishu)` 使用闭包读取当前运
 - 复制内容使用完整错误文案，不截断
 - 展开后的 `pre` 详情区允许原生文本选择，适合复制长错误或网关返回
 
+## OpenAI 异常响应兜底
+
+`OpenAIProvider.complete()` 现在不再假定返回体里一定有 `choices[0]`：
+
+- 先检查 `response.choices` 是否为数组，再读取首个 choice
+- 若缺失 `choices` 或 `choice.message`，改为从 `response.message`、`response.error`、`response.error.message` 中提取可读错误
+- 若上游只返回了异常结构，也会抛出 `OpenAI returned an invalid response: ...`，避免退化成 `Cannot read properties of undefined (reading '0')`
+
+这类错误会继续沿用 Chat 页现有的错误卡片和复制能力，方便直接排查 API Key、Base URL 或网关兼容性问题。
+
 这让 WebUI 更适合作为调试台和内容中转页，尤其适合把日报、总结或提示词快速粘贴到其他工具中。
 
 ## 飞书目标名称解析接口

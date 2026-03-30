@@ -149,4 +149,21 @@ describe("OpenAIProvider", () => {
     });
     expect(result.usage).toEqual({ inputTokens: 11, outputTokens: 7 });
   });
+
+  it("surfaces upstream error payloads when choices are missing", async () => {
+    const { create } = await getInternals();
+    create.mockResolvedValue({
+      error: {
+        message: "invalid api key",
+        type: "authentication_error",
+      },
+    });
+
+    const provider = new OpenAIProvider({ apiKey: "test" });
+
+    await expect(provider.complete({
+      system: "sys",
+      messages: [{ role: "user", content: "hi" }],
+    })).rejects.toThrow("OpenAI returned an invalid response: invalid api key");
+  });
 });
