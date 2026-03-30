@@ -34,6 +34,7 @@ export interface StatusOverview {
     configuredInStorage: boolean;
     appId?: string;
     chatId?: string;
+    targetName?: string;
     hasAppSecret: boolean;
     hasVerificationToken: boolean;
     hasEncryptKey: boolean;
@@ -53,7 +54,9 @@ export interface StatusOverview {
   lastIMEvent?: {
     platform: string;
     chatId: string;
+    chatName?: string;
     userId: string;
+    userName?: string;
     timestamp: string;
     textPreview: string;
   };

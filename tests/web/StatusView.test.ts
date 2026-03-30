@@ -43,6 +43,7 @@ describe("StatusView", () => {
               },
               appId: "cli_demo",
               chatId: "oc_demo",
+              targetName: "运营群（群聊）",
               hasAppSecret: true,
               hasVerificationToken: true,
               hasEncryptKey: false,
@@ -77,7 +78,9 @@ describe("StatusView", () => {
             lastIMEvent: {
               platform: "feishu",
               chatId: "oc_demo",
+              chatName: "运营群",
               userId: "ou_demo",
+              userName: "张三",
               timestamp: "2026-03-19T08:00:00.000Z",
               textPreview: "请查看飞书状态",
             },
@@ -95,6 +98,8 @@ describe("StatusView", () => {
     expect(screen.getByText("IM 配置")).toBeDefined();
     expect(screen.getByText("./data/im/im-config.json")).toBeDefined();
     expect(screen.getByText("请查看飞书状态")).toBeDefined();
+    expect(screen.getByText("会话 运营群（oc_demo）")).toBeDefined();
+    expect(screen.getByText("用户 张三（ou_demo）")).toBeDefined();
     expect(screen.queryByText("飞书运行状态")).toBeNull();
   });
 
@@ -115,6 +120,7 @@ describe("StatusView", () => {
             },
             appId: "cli_demo",
             chatId: "oc_demo",
+            targetName: "运营群（群聊）",
             hasAppSecret: true,
             hasVerificationToken: true,
             hasEncryptKey: false,
@@ -143,6 +149,7 @@ describe("StatusView", () => {
     expect(await screen.findByText("飞书运行状态")).toBeDefined();
     expect(screen.getByText("cli_demo")).toBeDefined();
     expect(screen.getByText("运营群")).toBeDefined();
+    expect(screen.getByText("运营群（群聊）")).toBeDefined();
     expect(screen.getByText(/机器人进群/)).toBeDefined();
   });
 
@@ -178,6 +185,7 @@ describe("StatusView", () => {
               },
               appId: "cli_demo",
               chatId: "oc_demo",
+              targetName: "运营群（群聊）",
               hasAppSecret: true,
               hasVerificationToken: true,
               hasEncryptKey: false,

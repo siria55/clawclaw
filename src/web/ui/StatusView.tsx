@@ -77,8 +77,8 @@ function LastIMEventCard(props: { overview: StatusOverview }): React.JSX.Element
       </div>
       <div className={styles.lastEventMeta}>
         <span>{lastEvent.platform}</span>
-        <span>会话 {lastEvent.chatId}</span>
-        <span>用户 {lastEvent.userId || "-"}</span>
+        <span>会话 {formatNamedIdentity(lastEvent.chatName, lastEvent.chatId)}</span>
+        <span>用户 {formatNamedIdentity(lastEvent.userName, lastEvent.userId || "-")}</span>
       </div>
       <p className={styles.lastEventText}>{lastEvent.textPreview}</p>
     </div>
@@ -110,4 +110,8 @@ function ConfigFilesSection(props: { overview: StatusOverview | undefined }): Re
       </div>
     </section>
   );
+}
+
+function formatNamedIdentity(name: string | undefined, id: string): string {
+  return name ? `${name}（${id}）` : id;
 }

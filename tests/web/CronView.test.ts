@@ -25,6 +25,7 @@ describe("CronView", () => {
         message: "生成日报",
         chatId: "oc_daily",
         chatIds: ["oc_daily"],
+        resolvedTargets: [{ chatId: "oc_daily", targetType: "group", name: "日报群" }],
         platform: "feishu",
         enabled: true,
         direct: false,
@@ -36,6 +37,7 @@ describe("CronView", () => {
 
     expect(await screen.findByText("daily-digest")).toBeDefined();
     expect(screen.getByText("生成日报")).toBeDefined();
+    expect(screen.getByText(/日报群（oc_daily）/)).toBeDefined();
   });
 
   it("runs a cron job from the run button", async () => {
@@ -48,6 +50,7 @@ describe("CronView", () => {
             message: "生成日报",
             chatId: "oc_daily",
             chatIds: ["oc_daily"],
+            resolvedTargets: [{ chatId: "oc_daily", targetType: "group", name: "日报群" }],
             platform: "feishu",
             enabled: true,
             direct: false,
@@ -89,6 +92,10 @@ describe("CronView", () => {
         message: "群发日报",
         chatId: "ou_owner",
         chatIds: ["ou_owner", "oc_team"],
+        resolvedTargets: [
+          { chatId: "ou_owner", targetType: "user", name: "Owner" },
+          { chatId: "oc_team", targetType: "group", name: "团队群" },
+        ],
         platform: "feishu",
         enabled: true,
         direct: false,
@@ -99,5 +106,7 @@ describe("CronView", () => {
     render(React.createElement(CronView));
 
     expect(await screen.findByText(/共 2 个目标/)).toBeDefined();
+    expect(screen.getByText(/Owner（ou_owner）/)).toBeDefined();
+    expect(screen.getByText(/团队群（oc_team）/)).toBeDefined();
   });
 });

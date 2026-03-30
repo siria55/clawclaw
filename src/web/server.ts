@@ -78,7 +78,9 @@ export interface StatusFile {
 export interface LastIMEventSummary {
   platform: string;
   chatId: string;
+  chatName?: string;
   userId: string;
+  userName?: string;
   timestamp: string;
   textPreview: string;
 }
@@ -93,12 +95,17 @@ interface IMLogEvent extends StoredIMEvent {
   userName?: string;
 }
 
+interface ResolvedCronJob extends CronJobConfig {
+  resolvedTargets?: FeishuTargetInfo[];
+}
+
 export interface StatusOverview {
   feishu: {
     runtime: RuntimeFeishuStatus;
     configuredInStorage: boolean;
     appId?: string;
     chatId?: string;
+    targetName?: string;
     hasAppSecret: boolean;
     hasVerificationToken: boolean;
     hasEncryptKey: boolean;
@@ -305,7 +312,7 @@ export class WebServer {
     }
 
     if (req.method === "GET" && path === "/api/status") {
-      this.#handleStatus(res);
+      await this.#handleStatus(res);
       return;
     }
 
@@ -342,7 +349,7 @@ export class WebServer {
     }
 
     if (req.method === "GET" && path === "/api/cron") {
-      this.#handleGetCron(res);
+      await this.#handleGetCron(res);
       return;
     }
 
@@ -463,16 +470,16 @@ export class WebServer {
     res.end(readFileSync(filePath));
   }
 
-  #handleStatus(res: ServerResponse): void {
+  async #handleStatus(res: ServerResponse): Promise<void> {
     const status: SystemStatus = this.#config.getStatus
       ? this.#config.getStatus()
       : { cronJobs: [], connections: [] };
-    const overview = this.#buildOverview(status.runtime);
+    const overview = await this.#buildOverview(status.runtime);
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ ...status, overview }));
   }
 
-  #buildOverview(runtime: RuntimeStatus | undefined): StatusOverview {
+  async #buildOverview(runtime: RuntimeStatus | undefined): Promise<StatusOverview> {
     const imConfig = this.#config.imConfigStorage?.read();
     const storedFeishu = imConfig?.feishu;
     const runtimeFeishu = runtime?.feishu ?? {
@@ -485,8 +492,14 @@ export class WebServer {
     const snapshots = this.#config.mountedDocLibrary?.listSnapshots() ?? [];
     const cronJobs = this.#config.cronStorage?.read() ?? [];
     const imStorage = this.#config.imEventStorage;
-    const feishuChats = imStorage?.listChats("feishu") ?? [];
+    const feishuChats = await this.#enrichFeishuChats(imStorage?.listChats("feishu") ?? []);
     const lastEvent = imStorage?.since(undefined).slice(-1)[0];
+    const runtimeTarget = storedFeishu?.chatId
+      ? await this.#resolveFeishuTargetInfo(storedFeishu.chatId)
+      : undefined;
+    const lastIMEvent = lastEvent
+      ? await this.#buildLastIMEventSummary(lastEvent)
+      : undefined;
 
     return {
       feishu: {
@@ -494,6 +507,7 @@ export class WebServer {
         configuredInStorage: !!storedFeishu,
         ...(storedFeishu?.appId ? { appId: storedFeishu.appId } : {}),
         ...(storedFeishu?.chatId ? { chatId: storedFeishu.chatId } : {}),
+        ...(runtimeTarget?.name ? { targetName: formatFeishuTargetLabel(runtimeTarget) } : {}),
         hasAppSecret: !!storedFeishu?.appSecret,
         hasVerificationToken: !!storedFeishu?.verificationToken,
         hasEncryptKey: !!storedFeishu?.encryptKey,
@@ -539,15 +553,7 @@ export class WebServer {
       ],
       configFiles: this.#buildStatusFiles(),
       chats: feishuChats,
-      ...(lastEvent ? {
-        lastIMEvent: {
-          platform: lastEvent.platform,
-          chatId: lastEvent.chatId,
-          userId: lastEvent.userId,
-          timestamp: lastEvent.timestamp,
-          textPreview: limitStatusText(lastEvent.text, 96),
-        },
-      } : {}),
+      ...(lastIMEvent ? { lastIMEvent } : {}),
     };
   }
 
@@ -725,8 +731,8 @@ export class WebServer {
     createReadStream(pngPath).pipe(res);
   }
 
-  #handleGetCron(res: ServerResponse): void {
-    const jobs = (this.#config.cronStorage?.read() ?? []).map(normalizeCronJobConfig);
+  async #handleGetCron(res: ServerResponse): Promise<void> {
+    const jobs = await this.#enrichCronJobs((this.#config.cronStorage?.read() ?? []).map(normalizeCronJobConfig));
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ jobs }));
   }
@@ -1251,6 +1257,88 @@ export class WebServer {
       return undefined;
     }
   }
+
+  async #resolveFeishuTargetInfo(chatId: string): Promise<FeishuTargetInfo | undefined> {
+    const platform = this.#buildFeishuLookupPlatform();
+    if (!platform) {
+      return undefined;
+    }
+
+    if (chatId.startsWith("oc_")) {
+      const name = await this.#resolveFeishuChatName(platform, chatId);
+      return {
+        chatId,
+        targetType: "group",
+        ...(name ? { name } : {}),
+      };
+    }
+
+    if (chatId.startsWith("ou_")) {
+      const name = await this.#resolveFeishuUserName(platform, chatId);
+      return {
+        chatId,
+        targetType: "user",
+        ...(name ? { name } : {}),
+      };
+    }
+
+    return {
+      chatId,
+      targetType: "unknown",
+    };
+  }
+
+  async #enrichFeishuChats(chats: StatusOverview["chats"]): Promise<StatusOverview["chats"]> {
+    const platform = this.#buildFeishuLookupPlatform();
+    if (!platform) {
+      return chats;
+    }
+
+    return Promise.all(chats.map(async (chat) => {
+      const chatName = chat.chatName ?? await this.#resolveFeishuChatName(platform, chat.chatId);
+      return {
+        ...chat,
+        ...(chatName ? { chatName } : {}),
+      };
+    }));
+  }
+
+  async #buildLastIMEventSummary(event: StoredIMEvent): Promise<LastIMEventSummary> {
+    const platform = this.#buildFeishuLookupPlatform();
+    const chatName = event.platform === "feishu" && platform
+      ? (event.chatName ?? await this.#resolveFeishuChatName(platform, event.chatId))
+      : event.chatName;
+    const userName = event.platform === "feishu" && platform
+      ? await this.#resolveFeishuUserName(platform, event.userId)
+      : undefined;
+
+    return {
+      platform: event.platform,
+      chatId: event.chatId,
+      ...(chatName ? { chatName } : {}),
+      userId: event.userId,
+      ...(userName ? { userName } : {}),
+      timestamp: event.timestamp,
+      textPreview: limitStatusText(event.text, 96),
+    };
+  }
+
+  async #enrichCronJobs(jobs: CronJobConfig[]): Promise<ResolvedCronJob[]> {
+    return Promise.all(jobs.map(async (job) => {
+      if (job.platform !== "feishu") {
+        return job;
+      }
+
+      const targets = await Promise.all(
+        normalizeCronJobConfig(job).chatIds!.map(async (chatId) => this.#resolveFeishuTargetInfo(chatId)),
+      );
+
+      return {
+        ...job,
+        resolvedTargets: targets.filter((target): target is FeishuTargetInfo => target !== undefined),
+      };
+    }));
+  }
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -1454,4 +1542,11 @@ async function resolveFeishuTargetInfo(platform: FeishuPlatform, chatId: string)
     chatId,
     targetType: "unknown",
   };
+}
+
+function formatFeishuTargetLabel(target: FeishuTargetInfo): string {
+  if (!target.name) return target.chatId;
+  if (target.targetType === "group") return `${target.name}（群聊）`;
+  if (target.targetType === "user") return `${target.name}（用户）`;
+  return `${target.name}（${target.chatId}）`;
 }

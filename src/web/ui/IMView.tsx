@@ -183,6 +183,7 @@ function FeishuRuntimeSection(props: { overview: StatusOverview | undefined }): 
             <InfoItem label="Webhook" value={feishu.runtime.webhookPath} mono />
             <InfoItem label="App ID" value={feishu.appId ?? "-"} mono />
             <InfoItem label="Chat ID" value={feishu.chatId ?? "-"} mono />
+            <InfoItem label="目标名称" value={feishu.targetName ?? "-"} />
             <InfoItem label="App Secret" value={feishu.hasAppSecret ? "已配置" : "未配置"} />
             <InfoItem label="Verification Token" value={feishu.hasVerificationToken ? "已配置" : "未配置"} />
             <InfoItem label="Encrypt Key" value={feishu.hasEncryptKey ? "已配置" : "未配置"} />

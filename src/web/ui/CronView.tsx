@@ -8,6 +8,11 @@ interface CronJobConfig {
   message: string;
   chatId: string;
   chatIds?: string[];
+  resolvedTargets?: Array<{
+    chatId: string;
+    targetType: "group" | "user" | "unknown";
+    name?: string;
+  }>;
   platform: string;
   enabled: boolean;
   direct: boolean;
@@ -82,14 +87,16 @@ function formatChatTargets(job: Pick<CronJobConfig, "chatId" | "chatIds">): stri
   return normalizeCronChatIds(job).join("\n");
 }
 
-function describeChatTargets(job: Pick<CronJobConfig, "chatId" | "chatIds">): string {
+function describeResolvedChatTargets(job: Pick<CronJobConfig, "chatId" | "chatIds" | "resolvedTargets">): string {
   const chatIds = normalizeCronChatIds(job);
   if (chatIds.length === 0) return "—";
-  if (chatIds.length === 1) {
-    const only = chatIds[0]!;
-    return `${only} ${getChatHint(only)}`.trim();
+
+  const targetMap = new Map((job.resolvedTargets ?? []).map((target) => [target.chatId, target] as const));
+  const labels = chatIds.map((chatId) => formatResolvedTarget(targetMap.get(chatId), chatId));
+  if (labels.length === 1) {
+    return labels[0]!;
   }
-  return `${chatIds.join(" / ")} · 共 ${chatIds.length} 个目标`;
+  return `${labels.join(" / ")} · 共 ${labels.length} 个目标`;
 }
 
 function getCardNotice(notice: Notice | null, jobId: string): Notice | null {
@@ -220,7 +227,7 @@ export function CronView(): React.JSX.Element {
                 </div>
                 <p className={styles.cronMsg}>{job.message}</p>
                 <div className={styles.metaList}>
-                  <span className={styles.cronMeta}>{job.platform} · {describeChatTargets(job)}</span>
+                  <span className={styles.cronMeta}>{job.platform} · {describeResolvedChatTargets(job)}</span>
                   {job.skillId && <span className={styles.cronMeta}>skillId: {job.skillId}</span>}
                   {job.sendSkillOutput && <span className={styles.cronMeta}>sendSkillOutput: {job.sendSkillOutput}</span>}
                   {job.direct && <span className={styles.cronMeta}>直发 {describeMsgType(job.msgType)}</span>}
@@ -316,4 +323,14 @@ function describeMsgType(msgType: CronJobConfig["msgType"]): string {
   if (msgType === "image") return "图片";
   if (msgType === "markdown") return "Markdown";
   return "文本";
+}
+
+function formatResolvedTarget(
+  target: CronJobConfig["resolvedTargets"] extends Array<infer T> ? T | undefined : never,
+  chatId: string,
+): string {
+  if (!target?.name) {
+    return `${chatId} ${getChatHint(chatId)}`.trim();
+  }
+  return `${target.name}（${chatId}）`;
 }

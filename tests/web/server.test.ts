@@ -254,6 +254,7 @@ describe("WebServer", () => {
   });
 
   it("GET /api/status returns visual overview for configs and Feishu runtime", async () => {
+    const originalFetch = global.fetch;
     const dir = mkdtempSync(join(tmpdir(), "claw-status-overview-"));
     try {
       const agent = makeMockAgent();
@@ -292,6 +293,27 @@ describe("WebServer", () => {
         enabled: true,
       }]);
 
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(makeFetchResponse({ tenant_access_token: "tenant-token" }))
+        .mockResolvedValueOnce(makeFetchResponse({
+          code: 0,
+          data: {
+            chat: {
+              name: "运营群",
+            },
+          },
+        }))
+        .mockResolvedValueOnce(makeFetchResponse({ tenant_access_token: "tenant-token" }))
+        .mockResolvedValueOnce(makeFetchResponse({
+          code: 0,
+          data: {
+            user: {
+              name: "管理员",
+            },
+          },
+        }));
+      global.fetch = fetchMock as typeof fetch;
+
       const server = new WebServer({
         agent,
         port: 0,
@@ -317,35 +339,115 @@ describe("WebServer", () => {
       });
       await server.start();
 
-      const res = await fetch(`http://localhost:${server.port}/api/status`);
-      const body = await res.json() as {
+      const response = await httpGetJson<{
         overview: {
-          feishu: { runtime: { source: string; active: boolean }; appId?: string; chatId?: string };
+          feishu: { runtime: { source: string; active: boolean }; appId?: string; chatId?: string; targetName?: string };
           metrics: Array<{ key: string; value: string }>;
           configFiles: Array<{ key: string; exists: boolean; summary: string }>;
           chats: Array<{ chatId: string; chatName?: string; lastEventType: string }>;
+          lastIMEvent?: { chatName?: string; userName?: string };
         };
-      };
+      }>(server.port, "/api/status");
 
-      expect(res.status).toBe(200);
-      expect(body.overview.feishu.runtime.source).toBe("storage");
-      expect(body.overview.feishu.runtime.active).toBe(true);
-      expect(body.overview.feishu.appId).toBe("cli_demo");
-      expect(body.overview.feishu.chatId).toBe("oc_demo");
-      expect(body.overview.metrics.find((item) => item.key === "memory")?.value).toBe("1");
-      expect(body.overview.metrics.find((item) => item.key === "feishu_chats")?.value).toBe("1");
-      expect(body.overview.configFiles.find((item) => item.key === "im_config")?.exists).toBe(true);
-      expect(body.overview.configFiles.find((item) => item.key === "cron_config")?.summary).toContain("任务 1 条");
-      expect(body.overview.chats).toEqual([
+      expect(response.status).toBe(200);
+      expect(response.body.overview.feishu.runtime.source).toBe("storage");
+      expect(response.body.overview.feishu.runtime.active).toBe(true);
+      expect(response.body.overview.feishu.appId).toBe("cli_demo");
+      expect(response.body.overview.feishu.chatId).toBe("oc_demo");
+      expect(response.body.overview.feishu.targetName).toBe("运营群（群聊）");
+      expect(response.body.overview.metrics.find((item) => item.key === "memory")?.value).toBe("1");
+      expect(response.body.overview.metrics.find((item) => item.key === "feishu_chats")?.value).toBe("1");
+      expect(response.body.overview.configFiles.find((item) => item.key === "im_config")?.exists).toBe(true);
+      expect(response.body.overview.configFiles.find((item) => item.key === "cron_config")?.summary).toContain("任务 1 条");
+      expect(response.body.overview.chats).toEqual([
         expect.objectContaining({
           chatId: "oc_demo",
           chatName: "运营群",
           lastEventType: "bot_added",
         }),
       ]);
+      expect(response.body.overview.lastIMEvent).toEqual(expect.objectContaining({
+        chatName: "运营群",
+        userName: "管理员",
+      }));
 
       await server.stop();
     } finally {
+      global.fetch = originalFetch;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("GET /api/cron enriches feishu target names", async () => {
+    const originalFetch = global.fetch;
+    const dir = mkdtempSync(join(tmpdir(), "claw-cron-targets-"));
+    try {
+      const agent = makeMockAgent();
+      const cronStorage = new ConfigStorage<CronJobConfig[]>(join(dir, "cron.json"), []);
+      cronStorage.write([{
+        id: "daily",
+        schedule: "0 9 * * *",
+        message: "日报",
+        chatId: "ou_owner",
+        chatIds: ["ou_owner", "oc_team"],
+        platform: "feishu",
+        enabled: true,
+      }]);
+
+      const imConfigStorage = new ConfigStorage<IMConfig>(join(dir, "im-config.json"));
+      imConfigStorage.write({
+        feishu: {
+          appId: "cli_demo",
+          appSecret: "secret",
+          verificationToken: "token",
+        },
+      });
+
+      const fetchMock = vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        if (url.includes("/auth/v3/tenant_access_token/internal")) {
+          return makeFetchResponse({ tenant_access_token: "tenant-token" });
+        }
+        if (url.includes("/contact/v3/users/ou_owner")) {
+          return makeFetchResponse({
+            code: 0,
+            data: {
+              user: {
+                name: "Owner",
+              },
+            },
+          });
+        }
+        if (url.includes("/im/v1/chats/oc_team")) {
+          return makeFetchResponse({
+            code: 0,
+            data: {
+              chat: {
+                name: "团队群",
+              },
+            },
+          });
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      });
+      global.fetch = fetchMock as typeof fetch;
+
+      const server = new WebServer({ agent, port: 0, staticDir, cronStorage, imConfigStorage });
+      await server.start();
+
+      const response = await httpGetJson<{
+        jobs: Array<{ resolvedTargets?: Array<{ chatId: string; name?: string }> }>;
+      }>(server.port, "/api/cron");
+
+      expect(response.status).toBe(200);
+      expect(response.body.jobs[0]?.resolvedTargets).toEqual([
+        expect.objectContaining({ chatId: "ou_owner", name: "Owner" }),
+        expect.objectContaining({ chatId: "oc_team", name: "团队群" }),
+      ]);
+
+      await server.stop();
+    } finally {
+      global.fetch = originalFetch;
       rmSync(dir, { recursive: true, force: true });
     }
   });
