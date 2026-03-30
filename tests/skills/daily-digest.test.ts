@@ -296,13 +296,13 @@ describe("buildDailyDigestSearchPlans", () => {
 });
 
 describe("buildBraveNewsSearchUrl", () => {
-  it("restricts Brave News Search to the past 24 hours", () => {
+  it("restricts Brave News Search to the past week", () => {
     const url = new URL(buildBraveNewsSearchUrl("OpenAI", 50));
 
     expect(url.searchParams.get("q")).toBe("OpenAI");
     expect(url.searchParams.get("count")).toBe("20");
     expect(url.searchParams.get("spellcheck")).toBe("0");
-    expect(url.searchParams.get("freshness")).toBe("pd");
+    expect(url.searchParams.get("freshness")).toBe("pw");
   });
 });
 

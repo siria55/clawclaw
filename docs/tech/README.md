@@ -409,7 +409,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 1. 读取 `SKILL.md` 获得默认搜索词、候选上限和国内/国际配额；若 `data/skills/daily-digest/config.json` 中存在自定义主题，则运行时覆盖默认搜索词
 2. 启动 Playwright chromium（headless）
-3. 依次请求 Brave Search API 的 `news/search` 接口，使用 `freshness=pd` 限制在过去 24 小时内获取候选新闻结果；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
+3. 依次请求 Brave Search API 的 `news/search` 接口，使用 `freshness=pw` 限制在过去一周内获取候选新闻结果；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
 4. 将 Brave 返回的标题、URL、来源、摘要与时间字段归一化为候选链接，跨关键词去重后先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际各调用一次 `ctx.agent.llm.complete()`，筛选为结构化 JSON（`DigestArticle[]`，含 `category`）
 5. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
 6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；同时把 Brave 返回的时间 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`

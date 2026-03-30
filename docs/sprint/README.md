@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`。
 
 ---
 
@@ -232,6 +232,12 @@
 - 内部 `publishedAt` 与 `date` 数据继续保留，供 JSON 输出和后续链路复用
 - 文档说明统一改为“展示层隐藏时间，数据层保留时间”
 
+## 第三十八阶段：日报时效窗口扩展到一周（Sprint 80）
+
+- `daily-digest` 的 Brave News Search 请求由 `freshness=pd` 调整为 `freshness=pw`
+- 默认搜索范围从“过去 24 小时”调整为“过去一周”
+- 运行日志、测试和文档说明统一改为“过去一周”口径
+
 ---
 
 ## 当前落点
@@ -273,5 +279,5 @@
 - `daily-digest-generate` 的手动执行链路已修复，当前会正常生成 `.html / .md / .png / .json` 到 `data/skills/daily-digest/`
 - `daily-digest` 的候选新闻搜索现已切到 Brave Search API，浏览器只保留给最终截图使用
 - Brave Search API Key 现在可直接在 WebUI 中配置，不再只能依赖环境变量
-- `daily-digest` 现在默认只检索过去 24 小时内的新闻，减少旧闻混入
+- `daily-digest` 现在默认只检索过去一周内的新闻，兼顾时效性和候选覆盖面
 - `daily-digest` 生成结果现在只显示来源，不再显示新闻时间；JSON 仍保留 `publishedAt` / `date`
