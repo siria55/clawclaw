@@ -204,6 +204,7 @@ export const DAILY_DIGEST_SCREENSHOT = {
 
 const BRAVE_NEWS_SEARCH_ENDPOINT = process.env["BRAVE_SEARCH_API_URL"] ?? "https://api.search.brave.com/res/v1/news/search";
 const BRAVE_NEWS_SEARCH_COUNT = 20;
+const BRAVE_NEWS_SEARCH_FRESHNESS = "pd";
 
 const EXTRACTION_SYSTEM = [
   "你是一个严谨的科技新闻筛选器。",
@@ -231,9 +232,9 @@ async function searchNewsWithBrave(
   const allLinks: DigestCandidateLink[] = [];
   const searchPlans = buildDailyDigestSearchPlans(queries);
   const apiKey = getBraveSearchApiKey(braveSearchApiKey);
-  log(`🧭 使用 Brave Search API 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求`);
+  log(`🧭 使用 Brave Search API 搜索过去 24 小时内的主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求`);
   for (const plan of searchPlans) {
-    log(`🌐 Brave 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
+    log(`🌐 Brave 搜索（过去 24 小时）: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
     const response = await fetchBraveNewsResponse(plan.searchText, apiKey, maxCandidates);
     const links = parseBraveNewsSearchResponse(response, plan.hintCategory);
     log(`🔗 获取 ${links.length} 个候选结果`);
@@ -979,13 +980,18 @@ function getBraveSearchApiKey(configuredKey: string | undefined): string {
   return apiKey;
 }
 
-async function fetchBraveNewsResponse(query: string, apiKey: string, maxCandidates: number): Promise<unknown> {
+export function buildBraveNewsSearchUrl(query: string, maxCandidates: number): string {
   const params = new URLSearchParams({
     q: query,
     count: String(Math.min(maxCandidates, BRAVE_NEWS_SEARCH_COUNT)),
     spellcheck: "0",
+    freshness: BRAVE_NEWS_SEARCH_FRESHNESS,
   });
-  const response = await fetch(`${BRAVE_NEWS_SEARCH_ENDPOINT}?${params.toString()}`, {
+  return `${BRAVE_NEWS_SEARCH_ENDPOINT}?${params.toString()}`;
+}
+
+async function fetchBraveNewsResponse(query: string, apiKey: string, maxCandidates: number): Promise<unknown> {
+  const response = await fetch(buildBraveNewsSearchUrl(query, maxCandidates), {
     headers: {
       Accept: "application/json",
       "X-Subscription-Token": apiKey,

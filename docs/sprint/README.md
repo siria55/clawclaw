@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`。
 
 ---
 
@@ -220,6 +220,12 @@
 - Brave Key 会保存到 `data/skills/daily-digest/config.json`
 - `daily-digest` 运行时优先读取 WebUI 保存的 key，未配置时回退到环境变量 `BRAVE_SEARCH_API_KEY`
 
+## 第三十六阶段：日报 24 小时时效筛选（Sprint 78）
+
+- `daily-digest` 的 Brave News Search 请求增加 `freshness=pd`，默认只搜过去 24 小时内的新闻
+- 运行日志和文档说明统一改为“过去 24 小时”口径
+- 保持现有自媒体过滤、主流媒体优先和发布日期归一化链路不变
+
 ---
 
 ## 当前落点
@@ -261,3 +267,4 @@
 - `daily-digest-generate` 的手动执行链路已修复，当前会正常生成 `.html / .md / .png / .json` 到 `data/skills/daily-digest/`
 - `daily-digest` 的候选新闻搜索现已切到 Brave Search API，浏览器只保留给最终截图使用
 - Brave Search API Key 现在可直接在 WebUI 中配置，不再只能依赖环境变量
+- `daily-digest` 现在默认只检索过去 24 小时内的新闻，减少旧闻混入

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDailyDigestSearchPlans,
+  buildBraveNewsSearchUrl,
   DAILY_DIGEST_SCREENSHOT,
   parseArticlesFromLLMOutput,
   parseBraveNewsSearchResponse,
@@ -290,6 +291,17 @@ describe("buildDailyDigestSearchPlans", () => {
       { query: "国际AI", searchText: "国际AI", hintCategory: "international" },
       { query: "OpenAI", searchText: "OpenAI", hintCategory: "international" },
     ]);
+  });
+});
+
+describe("buildBraveNewsSearchUrl", () => {
+  it("restricts Brave News Search to the past 24 hours", () => {
+    const url = new URL(buildBraveNewsSearchUrl("OpenAI", 50));
+
+    expect(url.searchParams.get("q")).toBe("OpenAI");
+    expect(url.searchParams.get("count")).toBe("20");
+    expect(url.searchParams.get("spellcheck")).toBe("0");
+    expect(url.searchParams.get("freshness")).toBe("pd");
   });
 });
 
