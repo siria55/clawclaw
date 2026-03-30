@@ -13,7 +13,7 @@ max-candidates: 36
 1. 默认使用本文件里的 `queries`；若 `data/skills/daily-digest/config.json` 中配置了自定义主题，则运行时优先使用配置值
 2. Playwright 直接导航各关键词的百度新闻搜索页（零 LLM 调用）
 3. 用 Playwright locator 提取页面所有链接（text + href），并尽量从搜索结果卡片提取新闻时间，再给链接打上国内/国际查询提示
-4. 跨关键词去重后，按国内 / 国际分别调用 LLM 筛选真实新闻文章并结构化为 JSON（含 `category`）；新闻时间继续沿用搜索结果里的 hint
+4. 跨关键词去重后，先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际分别调用 LLM 筛选真实新闻文章并结构化为 JSON（含 `category`）；新闻时间继续沿用搜索结果里的 hint
 5. 按国内 10 / 国际 5 的配额裁剪
 6. 将内容填入 HTML 模板，读取 `layout.css` 渲染日报并截图为 PNG
 7. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`

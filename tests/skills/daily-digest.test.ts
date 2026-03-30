@@ -125,6 +125,50 @@ describe("selectDigestArticles", () => {
     expect(selection.domestic[0]?.title).toBe("safe");
     expect(selection.all.some((article) => article.url.includes("10jqka.com.cn"))).toBe(false);
   });
+
+  it("excludes self-media articles from the final selection", () => {
+    const selection = selectDigestArticles([
+      createArticle("baijiahao", "domestic", {
+        url: "https://baijiahao.baidu.com/s?id=123",
+        source: "某某百家号",
+      }),
+      createArticle("sohuhao", "domestic", {
+        url: "https://www.sohu.com/a/123456789_121124376",
+        source: "科技观察搜狐号",
+      }),
+      createArticle("safe", "domestic", {
+        url: "https://www.thepaper.cn/newsDetail_forward_12345678",
+        source: "澎湃新闻",
+      }),
+    ], {
+      domestic: 3,
+      international: 0,
+    });
+
+    expect(selection.domestic).toHaveLength(1);
+    expect(selection.domestic[0]?.title).toBe("safe");
+    expect(selection.all.some((article) => article.source.includes("百家号"))).toBe(false);
+    expect(selection.all.some((article) => article.source.includes("搜狐号"))).toBe(false);
+  });
+
+  it("prefers mainstream media over generic sites when quota is tight", () => {
+    const selection = selectDigestArticles([
+      createArticle("generic", "international", {
+        url: "https://example.com/openai-update",
+        source: "Some Blog",
+      }),
+      createArticle("reuters", "international", {
+        url: "https://www.reuters.com/world/us/openai-update-2026-03-30/",
+        source: "Reuters",
+      }),
+    ], {
+      domestic: 0,
+      international: 1,
+    });
+
+    expect(selection.international).toHaveLength(1);
+    expect(selection.international[0]?.title).toBe("reuters");
+  });
 });
 
 describe("resolveDailyDigestQueries", () => {

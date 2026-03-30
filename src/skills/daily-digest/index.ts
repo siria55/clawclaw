@@ -97,8 +97,8 @@ const DOMESTIC_PATTERNS = [
 ];
 
 const LOW_PRIORITY_HOSTS = new Set([
-  "baijiahao.baidu.com",
-  "mbd.baidu.com",
+  "k.sina.com.cn",
+  "www.toutiao.com",
 ]);
 
 const BLOCKED_ARTICLE_HOSTS = new Set([
@@ -106,7 +106,67 @@ const BLOCKED_ARTICLE_HOSTS = new Set([
   "news.10jqka.com.cn",
   "stock.10jqka.com.cn",
   "t.10jqka.com.cn",
+  "baijiahao.baidu.com",
+  "mbd.baidu.com",
 ]);
+
+const SELF_MEDIA_SOURCE_PATTERNS = [
+  /百家号/i,
+  /搜狐号/i,
+  /网易号/i,
+  /企鹅号/i,
+  /头条号/i,
+  /一点号/i,
+  /大鱼号/i,
+  /新浪看点/i,
+  /东方号/i,
+  /快传号/i,
+  /知乎专栏/i,
+];
+
+const PREFERRED_MEDIA_SOURCE_PATTERNS = [
+  /新华社|人民日报|央视网|中国新闻网|澎湃新闻|界面新闻|第一财经|财新|证券时报|经济观察报|晚点/i,
+  /36氪|钛媒体|虎嗅|IT之家|雷峰网/i,
+  /Reuters|路透|Bloomberg|彭博|Financial Times|FT|华尔街日报|WSJ|BBC|CNBC|The Verge|TechCrunch|AP News|美联社/i,
+  /OpenAI|Anthropic|Google|Microsoft|NVIDIA|Meta|Apple|Amazon|Tesla|字节跳动|阿里巴巴|腾讯|华为/i,
+];
+
+const PREFERRED_MEDIA_HOST_PATTERNS = [
+  /(^|\.)news\.cn$/i,
+  /(^|\.)people\.com\.cn$/i,
+  /(^|\.)chinanews\.com\.cn$/i,
+  /(^|\.)thepaper\.cn$/i,
+  /(^|\.)jiemian\.com$/i,
+  /(^|\.)yicai\.com$/i,
+  /(^|\.)caixin\.com$/i,
+  /(^|\.)stcn\.com$/i,
+  /(^|\.)eeo\.com\.cn$/i,
+  /(^|\.)36kr\.com$/i,
+  /(^|\.)tmtpost\.com$/i,
+  /(^|\.)huxiu\.com$/i,
+  /(^|\.)ithome\.com$/i,
+  /(^|\.)leiphone\.com$/i,
+  /(^|\.)reuters\.com$/i,
+  /(^|\.)bloomberg\.com$/i,
+  /(^|\.)ft\.com$/i,
+  /(^|\.)wsj\.com$/i,
+  /(^|\.)bbc\.com$/i,
+  /(^|\.)cnbc\.com$/i,
+  /(^|\.)theverge\.com$/i,
+  /(^|\.)techcrunch\.com$/i,
+  /(^|\.)apnews\.com$/i,
+  /(^|\.)openai\.com$/i,
+  /(^|\.)anthropic\.com$/i,
+  /(^|\.)googleblog\.com$/i,
+  /(^|\.)blog\.google$/i,
+  /(^|\.)microsoft\.com$/i,
+  /(^|\.)nvidia\.com$/i,
+  /(^|\.)about\.fb\.com$/i,
+  /(^|\.)meta\.com$/i,
+  /(^|\.)apple\.com$/i,
+  /(^|\.)amazon\.science$/i,
+  /(^|\.)aws\.amazon\.com$/i,
+];
 
 const DAILY_DECK_LINES = [
   "先看事实，再下判断。",
@@ -128,7 +188,9 @@ const EXTRACTION_SYSTEM = [
   "你的任务是从候选链接中挑出真实新闻文章，并返回严格 JSON 数组。",
   "不要聊天，不要解释，不要使用 markdown，除了 JSON 数组不要输出任何别的内容。",
   "只保留新闻文章页，排除搜索页、导航页、专题页、广告页、下载页和纯视频页。",
-  "优先原创媒体、主流媒体、官网和权威发布，尽量减少百家号等聚合自媒体；只有在没有更好候选时才保留。",
+  "优先原创媒体、主流媒体、官网和权威发布。",
+  "不要返回百家号、搜狐号、网易号、企鹅号、头条号、一点号、大鱼号等自媒体或聚合号内容。",
+  "如果同一事件同时有主流媒体、公司官网和自媒体版本，只保留主流媒体或官网版本。",
   "category 只允许 domestic 或 international。",
   "domestic 表示中国公司、政策、市场、机构或中国互联网/创投动态为主。",
   "international 表示海外公司、政策、市场、机构或全球科技/创投动态为主。",
@@ -225,13 +287,19 @@ async function searchNewsWithBrowser(
   }
 
   const uniqueLinks = dedupeLinks(allLinks);
-  if (uniqueLinks.length === 0) {
+  const filteredLinks = uniqueLinks.filter((link) => !isBlockedLink(link));
+  const blockedCount = uniqueLinks.length - filteredLinks.length;
+  if (blockedCount > 0) {
+    log(`🚫 过滤 ${blockedCount} 个自媒体 / 黑名单链接`);
+  }
+
+  if (filteredLinks.length === 0) {
     log("⚠️ 未获取到任何链接");
     return [];
   }
 
-  const domesticLinks = uniqueLinks.filter((link) => link.hintCategory === "domestic");
-  const internationalLinks = uniqueLinks.filter((link) => link.hintCategory === "international");
+  const domesticLinks = filteredLinks.filter((link) => link.hintCategory === "domestic");
+  const internationalLinks = filteredLinks.filter((link) => link.hintCategory === "international");
 
   const domesticArticles = await extractArticlesFromLinks(
     ctx,
@@ -486,6 +554,8 @@ ${linkText}
 请只筛选出真正属于${CATEGORY_LABEL[category]}科技、创投或互联网动态的新闻正文页，满足这些要求：
 - 只保留新闻正文页，不要搜索结果、专题页、导航链接、下载页、广告页
 - 优先原创媒体、主流媒体、公司官网和权威发布
+- 不要百家号、搜狐号、网易号、企鹅号、头条号、一点号、大鱼号等自媒体或聚合号内容
+- 如果同一事件既有主流媒体 / 官网版本，也有自媒体版本，只保留前者
 - 尽量覆盖不同主题，避免同题反复
 - summary 尽量用一句中文短句概括；如果从标题无法可靠概括，可留空字符串
 - category 固定返回 ${category}
@@ -739,28 +809,22 @@ function rankArticles(articles: DigestArticle[]): DigestArticle[] {
 }
 
 function isBlockedArticle(article: DigestArticle): boolean {
-  if (article.source.includes("同花顺")) return true;
-  try {
-    const hostname = new URL(article.url).hostname.toLowerCase();
-    return hostname === "10jqka.com.cn" || hostname.endsWith(".10jqka.com.cn") || BLOCKED_ARTICLE_HOSTS.has(hostname);
-  } catch {
-    return false;
-  }
+  if (article.source.includes("同花顺") || isSelfMediaSource(article.source)) return true;
+  const hostname = getHostname(article.url);
+  return hostname ? isBlockedHostname(hostname) : false;
 }
 
 function scoreArticle(article: DigestArticle): number {
   let score = 0;
   if (article.summary.trim()) score += 1;
   if (article.source.trim()) score += 1;
-  try {
-    const hostname = new URL(article.url).hostname.toLowerCase();
-    if (!LOW_PRIORITY_HOSTS.has(hostname)) score += 2;
-    if (hostname.endsWith(".cn")) score += article.category === "domestic" ? 1 : 0;
-    if (!hostname.endsWith(".cn")) score += article.category === "international" ? 1 : 0;
-  } catch {
-    // ignore URL parse failures
-  }
-  if (article.source.includes("百家号")) score -= 2;
+  const hostname = getHostname(article.url);
+  if (hostname && !LOW_PRIORITY_HOSTS.has(hostname)) score += 2;
+  if (hostname?.endsWith(".cn")) score += article.category === "domestic" ? 1 : 0;
+  if (hostname && !hostname.endsWith(".cn")) score += article.category === "international" ? 1 : 0;
+  if (hostname && isPreferredMediaHost(hostname)) score += 3;
+  if (isPreferredMediaSource(article.source)) score += 2;
+  if (isSelfMediaSource(article.source)) score -= 4;
   return score;
 }
 
@@ -881,6 +945,37 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function isBlockedLink(link: LinkItem): boolean {
+  const hostname = getHostname(link.href);
+  return hostname ? isBlockedHostname(hostname) : false;
+}
+
+function isBlockedHostname(hostname: string): boolean {
+  return hostname === "10jqka.com.cn"
+    || hostname.endsWith(".10jqka.com.cn")
+    || BLOCKED_ARTICLE_HOSTS.has(hostname);
+}
+
+function isSelfMediaSource(source: string): boolean {
+  return SELF_MEDIA_SOURCE_PATTERNS.some((pattern) => pattern.test(source));
+}
+
+function isPreferredMediaSource(source: string): boolean {
+  return PREFERRED_MEDIA_SOURCE_PATTERNS.some((pattern) => pattern.test(source));
+}
+
+function isPreferredMediaHost(hostname: string): boolean {
+  return PREFERRED_MEDIA_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
+}
+
+function getHostname(value: string): string | undefined {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
 }
 
 function canonicalizeUrl(value: string): string {
