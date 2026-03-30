@@ -15,7 +15,7 @@ max-candidates: 36
 3. 将 Brave 返回的标题、URL、来源、摘要与时间元信息整理为候选链接，并打上国内/国际查询提示
 4. 跨关键词去重后，先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际分别调用 LLM 筛选真实新闻文章并结构化为 JSON（含 `category`）；新闻时间继续沿用 Brave 返回的时间 hint，并最佳努力推导结构化 `date`
 5. 按国内 10 / 国际 5 的配额裁剪
-6. 将内容填入 HTML 模板，读取 `layout.css` 渲染日报并截图为 PNG
+6. 将内容填入 HTML 模板，读取 `layout.css` 渲染日报并截图为 PNG；生成结果只展示来源，不展示新闻时间
 7. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
 
 手动执行默认 Cron `daily-digest-generate` 时，生成文件同样写入 `data/skills/daily-digest/`。

@@ -171,7 +171,7 @@ Agent 指令...
 4. 若 LLM 返回 fenced json 或 near-JSON（如标题引号未转义），解析层会做兜底修复
 5. 依据配额裁成国内 10 篇、国际 5 篇，共 15 篇
 6. 将内容填入 HTML 模板，封面 `deck` 使用每日轮换短句，“今日摘要”按新闻内容生成概览
-7. 新闻条目展示来源与新闻时间；若个别条目未提取到时间，则仅展示来源
+7. 新闻条目生成结果仅展示来源，不展示新闻时间
 8. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`；其中 JSON 会包含 `publishedAt` 和最佳努力推导的 `date`
 9. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
 

@@ -6,6 +6,7 @@ import {
   parseArticlesFromLLMOutput,
   parseBraveNewsSearchResponse,
   renderDailyDigestHtml,
+  renderDailyDigestMarkdown,
   resolveDailyDigestQueries,
   selectDigestArticles,
   type DailyDigestSelection,
@@ -330,14 +331,31 @@ describe("renderDailyDigestHtml", () => {
     expect(html).toContain("https://example.com/B");
     expect(html).toContain('<span class="num">01</span>');
     expect(html).toContain('<span class="num">02</span>');
-    expect(html).toContain("A time");
-    expect(html).toContain("B time");
+    expect(html).not.toContain("A time");
+    expect(html).not.toContain("B time");
     expect(html).not.toContain("Browser-searched");
     expect(html).not.toContain("LOCAL SIGNAL");
     expect(html).not.toContain("GLOBAL SIGNAL");
     expect(html).not.toContain("backdrop-filter");
     expect(html).not.toContain("filter: blur(");
     expect(html).not.toContain("{{");
+  });
+});
+
+describe("renderDailyDigestMarkdown", () => {
+  it("renders source without published time", () => {
+    const selection: DailyDigestSelection = {
+      domestic: [createArticle("A", "domestic")],
+      international: [createArticle("B", "international")],
+      all: [createArticle("A", "domestic"), createArticle("B", "international")],
+    };
+
+    const markdown = renderDailyDigestMarkdown(selection, "2026年3月19日");
+
+    expect(markdown).toContain("_A source_");
+    expect(markdown).toContain("_B source_");
+    expect(markdown).not.toContain("A time");
+    expect(markdown).not.toContain("B time");
   });
 });
 

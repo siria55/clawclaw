@@ -293,7 +293,7 @@ export function renderDailyDigestHtml(selection: DailyDigestSelection, date: str
 }
 
 /** Render articles as a Markdown digest. */
-function renderMarkdown(selection: DailyDigestSelection, date: string): string {
+export function renderDailyDigestMarkdown(selection: DailyDigestSelection, date: string): string {
   const domesticRows = renderMarkdownSection(selection.domestic, 1);
   const internationalRows = renderMarkdownSection(selection.international, selection.domestic.length + 1);
   const summary = buildSummaryText(selection);
@@ -400,7 +400,7 @@ export class DailyDigestSkill implements Skill {
       const dataDirPath = ctx.dataDir ?? "";
       if (dataDirPath) {
         writeFileSync(join(dataDirPath, `${dateKey}.html`), html, "utf8");
-        writeFileSync(join(dataDirPath, `${dateKey}.md`), renderMarkdown(selection, dateLabel), "utf8");
+        writeFileSync(join(dataDirPath, `${dateKey}.md`), renderDailyDigestMarkdown(selection, dateLabel), "utf8");
         writeFileSync(join(dataDirPath, `${dateKey}.png`), imageBuffer);
         writeFileSync(join(dataDirPath, `${dateKey}.json`), JSON.stringify(selection.all, null, 2), "utf8");
         ctx.log?.(`💾 文件已保存到 ${dataDirPath}`);
@@ -829,9 +829,6 @@ function renderItem(article: DigestArticle, index: number): string {
   const summaryBlock = article.summary
     ? `<p class="summary">${escapeHtml(article.summary)}</p>`
     : "";
-  const publishedAtBlock = article.publishedAt
-    ? `<span class="published-at">${escapeHtml(article.publishedAt)}</span>`
-    : "";
 
   return fillTemplate(ITEM_TEMPLATE, {
     INDEX: String(index).padStart(2, "0"),
@@ -839,7 +836,6 @@ function renderItem(article: DigestArticle, index: number): string {
     TITLE: escapeHtml(article.title),
     SUMMARY_BLOCK: summaryBlock,
     SOURCE: escapeHtml(article.source || "未知来源"),
-    PUBLISHED_AT_BLOCK: publishedAtBlock,
   });
 }
 
@@ -850,7 +846,7 @@ function renderMarkdownSection(articles: DigestArticle[], startIndex: number): s
       const lines = [
         `${startIndex + index}. **[${article.title}](${article.url})**`,
         article.summary ? `   ${article.summary}` : "",
-        `   _${article.source}${article.publishedAt ? ` · ${article.publishedAt}` : ""}_`,
+        `   _${article.source}_`,
       ].filter(Boolean);
       return lines.join("\n");
     })

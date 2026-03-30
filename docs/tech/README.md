@@ -414,7 +414,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 5. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
 6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；同时把 Brave 返回的时间 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`
 7. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML
-8. 条目元信息显示为“来源 + 新闻时间”；若未提取到时间则仅显示来源
+8. 条目元信息展示层只显示来源；新闻时间仍保留在文章对象中供 JSON 输出与 `date` 推导复用
 9. Playwright 截图为 PNG，写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
 10. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
 11. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
