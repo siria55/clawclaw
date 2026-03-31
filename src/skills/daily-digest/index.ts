@@ -839,7 +839,7 @@ function renderSection(category: DigestCategory, articles: DigestArticle[], star
   return fillTemplate(SECTION_TEMPLATE, {
     SECTION_KEY: category,
     SECTION_EYEBROW: category === "domestic" ? "国内主线" : "国际主线",
-    SECTION_TITLE: category === "domestic" ? "国内科技" : "国际科技",
+    SECTION_TITLE: category === "domestic" ? "国内资讯" : "国际资讯",
     SECTION_COUNT: String(articles.length).padStart(2, "0"),
     SECTION_ITEMS: items,
   });

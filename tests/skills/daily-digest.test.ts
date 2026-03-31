@@ -389,8 +389,8 @@ describe("renderDailyDigestHtml", () => {
     expect(html).not.toContain("科技新闻");
     expect(html).toContain("真正重要的，不是更快，而是更准。");
     expect(html).toContain("国内主线");
-    expect(html).toContain("国内科技");
-    expect(html).toContain("国际科技");
+    expect(html).toContain("国内资讯");
+    expect(html).toContain("国际资讯");
     expect(html).toContain("国内焦点集中在A summary。");
     expect(html).toContain("国际方面重点关注B summary。");
     expect(html).toContain("https://example.com/A");
