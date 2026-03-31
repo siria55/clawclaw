@@ -567,6 +567,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 内容 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起，只展示已通过 `memory_save` 落库的条目 |
 | 自动化 | Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行、直发文本 / Markdown / 图片、支持多目标发送 |
 | 自动化 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志；`daily-digest` 卡片内可直接修改搜索主题 |
+| 自动化 | 搜索 | `#search` | `SearchConfigView` | 集中管理 Brave Search API Key 与 `daily-digest` 搜索主题；保存到 `data/skills/daily-digest/config.json` |
 | IM | 消息 | `#im` | `IMView` | IM 页默认二级 tab；展示实时 IM 日志、群聊 / 直发筛选 |
 | IM | 状态 | `#im-status` | `IMView` | 展示 IM 平台连接、飞书运行摘要、群聊列表，并带右侧 TOC |
 | IM | 配置 | `#im-config` | `IMView` | 展示飞书 IM 凭证表单和运行摘要 |
@@ -577,7 +578,7 @@ URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读
 
 `CronView` 通过 `GET /api/cron` 读取配置，`POST /api/cron` 保存，`DELETE /api/cron/:id` 删除，`POST /api/cron/:id/run` 直接触发一次运行；后端再通过 `CronScheduler.runNow()` 复用既有 Skill / IM 投递链路。直发模式下可选择 `text` / `markdown` / `image`，其中 Markdown 会优先走平台的 `sendMarkdown()` 能力。发送目标支持多行输入，保存后会归一化为 `chatId + chatIds`；若是仅执行 Skill 的 Cron，则允许空目标保存。
 
-`ContentView`、`AutomationView`、`SystemView` 负责承载同一一级域下的二级 tab 壳层；`App.tsx` 统一控制其 `activeTab` 和 `onTabChange`，避免子页各自读写 hash 导致路由分散。
+`ContentView`、`AutomationView`、`SystemView` 负责承载同一一级域下的二级 tab 壳层；`App.tsx` 统一控制其 `activeTab` 和 `onTabChange`，避免子页各自读写 hash 导致路由分散。`AutomationView` 当前承载 `Cron / Skills / 搜索` 三个子页，并兼容把旧 `#search-config` 映射到新的 `#search`。
 
 `SettingsView`、`StatusView` 以及 `IMView` 的状态子 tab 都会在页面右侧渲染 `SectionToc`，点击后使用 `scrollIntoView()` 在当前 tab 内平滑滚动到目标区块，不修改主 URL hash。
 
@@ -597,7 +598,7 @@ URL hash 路由由 `App.tsx` 自行管理（无路由库依赖）：初始化读
 
 **等待指示器（TypingBubble）：** `streaming=true` 且无正在流式输出的 assistant 气泡时显示三点跳动动画，给予即时反馈。
 
-**SkillsView 日志面板：** 手动触发 Skill 后，通过 `fetch` + `ReadableStream` 读取 SSE 流，实时渲染深色终端风格日志，自动滚动到底部。`done` 事件后请求 `GET /api/skills/:id/latest-image` 展示 PNG 预览，加载失败自动隐藏。`daily-digest` 额外在同一卡片内提供搜索主题配置，避免手动运行和配置分散在不同 tab。
+**SkillsView 日志面板：** 手动触发 Skill 后，通过 `fetch` + `ReadableStream` 读取 SSE 流，实时渲染深色终端风格日志，自动滚动到底部。`done` 事件后请求 `GET /api/skills/:id/latest-image` 展示 PNG 预览，加载失败自动隐藏。`daily-digest` 卡片仍保留搜索主题兼容入口，但推荐统一在 `SearchConfigView` 中管理 Brave 搜索配置。
 
 ---
 

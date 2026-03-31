@@ -1,8 +1,9 @@
 import { CronView } from "./CronView";
+import { SearchConfigView } from "./SearchConfigView";
 import { SkillsView } from "./SkillsView";
 import styles from "./HubView.module.css";
 
-export type AutomationTab = "cron" | "skills";
+export type AutomationTab = "cron" | "skills" | "search";
 
 interface AutomationViewProps {
   activeTab: AutomationTab;
@@ -27,9 +28,20 @@ export function AutomationView(props: AutomationViewProps): React.JSX.Element {
         >
           Skills
         </button>
+        <button
+          type="button"
+          className={`${styles.subTab} ${props.activeTab === "search" ? styles.subTabActive : ""}`}
+          onClick={() => props.onTabChange("search")}
+        >
+          搜索
+        </button>
       </div>
       <div className={styles.panel}>
-        {props.activeTab === "cron" ? <CronView /> : <SkillsView />}
+        {props.activeTab === "cron"
+          ? <CronView />
+          : props.activeTab === "skills"
+          ? <SkillsView />
+          : <SearchConfigView />}
       </div>
     </div>
   );

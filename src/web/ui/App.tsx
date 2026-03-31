@@ -52,6 +52,9 @@ function getRouteFromHash(hash: string): RouteState {
       return { ...DEFAULT_ROUTE, view: "content", contentTab: "memory" };
     case "#skills":
       return { ...DEFAULT_ROUTE, view: "automation", automationTab: "skills" };
+    case "#search":
+    case "#search-config":
+      return { ...DEFAULT_ROUTE, view: "automation", automationTab: "search" };
     case "#cron":
       return { ...DEFAULT_ROUTE, view: "automation", automationTab: "cron" };
     case "#im-status":
@@ -74,7 +77,9 @@ function getHashForContentTab(tab: ContentTab): string {
 }
 
 function getHashForAutomationTab(tab: AutomationTab): string {
-  return tab === "skills" ? "#skills" : "#cron";
+  if (tab === "skills") return "#skills";
+  if (tab === "search") return "#search";
+  return "#cron";
 }
 
 function getHashForIMTab(tab: IMSubTab): string {

@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`、`sprint-84.md`。
 
 ---
 
@@ -256,6 +256,12 @@
 - 当用户问“你谁 / 你叫什么 / 你是做什么的”时，模型被明确要求优先依据这些配置回答
 - `app.ts` 与 `src/web/dev.ts` 共用同一套 system prompt 组装逻辑
 
+## 第四十二阶段：Brave 搜索配置独立页（Sprint 84）
+
+- `自动化` 下新增 `搜索` 子 tab，统一管理 Brave Search API Key 和 `daily-digest` 搜索主题
+- 新增 `#search` hash，并兼容旧的 `#search-config` 直达入口
+- 搜索配置继续持久化到 `data/skills/daily-digest/config.json`
+
 ---
 
 ## 当前落点
@@ -269,7 +275,7 @@
 - `对话` 页里的错误卡片现已支持复制，`401` 等报错会保留状态码与服务端错误内容
 - OpenAI / 代理网关返回异常 JSON 时，不再退化成 `Cannot read properties of undefined (reading '0')`
 - `内容` 内部为 `新闻库` / `记忆库`
-- `自动化` 内部为 `Cron` / `Skills`
+- `自动化` 内部为 `Cron` / `Skills` / `搜索`
 - `IM` 内部为 `状态` / `消息` / `配置`
 - `系统` 内部为 `状态` / `设置`
 - `#status` / `#settings` 以及 `#im-status` 等旧 hash 仍兼容到新的二级页
@@ -280,6 +286,7 @@
 - 飞书里问“给我今天的新闻”会优先收到今日日报图片；文本版可显式索取
 - 飞书 Cron 已支持同一任务同时投递到多个 chat / 群
 - `daily-digest` 的搜索主题配置、手动运行、日志和图片预览已收拢到 `自动化 > Skills > daily-digest`
+- Brave 搜索相关配置现已统一收拢到 `自动化 > 搜索`，可集中维护搜索主题和 `Brave Search API Key`
 - 今日日报封面会轮换一句中文短句，“今日摘要”展示内容概览而不是数量统计
 - 今日日报长图已收紧版式并移除高风险滤镜层，同花顺来源不会进入最终结果
 - 今日日报支持回复数字获取原文链接，编号与当天 JSON 输出顺序一致，返回内容为单独链接

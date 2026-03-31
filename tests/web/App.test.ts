@@ -30,11 +30,12 @@ vi.mock("../../src/web/ui/ContentView.js", () => ({
 }));
 
 vi.mock("../../src/web/ui/AutomationView.js", () => ({
-  AutomationView: (props: { activeTab: string; onTabChange: (tab: "cron" | "skills") => void }) => (
+  AutomationView: (props: { activeTab: string; onTabChange: (tab: "cron" | "skills" | "search") => void }) => (
     React.createElement("div", { "data-testid": "automation-view" },
       React.createElement("span", null, props.activeTab),
       React.createElement("button", { type: "button", onClick: () => props.onTabChange("cron") }, "automation-cron"),
       React.createElement("button", { type: "button", onClick: () => props.onTabChange("skills") }, "automation-skills"),
+      React.createElement("button", { type: "button", onClick: () => props.onTabChange("search") }, "automation-search"),
     )
   ),
 }));
@@ -80,6 +81,8 @@ describe("App", () => {
   it.each([
     ["#memory", "content-view", "memory"],
     ["#skills", "automation-view", "skills"],
+    ["#search", "automation-view", "search"],
+    ["#search-config", "automation-view", "search"],
     ["#im-status", "im-view", "status"],
     ["#im-config", "im-view", "config"],
     ["#settings", "system-view", "settings"],
@@ -117,6 +120,9 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "automation-skills" }));
     await waitFor(() => expect(window.location.hash).toBe("#skills"));
     expect(screen.getByTestId("automation-view").textContent ?? "").toContain("skills");
+    fireEvent.click(screen.getByRole("button", { name: "automation-search" }));
+    await waitFor(() => expect(window.location.hash).toBe("#search"));
+    expect(screen.getByTestId("automation-view").textContent ?? "").toContain("search");
 
     fireEvent.click(screen.getByRole("button", { name: "IM" }));
     await waitFor(() => expect(window.location.hash).toBe("#im"));
