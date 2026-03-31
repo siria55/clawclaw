@@ -266,6 +266,40 @@ describe("selectDigestArticles", () => {
     expect(selection.international).toHaveLength(1);
     expect(selection.international[0]?.title).toBe("reuters");
   });
+
+  it("filters non-Chinese-or-English language articles from the international section", () => {
+    const selection = selectDigestArticles([
+      createArticle("jp", "international", {
+        title: "OpenAIが教育向け新機能を発表",
+        summary: "日本語 summary",
+        source: "日経クロステック",
+      }),
+      createArticle("kr", "international", {
+        title: "오픈AI 교육 기능 업데이트",
+        summary: "한국어 summary",
+        source: "연합뉴스",
+      }),
+      createArticle("en", "international", {
+        title: "OpenAI expands education tools",
+        summary: "New classroom workflow features roll out this week.",
+        source: "Reuters",
+      }),
+      createArticle("zh", "international", {
+        title: "OpenAI 扩大教育产品布局",
+        summary: "新功能面向全球课堂场景推出。",
+        source: "界面新闻",
+      }),
+    ], {
+      domestic: 0,
+      international: 3,
+    });
+
+    expect(selection.international).toHaveLength(2);
+    expect(selection.international.map((article) => article.title)).toEqual([
+      "OpenAI expands education tools",
+      "OpenAI 扩大教育产品布局",
+    ]);
+  });
 });
 
 describe("resolveDailyDigestQueries", () => {
@@ -366,9 +400,11 @@ describe("buildDailyDigestExtractionPrompt", () => {
     ], 8);
 
     expect(DAILY_DIGEST_EXTRACTION_SYSTEM).toContain("教育科技新闻筛选器");
+    expect(DAILY_DIGEST_EXTRACTION_SYSTEM).toContain("international 结果只保留可用中文或英文阅读与展示的内容");
     expect(prompt).toContain("教育 / 教育科技 / AI 教育 / 教育公司");
     expect(prompt).toContain("优先保留教育、教育科技、AI 教育、教育公司、教育平台、教育政策、教育产品相关内容");
     expect(prompt).toContain("只有在它与教育行业、教育场景、教育产品或教育公司明显相关时才保留");
+    expect(prompt).toContain("国际结果只保留中文或英文内容");
   });
 });
 

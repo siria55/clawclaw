@@ -218,6 +218,7 @@ export const DAILY_DIGEST_EXTRACTION_SYSTEM = [
   "category 只允许 domestic 或 international。",
   "domestic 表示中国教育、教育科技、AI 教育、教育公司、教育政策、教育平台，或与中国教育场景强相关的科技/创投动态为主。",
   "international 表示海外教育、教育科技、AI 教育、教育公司、教育政策、教育平台，或与全球教育场景强相关的科技/创投动态为主。",
+  "international 结果只保留可用中文或英文阅读与展示的内容，排除明显为日文、韩文等其他语言的页面。",
   "如果字符串里出现双引号，必须转义。",
 ].join("\n");
 
@@ -443,6 +444,7 @@ export function selectDigestArticles(
   const used = new Set(domestic.map((article) => canonicalizeUrl(article.url)));
   const international = ranked
     .filter((article) => article.category === "international")
+    .filter((article) => isAllowedInternationalArticle(article))
     .filter((article) => !used.has(canonicalizeUrl(article.url)))
     .slice(0, quota.international);
 
@@ -566,6 +568,7 @@ ${linkText}
 - 如果同一事件既有主流媒体 / 官网版本，也有自媒体版本，只保留前者
 - 尽量覆盖不同主题，避免同题反复
 - summary 尽量用一句中文短句概括；如果从标题无法可靠概括，可留空字符串
+- 国际结果只保留中文或英文内容；如果页面明显是日文、韩文或其他非中文/英文语言，不要返回
 - category 固定返回 ${category}
 
 最多返回 ${maxCandidates} 篇，按质量、相关性和时效性排序。
@@ -807,6 +810,29 @@ function isBlockedArticle(article: DigestArticle): boolean {
   if (article.source.includes("同花顺") || isSelfMediaSource(article.source)) return true;
   const hostname = getHostname(article.url);
   return hostname ? isBlockedHostname(hostname) : false;
+}
+
+function isAllowedInternationalArticle(article: DigestArticle): boolean {
+  if (article.category !== "international") return true;
+  return [article.title, article.summary, article.source].every((text) => containsOnlyChineseOrEnglishText(text));
+}
+
+function containsOnlyChineseOrEnglishText(text: string): boolean {
+  const normalized = text.normalize("NFKC");
+  for (const char of normalized) {
+    if (isAsciiReadableChar(char) || isCommonCjkPunctuation(char)) continue;
+    if (/\p{Script=Han}/u.test(char)) continue;
+    if (/\p{Letter}/u.test(char)) return false;
+  }
+  return true;
+}
+
+function isAsciiReadableChar(char: string): boolean {
+  return /^[\u0020-\u007e]$/u.test(char);
+}
+
+function isCommonCjkPunctuation(char: string): boolean {
+  return /^[\u3000-\u303f\uff00-\uffef]$/u.test(char);
 }
 
 function scoreArticle(article: DigestArticle): number {
