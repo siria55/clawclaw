@@ -169,9 +169,10 @@ corepack pnpm start
 
 旧链接仍兼容：
 - `#memory`、`#skills`、`#settings` 仍可直接打开对应二级页
-- `#digest` 可直接打开 `日报记录`
 - `#search-config` 会直接打开 `自动化 > 搜索`
 - `#im-status` / `#im-config` 会直接打开 `IM` 页对应子 tab
+
+新入口也可直接访问：`#digest` 可直接打开 `日报记录`。
 
 **飞书会话规则**：
 - 长期记忆仍共用同一个记忆库

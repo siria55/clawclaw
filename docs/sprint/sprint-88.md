@@ -8,11 +8,11 @@
 
 ## 完成项
 
-- [ ] 为每次 `daily-digest` 执行生成独立 run 记录
-- [ ] 保存 Brave 请求参数、返回结果与关键筛选阶段数据
-- [ ] 提供后端接口读取 run 列表与详情
-- [ ] 在 WebUI 新增一级 tab 展示 run 记录
-- [ ] 更新 sprint / prd / tech / manual 文档
+- [x] 为每次 `daily-digest` 执行生成独立 run 记录
+- [x] 保存 Brave 请求参数、返回结果与关键筛选阶段数据
+- [x] 提供后端接口读取 run 列表与详情
+- [x] 在 WebUI 新增一级 tab 展示 run 记录
+- [x] 更新 sprint / prd / tech / manual 文档
 
 ## 设计说明
 
@@ -22,10 +22,12 @@
 
 ## 验证
 
-- [ ] `corepack pnpm test -- tests/skills/daily-digest.test.ts tests/skills/daily-digest-run-record.test.ts tests/web/server.test.ts tests/web/App.test.ts tests/web/DailyDigestRunsView.test.tsx`
-- [ ] `corepack pnpm typecheck`
-- [ ] `corepack pnpm build`
+- [x] `corepack pnpm test -- tests/skills/daily-digest.test.ts tests/skills/daily-digest-run-record.test.ts tests/web/server.test.ts tests/web/App.test.ts tests/web/DailyDigestRunsView.test.tsx`
+- [x] `corepack pnpm typecheck`
+- [x] `corepack pnpm build`
 
 ## 结果
 
-- 待完成
+- `daily-digest` 每次执行都会把 Brave 请求参数、返回结果、抽取阶段数据和最终入选结果保存到 `data/skills/daily-digest/runs/{runId}.json`
+- WebUI 新增一级 tab `日报记录`，可直接查看最近执行列表和单次 run 详情
+- 后端新增 run 列表与详情接口，前端可直接排查“为什么只搜到很少的新闻”
