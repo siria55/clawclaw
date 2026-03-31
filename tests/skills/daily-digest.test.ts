@@ -304,8 +304,10 @@ describe("buildBraveNewsSearchUrl", () => {
 
     expect(url.searchParams.get("q")).toBe("中国AI");
     expect(url.searchParams.get("count")).toBe("20");
+    expect(url.searchParams.get("offset")).toBe("0");
     expect(url.searchParams.get("spellcheck")).toBe("0");
     expect(url.searchParams.get("freshness")).toBe("pw");
+    expect(url.searchParams.get("safesearch")).toBe("strict");
     expect(url.searchParams.get("country")).toBe("CN");
     expect(url.searchParams.get("search_lang")).toBe("zh-hans");
   });
@@ -317,6 +319,36 @@ describe("buildBraveNewsSearchUrl", () => {
     expect(url.searchParams.get("freshness")).toBe("pw");
     expect(url.searchParams.get("country")).toBeNull();
     expect(url.searchParams.get("search_lang")).toBeNull();
+  });
+
+  it("applies custom Brave request parameters from config", () => {
+    const url = new URL(buildBraveNewsSearchUrl("OpenAI", 80, "international", {
+      request: {
+        count: 80,
+        offset: 5,
+        freshness: "",
+        spellcheck: true,
+        safesearch: "moderate",
+        uiLang: "en-US",
+        extraSnippets: true,
+        goggles: ["https://example.com/g1", "https://example.com/g2"],
+      },
+      international: {
+        country: "US",
+        searchLang: "en",
+      },
+    }));
+
+    expect(url.searchParams.get("count")).toBe("50");
+    expect(url.searchParams.get("offset")).toBe("5");
+    expect(url.searchParams.get("spellcheck")).toBe("1");
+    expect(url.searchParams.get("freshness")).toBeNull();
+    expect(url.searchParams.get("safesearch")).toBe("moderate");
+    expect(url.searchParams.get("ui_lang")).toBe("en-US");
+    expect(url.searchParams.get("extra_snippets")).toBe("true");
+    expect(url.searchParams.getAll("goggles")).toEqual(["https://example.com/g1", "https://example.com/g2"]);
+    expect(url.searchParams.get("country")).toBe("US");
+    expect(url.searchParams.get("search_lang")).toBe("en");
   });
 });
 

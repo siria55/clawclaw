@@ -20,6 +20,7 @@ import { normalizeCronChatIds, normalizeCronJobConfig } from "../cron/types.js";
 import type { CronJobConfig } from "../cron/types.js";
 import type { MemoryStorage } from "../memory/storage.js";
 import type { ConfigStorage } from "../config/storage.js";
+import { mergeBraveSearchConfig } from "../config/daily-digest.js";
 import type { IMConfig, LLMConfig, AgentMetaConfig, DailyDigestConfig, MountedDocConfig } from "../config/types.js";
 import type { Message } from "../llm/types.js";
 import type { SkillRegistry } from "../skills/registry.js";
@@ -931,8 +932,7 @@ export class WebServer {
 
   #handleGetDailyDigestConfig(res: ServerResponse): void {
     const storage = this.#config.dailyDigestConfigStorage;
-    const defaults = storage?.defaultValue ?? {};
-    const config = storage ? mergeDailyDigestConfig(defaults, storage.read()) : defaults;
+    const config = mergeDailyDigestConfig(storage?.defaultValue, storage?.read());
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify(config));
   }
@@ -953,7 +953,7 @@ export class WebServer {
       return;
     }
 
-    const merged = mergeDailyDigestConfig(storage.defaultValue, { ...storage.read(), ...incoming });
+    const merged = mergeDailyDigestConfig(storage.defaultValue, storage.read(), incoming);
     storage.write(merged);
 
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
@@ -1497,22 +1497,33 @@ function mergeIMConfig(existing: IMConfig, incoming: IMConfig): IMConfig {
 }
 
 function mergeDailyDigestConfig(
-  defaults: DailyDigestConfig,
-  incoming: DailyDigestConfig,
+  defaults: DailyDigestConfig | undefined,
+  ...layers: Array<DailyDigestConfig | undefined>
 ): DailyDigestConfig {
-  const baseQueries = normalizeStringList(defaults.queries);
-  const incomingQueries = incoming.queries !== undefined
-    ? normalizeStringList(incoming.queries)
-    : undefined;
-  const queries = incomingQueries !== undefined
-    ? (incomingQueries.length > 0 ? incomingQueries : baseQueries)
-    : normalizeStringList(incoming.queries ?? defaults.queries);
-  const braveSearchApiKey = incoming.braveSearchApiKey !== undefined
-    ? (incoming.braveSearchApiKey.trim() || undefined)
-    : defaults.braveSearchApiKey;
+  const baseQueries = normalizeStringList(defaults?.queries);
+  let queries = [...baseQueries];
+  let braveSearchApiKey = defaults?.braveSearchApiKey?.trim() || undefined;
+
+  for (const layer of layers) {
+    if (!layer) continue;
+    if (layer.queries !== undefined) {
+      const normalized = normalizeStringList(layer.queries);
+      queries = normalized.length > 0 ? normalized : baseQueries;
+    }
+    if (layer.braveSearchApiKey !== undefined) {
+      braveSearchApiKey = layer.braveSearchApiKey.trim() || undefined;
+    }
+  }
+
+  const braveSearch = mergeBraveSearchConfig(
+    defaults?.braveSearch,
+    ...layers.map((layer) => layer?.braveSearch),
+  );
+
   return {
     ...(queries.length > 0 && { queries }),
     ...(braveSearchApiKey !== undefined && { braveSearchApiKey }),
+    braveSearch,
   };
 }
 

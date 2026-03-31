@@ -1082,6 +1082,9 @@ describe("WebServer", () => {
     const res = await fetch(`http://localhost:${server.port}/api/config/daily-digest`);
     const body = await res.json() as DailyDigestConfig;
     expect(body.queries).toEqual(["国内AI科技", "国际AI科技"]);
+    expect(body.braveSearch?.request?.count).toBe(20);
+    expect(body.braveSearch?.request?.freshness).toBe("pw");
+    expect(body.braveSearch?.domestic?.country).toBe("CN");
 
     await server.stop();
     rmSync(configDir, { recursive: true, force: true });
@@ -1154,6 +1157,105 @@ describe("WebServer", () => {
     expect(dailyDigestConfigStorage.read()).toEqual({
       queries: ["默认主题"],
       braveSearchApiKey: "brave_saved_key",
+      braveSearch: {
+        request: {
+          count: 20,
+          offset: 0,
+          freshness: "pw",
+          spellcheck: false,
+          safesearch: "strict",
+          uiLang: "",
+          extraSnippets: false,
+          goggles: [],
+        },
+        domestic: {
+          country: "CN",
+          searchLang: "zh-hans",
+        },
+        international: {
+          country: "",
+          searchLang: "",
+        },
+      },
+    });
+
+    await server.stop();
+    rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it("POST /api/config/daily-digest deep-merges Brave Search params", async () => {
+    const agent = makeMockAgent();
+    const configDir = join(tmpdir(), `clawclaw-daily-digest-brave-params-${Date.now()}`);
+    mkdirSync(configDir, { recursive: true });
+    const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>(join(configDir, "config.json"), {
+      queries: ["默认主题"],
+    });
+    dailyDigestConfigStorage.write({
+      queries: ["默认主题"],
+      braveSearch: {
+        request: {
+          count: 10,
+          offset: 0,
+          freshness: "pw",
+          spellcheck: false,
+          safesearch: "strict",
+          uiLang: "",
+          extraSnippets: false,
+          goggles: [],
+        },
+        domestic: {
+          country: "CN",
+          searchLang: "zh-hans",
+        },
+        international: {
+          country: "",
+          searchLang: "",
+        },
+      },
+    });
+
+    const server = new WebServer({ agent, port: 0, staticDir, dailyDigestConfigStorage });
+    await server.start();
+
+    const res = await fetch(`http://localhost:${server.port}/api/config/daily-digest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        braveSearch: {
+          request: {
+            count: 60,
+            offset: 3,
+            freshness: "",
+            extraSnippets: true,
+            goggles: [" https://example.com/g1 ", "https://example.com/g1"],
+          },
+          international: {
+            country: "US",
+            searchLang: "en",
+          },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(dailyDigestConfigStorage.read().braveSearch).toEqual({
+      request: {
+        count: 50,
+        offset: 3,
+        freshness: "",
+        spellcheck: false,
+        safesearch: "strict",
+        uiLang: "",
+        extraSnippets: true,
+        goggles: ["https://example.com/g1"],
+      },
+      domestic: {
+        country: "CN",
+        searchLang: "zh-hans",
+      },
+      international: {
+        country: "US",
+        searchLang: "en",
+      },
     });
 
     await server.stop();

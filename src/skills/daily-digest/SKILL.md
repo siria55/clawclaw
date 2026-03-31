@@ -11,7 +11,7 @@ max-candidates: 36
 ## 执行流程
 
 1. 默认使用本文件里的 `queries`；若 `data/skills/daily-digest/config.json` 中配置了自定义主题，则运行时优先使用配置值
-2. 通过 Brave Search API 的 `news/search` 接口检索各关键词在过去一周内的候选新闻；国内搜索会明确使用中国口径（如 `中国AI`）并带 `country=CN` / `search_lang=zh-hans`（优先使用 WebUI 保存的 Brave Key，未配置时回退到 `BRAVE_SEARCH_API_KEY` 环境变量）
+2. 通过 Brave Search API 的 `news/search` 接口检索各关键词在过去一周内的候选新闻；默认参数为 `count=20`、`offset=0`、`freshness=pw`、`safesearch=strict`、`spellcheck=0`，国内搜索默认会明确使用中国口径（如 `中国AI`）并带 `country=CN` / `search_lang=zh-hans`；这些参数都可由 WebUI `自动化 > 搜索` 覆盖（Brave Key 仍优先使用 WebUI 保存值，未配置时回退到 `BRAVE_SEARCH_API_KEY` 环境变量）
 3. 将 Brave 返回的标题、URL、来源、摘要与时间元信息整理为候选链接，并打上国内/国际查询提示
 4. 跨关键词去重后，先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际分别调用 LLM 优先筛选教育、教育科技、AI 教育、教育公司，以及与教育场景强相关的科技动态，并结构化为 JSON（含 `category`）；新闻时间继续沿用 Brave 返回的时间 hint，并最佳努力推导结构化 `date`
 5. 按国内 10 / 国际 5 的配额裁剪

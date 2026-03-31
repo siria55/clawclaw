@@ -351,7 +351,7 @@ function BraveSearchSection(): React.JSX.Element {
       <div className={styles.sectionTitle}>搜索（Brave Search）</div>
       <div className={styles.sectionHint}>
         配置保存在服务端 `data/skills/daily-digest/config.json`，保存后下一次运行 `daily-digest` 即生效。<br />
-        若这里留空，运行时会回退到环境变量 `BRAVE_SEARCH_API_KEY`。
+        若这里留空，运行时会回退到环境变量 `BRAVE_SEARCH_API_KEY`。更多 Brave `news/search` 参数请到 `自动化 &gt; 搜索` 里统一配置。
       </div>
       <div className={styles.fields}>
         <Field

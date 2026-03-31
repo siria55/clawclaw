@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`、`sprint-84.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`、`sprint-84.md`、`sprint-85.md`。
 
 ---
 
@@ -262,6 +262,12 @@
 - 新增 `#search` hash，并兼容旧的 `#search-config` 直达入口
 - 搜索配置继续持久化到 `data/skills/daily-digest/config.json`
 
+## 第四十三阶段：Brave 参数可视化配置（Sprint 85）
+
+- 按 Brave 官方 `news/search` 文档，把关键请求参数映射到 WebUI `自动化 > 搜索`
+- 新增 `count / offset / freshness / safesearch / ui_lang / spellcheck / extra_snippets / goggles` 与国内 / 国际 `country / search_lang` 配置
+- 这些参数继续持久化到 `data/skills/daily-digest/config.json`
+
 ---
 
 ## 当前落点
@@ -286,7 +292,7 @@
 - 飞书里问“给我今天的新闻”会优先收到今日日报图片；文本版可显式索取
 - 飞书 Cron 已支持同一任务同时投递到多个 chat / 群
 - `daily-digest` 的搜索主题配置、手动运行、日志和图片预览已收拢到 `自动化 > Skills > daily-digest`
-- Brave 搜索相关配置现已统一收拢到 `自动化 > 搜索`，可集中维护搜索主题和 `Brave Search API Key`
+- Brave 搜索相关配置现已统一收拢到 `自动化 > 搜索`，可集中维护搜索主题、`Brave Search API Key` 和 Brave `news/search` 参数
 - 今日日报封面会轮换一句中文短句，“今日摘要”展示内容概览而不是数量统计
 - 今日日报长图已收紧版式并移除高风险滤镜层，同花顺来源不会进入最终结果
 - 今日日报支持回复数字获取原文链接，编号与当天 JSON 输出顺序一致，返回内容为单独链接
@@ -304,6 +310,7 @@
 - `daily-digest-generate` 的手动执行链路已修复，当前会正常生成 `.html / .md / .png / .json` 到 `data/skills/daily-digest/`
 - `daily-digest` 的候选新闻搜索现已切到 Brave Search API，浏览器只保留给最终截图使用
 - Brave Search API Key 现在可直接在 WebUI 中配置，不再只能依赖环境变量
+- Brave `news/search` 的关键参数现在也可直接在 WebUI 中配置，并持久化到本地 `./data`
 - `daily-digest` 现在默认只检索过去一周内的新闻，兼顾时效性和候选覆盖面
 - `daily-digest` 生成结果现在只显示来源，不再显示新闻时间；JSON 仍保留 `publishedAt` / `date`
 - `daily-digest` 现在会优先筛出教育、教育科技、AI 教育、教育公司内容，同时保留与教育强相关的科技动态

@@ -44,10 +44,39 @@ export interface AgentMetaConfig {
   allowedPaths?: string[];
 }
 
+export type BraveSearchSafeSearch = "off" | "moderate" | "strict" | "";
+
+/** Brave `news/search` query parameters used by daily-digest. */
+export interface BraveSearchRequestConfig {
+  count?: number;
+  offset?: number;
+  freshness?: string;
+  spellcheck?: boolean;
+  safesearch?: BraveSearchSafeSearch;
+  uiLang?: string;
+  extraSnippets?: boolean;
+  goggles?: string[];
+}
+
+/** Brave `news/search` region / language parameters for one query scope. */
+export interface BraveSearchScopeConfig {
+  country?: string;
+  searchLang?: string;
+}
+
+/** Brave `news/search` config grouped by common params and domestic/international overrides. */
+export interface BraveSearchConfig {
+  request?: BraveSearchRequestConfig;
+  domestic?: BraveSearchScopeConfig;
+  international?: BraveSearchScopeConfig;
+}
+
 /** DailyDigest skill runtime settings configurable from WebUI. */
 export interface DailyDigestConfig {
   /** Search topics used by the skill. One query per search request. */
   queries?: string[];
   /** Brave Search API key used by daily-digest when configured from WebUI. */
   braveSearchApiKey?: string;
+  /** Brave `news/search` request parameters configurable from WebUI. */
+  braveSearch?: BraveSearchConfig;
 }

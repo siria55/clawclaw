@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url";
 import type { Browser } from "playwright";
 import { chromium } from "playwright";
 import { z } from "zod";
+import { mergeBraveSearchConfig } from "../../config/daily-digest.js";
 import type { ConfigStorage } from "../../config/storage.js";
-import type { DailyDigestConfig } from "../../config/types.js";
+import type { BraveSearchConfig, DailyDigestConfig } from "../../config/types.js";
 import { loadSkillDef } from "../loader.js";
 import type { Skill, SkillContext, SkillResult } from "../types.js";
 
@@ -203,10 +204,6 @@ export const DAILY_DIGEST_SCREENSHOT = {
 } as const;
 
 const BRAVE_NEWS_SEARCH_ENDPOINT = process.env["BRAVE_SEARCH_API_URL"] ?? "https://api.search.brave.com/res/v1/news/search";
-const BRAVE_NEWS_SEARCH_COUNT = 20;
-const BRAVE_NEWS_SEARCH_FRESHNESS = "pw";
-const BRAVE_DOMESTIC_COUNTRY = "CN";
-const BRAVE_DOMESTIC_SEARCH_LANG = "zh-hans";
 const DAILY_DIGEST_FOCUS = "教育 / 教育科技 / AI 教育 / 教育公司";
 
 export const DAILY_DIGEST_EXTRACTION_SYSTEM = [
@@ -231,15 +228,18 @@ async function searchNewsWithBrave(
   quota: DigestQuota,
   referenceDate: string,
   braveSearchApiKey: string | undefined,
+  braveSearchConfig: BraveSearchConfig | undefined,
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   const allLinks: DigestCandidateLink[] = [];
   const searchPlans = buildDailyDigestSearchPlans(queries);
   const apiKey = getBraveSearchApiKey(braveSearchApiKey);
-  log(`🧭 使用 Brave Search API 搜索过去一周内的主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求`);
+  const searchConfig = mergeBraveSearchConfig(braveSearchConfig);
+  const freshnessLabel = searchConfig.request.freshness || "不限";
+  log(`🧭 使用 Brave Search API 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求（freshness=${freshnessLabel}）`);
   for (const plan of searchPlans) {
-    log(`🌐 Brave 搜索（过去一周）: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
-    const response = await fetchBraveNewsResponse(plan.searchText, apiKey, maxCandidates, plan.hintCategory);
+    log(`🌐 Brave 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
+    const response = await fetchBraveNewsResponse(plan.searchText, apiKey, maxCandidates, plan.hintCategory, searchConfig);
     const links = parseBraveNewsSearchResponse(response, plan.hintCategory);
     log(`🔗 获取 ${links.length} 个候选结果`);
     allLinks.push(...links);
@@ -388,6 +388,7 @@ export class DailyDigestSkill implements Skill {
       this.#quota,
       dateKey,
       config?.braveSearchApiKey,
+      config?.braveSearch,
     );
     const selection = selectDigestArticles(articles, this.#quota);
     ctx.log?.(`📊 最终入选 ${selection.all.length} 篇文章（国内 ${selection.domestic.length} / 国际 ${selection.international.length}）`);
@@ -999,17 +1000,25 @@ export function buildBraveNewsSearchUrl(
   query: string,
   maxCandidates: number,
   hintCategory: DigestCategory | undefined = undefined,
+  braveSearchConfig: BraveSearchConfig | undefined = undefined,
 ): string {
+  const config = mergeBraveSearchConfig(braveSearchConfig);
   const params = new URLSearchParams({
     q: query,
-    count: String(Math.min(maxCandidates, BRAVE_NEWS_SEARCH_COUNT)),
-    spellcheck: "0",
-    freshness: BRAVE_NEWS_SEARCH_FRESHNESS,
+    count: String(Math.min(maxCandidates, config.request.count)),
+    offset: String(config.request.offset),
+    spellcheck: config.request.spellcheck ? "1" : "0",
   });
-  if (hintCategory === "domestic") {
-    params.set("country", BRAVE_DOMESTIC_COUNTRY);
-    params.set("search_lang", BRAVE_DOMESTIC_SEARCH_LANG);
+  if (config.request.freshness) params.set("freshness", config.request.freshness);
+  if (config.request.safesearch) params.set("safesearch", config.request.safesearch);
+  if (config.request.uiLang) params.set("ui_lang", config.request.uiLang);
+  if (config.request.extraSnippets) params.set("extra_snippets", "true");
+  for (const goggles of config.request.goggles) {
+    params.append("goggles", goggles);
   }
+  const scopedConfig = hintCategory === "domestic" ? config.domestic : config.international;
+  if (scopedConfig.country) params.set("country", scopedConfig.country);
+  if (scopedConfig.searchLang) params.set("search_lang", scopedConfig.searchLang);
   return `${BRAVE_NEWS_SEARCH_ENDPOINT}?${params.toString()}`;
 }
 
@@ -1018,8 +1027,9 @@ async function fetchBraveNewsResponse(
   apiKey: string,
   maxCandidates: number,
   hintCategory: DigestCategory,
+  braveSearchConfig: BraveSearchConfig | undefined,
 ): Promise<unknown> {
-  const response = await fetch(buildBraveNewsSearchUrl(query, maxCandidates, hintCategory), {
+  const response = await fetch(buildBraveNewsSearchUrl(query, maxCandidates, hintCategory, braveSearchConfig), {
     headers: {
       Accept: "application/json",
       "X-Subscription-Token": apiKey,

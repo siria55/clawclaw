@@ -403,13 +403,13 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 `loadSkillDef(skillDir)` 解析 SKILL.md，返回 `SkillDef`（含 `instructions` 字段为 frontmatter 之后的 markdown body）。
 其中 `max-candidates` 用于抽取阶段的候选上限，`domestic-articles` / `international-articles` 用于最终日报配额。
-`DailyDigestSkill` 运行时还可从 `ConfigStorage<DailyDigestConfig>` 读取覆盖配置，目前支持在 WebUI 动态修改搜索主题和 Brave Search API Key。
+`DailyDigestSkill` 运行时还可从 `ConfigStorage<DailyDigestConfig>` 读取覆盖配置，目前支持在 WebUI 动态修改搜索主题、Brave Search API Key，以及 Brave `news/search` 参数。
 
 ### DailyDigestSkill 执行流程
 
 1. 读取 `SKILL.md` 获得默认搜索词、候选上限和国内/国际配额；若 `data/skills/daily-digest/config.json` 中存在自定义主题，则运行时覆盖默认搜索词
 2. 启动 Playwright chromium（headless）
-3. 依次请求 Brave Search API 的 `news/search` 接口，使用 `freshness=pw` 限制在过去一周内获取候选新闻结果；国内搜索会额外附带 `country=CN` 与 `search_lang=zh-hans`，并将“国内…”规范化为“中国…”搜索文本；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
+3. 依次请求 Brave Search API 的 `news/search` 接口；默认请求参数为 `count=20`、`offset=0`、`freshness=pw`、`safesearch=strict`、`spellcheck=0`，并支持由 WebUI 覆盖 `count / offset / freshness / safesearch / ui_lang / extra_snippets / goggles`；国内搜索默认额外附带 `country=CN` 与 `search_lang=zh-hans`，国际搜索默认不带地域参数；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
 4. 将 Brave 返回的标题、URL、来源、摘要与时间字段归一化为候选链接，跨关键词去重后先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际各调用一次 `ctx.agent.llm.complete()`，优先筛出教育、教育科技、AI 教育、教育公司内容，同时保留与教育场景强相关的科技动态，输出为结构化 JSON（`DigestArticle[]`，含 `category`）
 5. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
 6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；同时把 Brave 返回的时间 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`
@@ -445,7 +445,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 - `new ConfigStorage<LLMConfig>("./data/agent/llm-config.json")` — LLM 配置（provider / apiKey / baseURL / httpsProxy / model）
 - `new ConfigStorage<AgentMetaConfig>("./data/agent/agent-config.json")` — Agent 名称和系统提示词
 - `new ConfigStorage<MountedDocConfig>("./data/agent/feishu-docs/config.json", { docs: [] })` — 挂载飞书文档配置
-- `new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json")` — DailyDigest 搜索主题与 Brave Search API Key
+- `new ConfigStorage<DailyDigestConfig>("./data/skills/daily-digest/config.json")` — DailyDigest 搜索主题、Brave Search API Key 与 Brave `news/search` 参数
 - `new ConfigStorage<CronJobConfig[]>("./data/cron/cron-config.json", [])` — Cron 任务配置
 
 ConversationStorage 负责短期 session 历史；MemoryStorage 负责长期共享记忆，两者不会自动互相镜像。也就是说，IM 多轮对话会持久化到 `conversations.json`，但不会自动沉淀到 `memory.json`。各配置文件职责分离，互不干扰。WebServer 通过各自独立的注入点访问，POST 保存后通过回调（`onIMConfig` / `onLLMConfig` / `onAgentConfig`）热更新运行中的服务，无需重启。`LLM_PROVIDER` 环境变量可在未持久化配置时决定默认使用 `anthropic` 还是 `openai`。
@@ -516,7 +516,7 @@ defineTool({
 | `/api/im-config` | GET/POST | 飞书等 IM 凭证（读写 `data/im/im-config.json`） |
 | `/api/config/llm` | GET/POST | LLM 配置（读写 `data/agent/llm-config.json`） |
 | `/api/config/agent` | GET/POST | Agent 配置（读写 `data/agent/agent-config.json`） |
-| `/api/config/daily-digest` | GET/POST | DailyDigest 搜索主题与 Brave Search API Key（读写 `data/skills/daily-digest/config.json`） |
+| `/api/config/daily-digest` | GET/POST | DailyDigest 搜索主题、Brave Search API Key 与 Brave `news/search` 参数（读写 `data/skills/daily-digest/config.json`） |
 | `/api/config/feishu-docs` | GET/POST | 挂载飞书文档配置（读写 `data/agent/feishu-docs/config.json`） |
 | `/api/config/feishu-docs/sync` | POST | 用 Playwright 同步飞书文档正文到本地缓存 |
 | `/api/cron` | GET/POST/DELETE | Cron 任务 CRUD |
@@ -567,7 +567,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 内容 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起，只展示已通过 `memory_save` 落库的条目 |
 | 自动化 | Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行、直发文本 / Markdown / 图片、支持多目标发送 |
 | 自动化 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志；`daily-digest` 卡片内可直接修改搜索主题 |
-| 自动化 | 搜索 | `#search` | `SearchConfigView` | 集中管理 Brave Search API Key 与 `daily-digest` 搜索主题；保存到 `data/skills/daily-digest/config.json` |
+| 自动化 | 搜索 | `#search` | `SearchConfigView` | 集中管理 Brave Search API Key、`daily-digest` 搜索主题与 Brave `news/search` 参数；保存到 `data/skills/daily-digest/config.json` |
 | IM | 消息 | `#im` | `IMView` | IM 页默认二级 tab；展示实时 IM 日志、群聊 / 直发筛选 |
 | IM | 状态 | `#im-status` | `IMView` | 展示 IM 平台连接、飞书运行摘要、群聊列表，并带右侧 TOC |
 | IM | 配置 | `#im-config` | `IMView` | 展示飞书 IM 凭证表单和运行摘要 |
