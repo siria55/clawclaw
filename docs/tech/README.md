@@ -412,7 +412,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 3. 依次请求 Brave Search API 的 `news/search` 接口；默认请求参数为 `count=20`、`offset=0`、`freshness=pw`、`safesearch=strict`、`spellcheck=0`，并支持由 WebUI 覆盖 `count / offset / freshness / safesearch / ui_lang / extra_snippets / goggles`；国内搜索默认额外附带 `country=CN` 与 `search_lang=zh-hans`，国际搜索默认不带地域参数；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
 4. 将 Brave 返回的标题、URL、来源、摘要与时间字段归一化为候选链接，跨关键词去重后先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际各调用一次 `ctx.agent.llm.complete()`，优先筛出教育、教育科技、AI 教育、教育公司内容，同时保留与教育场景强相关的科技动态，输出为结构化 JSON（`DigestArticle[]`，含 `category`）
 5. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
-6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；国际候选还会再做一层语言过滤，只保留中文 / 英文内容，挡掉明显的日文、韩文等其他语言；同时把 Brave 返回的时间 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`
+6. 按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；国际候选还会再做一层语言过滤，只保留简体中文 / 英文内容，挡掉明显的繁体中文、日文、韩文等其他语言，并对港台繁体中文站点做额外识别；同时把 Brave 返回的时间 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`
 7. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML
 8. 条目元信息展示层只显示来源；新闻时间仍保留在文章对象中供 JSON 输出与 `date` 推导复用
 9. Playwright 截图为 PNG，写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`

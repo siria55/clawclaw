@@ -188,6 +188,20 @@ const PREFERRED_MEDIA_HOST_PATTERNS = [
   /(^|\.)aws\.amazon\.com$/i,
 ];
 
+const TRADITIONAL_CHINESE_INDICATOR_PATTERN = /[專學體與為這來們會後從開關於發佈業產網點臺灣聯報經濟應數據醫門戶話讓還選觀讀寫實軟電腦雲處裡廣務測證遠際權聲標圖錄頁覽優勢機構續線層級國資訊華號]/u;
+
+const TRADITIONAL_CHINESE_MEDIA_HOST_PATTERNS = [
+  /(^|\.)storm\.mg$/i,
+  /(^|\.)udn\.com$/i,
+  /(^|\.)ettoday\.net$/i,
+  /(^|\.)hk01\.com$/i,
+  /(^|\.)mingpao\.com$/i,
+  /(^|\.)hket\.com$/i,
+  /(^|\.)stheadline\.com$/i,
+  /(^|\.)cna\.com\.tw$/i,
+  /(^|\.)ltn\.com\.tw$/i,
+];
+
 const DAILY_DECK_LINES = [
   "先看事实，再下判断。",
   "把噪音滤掉，趋势才会显形。",
@@ -218,7 +232,7 @@ export const DAILY_DIGEST_EXTRACTION_SYSTEM = [
   "category 只允许 domestic 或 international。",
   "domestic 表示中国教育、教育科技、AI 教育、教育公司、教育政策、教育平台，或与中国教育场景强相关的科技/创投动态为主。",
   "international 表示海外教育、教育科技、AI 教育、教育公司、教育政策、教育平台，或与全球教育场景强相关的科技/创投动态为主。",
-  "international 结果只保留可用中文或英文阅读与展示的内容，排除明显为日文、韩文等其他语言的页面。",
+  "international 结果只保留可用简体中文或英文阅读与展示的内容，繁体中文、日文、韩文等其他语言页面不要返回。",
   "如果字符串里出现双引号，必须转义。",
 ].join("\n");
 
@@ -568,7 +582,7 @@ ${linkText}
 - 如果同一事件既有主流媒体 / 官网版本，也有自媒体版本，只保留前者
 - 尽量覆盖不同主题，避免同题反复
 - summary 尽量用一句中文短句概括；如果从标题无法可靠概括，可留空字符串
-- 国际结果只保留中文或英文内容；如果页面明显是日文、韩文或其他非中文/英文语言，不要返回
+- 国际结果只保留简体中文或英文内容；如果页面明显是繁体中文、日文、韩文或其他非简体中文/英文语言，不要返回
 - category 固定返回 ${category}
 
 最多返回 ${maxCandidates} 篇，按质量、相关性和时效性排序。
@@ -814,17 +828,37 @@ function isBlockedArticle(article: DigestArticle): boolean {
 
 function isAllowedInternationalArticle(article: DigestArticle): boolean {
   if (article.category !== "international") return true;
-  return [article.title, article.summary, article.source].every((text) => containsOnlyChineseOrEnglishText(text));
+  const fields = [article.title, article.summary, article.source];
+  if (!fields.every((text) => containsOnlySimplifiedChineseOrEnglishText(text))) return false;
+  return !hasTraditionalChineseSiteSignal(article.url, [article.title, article.summary].join(" "));
 }
 
-function containsOnlyChineseOrEnglishText(text: string): boolean {
+function containsOnlySimplifiedChineseOrEnglishText(text: string): boolean {
   const normalized = text.normalize("NFKC");
+  if (TRADITIONAL_CHINESE_INDICATOR_PATTERN.test(normalized)) return false;
   for (const char of normalized) {
     if (isAsciiReadableChar(char) || isCommonCjkPunctuation(char)) continue;
     if (/\p{Script=Han}/u.test(char)) continue;
     if (/\p{Letter}/u.test(char)) return false;
   }
   return true;
+}
+
+function hasTraditionalChineseSiteSignal(url: string, text: string): boolean {
+  const hostname = getHostname(url);
+  if (!hostname || !containsHanText(text)) return false;
+  return isTraditionalChineseHostname(hostname);
+}
+
+function containsHanText(text: string): boolean {
+  return /\p{Script=Han}/u.test(text.normalize("NFKC"));
+}
+
+function isTraditionalChineseHostname(hostname: string): boolean {
+  return hostname.endsWith(".tw")
+    || hostname.endsWith(".hk")
+    || hostname.endsWith(".mo")
+    || TRADITIONAL_CHINESE_MEDIA_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
 }
 
 function isAsciiReadableChar(char: string): boolean {

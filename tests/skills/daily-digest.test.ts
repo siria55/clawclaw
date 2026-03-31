@@ -267,7 +267,7 @@ describe("selectDigestArticles", () => {
     expect(selection.international[0]?.title).toBe("reuters");
   });
 
-  it("filters non-Chinese-or-English language articles from the international section", () => {
+  it("filters non-English-or-simplified-Chinese articles from the international section", () => {
     const selection = selectDigestArticles([
       createArticle("jp", "international", {
         title: "OpenAIが教育向け新機能を発表",
@@ -289,6 +289,12 @@ describe("selectDigestArticles", () => {
         summary: "新功能面向全球课堂场景推出。",
         source: "界面新闻",
       }),
+      createArticle("zh-hant", "international", {
+        title: "OpenAI 擴大教育產品佈局",
+        summary: "新功能面向全球課堂場景推出。",
+        source: "聯合新聞網",
+        url: "https://udn.com/news/story/7240/1234567",
+      }),
     ], {
       domestic: 0,
       international: 3,
@@ -299,6 +305,29 @@ describe("selectDigestArticles", () => {
       "OpenAI expands education tools",
       "OpenAI 扩大教育产品布局",
     ]);
+  });
+
+  it("filters Han-language articles from traditional Chinese sites while keeping English ones", () => {
+    const selection = selectDigestArticles([
+      createArticle("hk-shared-han", "international", {
+        title: "AI 教育平台进入校园",
+        summary: "教育公司推出校园方案。",
+        source: "香港01",
+        url: "https://www.hk01.com/article/123456",
+      }),
+      createArticle("hk-english", "international", {
+        title: "OpenAI expands campus tools",
+        summary: "English summary for international schools.",
+        source: "香港01",
+        url: "https://www.hk01.com/english/article/654321",
+      }),
+    ], {
+      domestic: 0,
+      international: 3,
+    });
+
+    expect(selection.international).toHaveLength(1);
+    expect(selection.international[0]?.title).toBe("OpenAI expands campus tools");
   });
 });
 
@@ -400,11 +429,12 @@ describe("buildDailyDigestExtractionPrompt", () => {
     ], 8);
 
     expect(DAILY_DIGEST_EXTRACTION_SYSTEM).toContain("教育科技新闻筛选器");
-    expect(DAILY_DIGEST_EXTRACTION_SYSTEM).toContain("international 结果只保留可用中文或英文阅读与展示的内容");
+    expect(DAILY_DIGEST_EXTRACTION_SYSTEM).toContain("international 结果只保留可用简体中文或英文阅读与展示的内容");
     expect(prompt).toContain("教育 / 教育科技 / AI 教育 / 教育公司");
     expect(prompt).toContain("优先保留教育、教育科技、AI 教育、教育公司、教育平台、教育政策、教育产品相关内容");
     expect(prompt).toContain("只有在它与教育行业、教育场景、教育产品或教育公司明显相关时才保留");
-    expect(prompt).toContain("国际结果只保留中文或英文内容");
+    expect(prompt).toContain("国际结果只保留简体中文或英文内容");
+    expect(prompt).toContain("繁体中文");
   });
 });
 
