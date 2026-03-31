@@ -198,7 +198,7 @@ export function SearchConfigView(): React.JSX.Element {
               <textarea
                 id="search-daily-digest-queries"
                 className={styles.textarea}
-                placeholder={"中国教育\nAI 教育\n教育公司\n全球教育公司\n全球科技公司"}
+                placeholder={"AI 教育\n生成式 AI 教育\n教育科技 AI\n教育 AI 公司\nOpenAI education"}
                 value={fields.queries}
                 onChange={(e) => setField("queries", e.target.value)}
                 rows={8}

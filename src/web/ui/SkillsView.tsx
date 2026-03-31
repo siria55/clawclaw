@@ -216,7 +216,7 @@ function DailyDigestConfigCard(): React.JSX.Element {
           <textarea
             id="daily-digest-queries"
             className={styles.configInput}
-            placeholder={"国内AI科技\n中国创业投资\n中国互联网平台\n美国OpenAI\n美国英伟达AI"}
+            placeholder={"AI 教育\n生成式 AI 教育\n教育科技 AI\n教育 AI 公司\nOpenAI education"}
             value={fields.queries}
             onChange={(e) => setFields({ queries: e.target.value })}
             rows={6}

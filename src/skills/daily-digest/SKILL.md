@@ -1,7 +1,7 @@
 ---
 id: daily-digest
 description: 通过 Brave Search API 搜索过去一周教育与教育科技相关新闻，按国内 10 / 国际 5 生成 HTML 日报并截图保存
-queries: 中国AI科技,中国创业投资,中国互联网平台,美国OpenAI,美国英伟达AI,硅谷创投,海外互联网监管,全球科技公司
+queries: AI 教育,生成式 AI 教育,教育科技 AI,教育 AI 公司,AI 课堂,AI 教师,智能教育,OpenAI education,Google education AI,Microsoft education AI
 domestic-articles: 10
 international-articles: 5
 max-articles: 15

@@ -120,6 +120,7 @@ corepack pnpm start
 - `Skills`（`/#skills`）：查看所有 Skill、手动运行单个 Skill、实时查看执行日志，并在完成后预览生成截图
 - `daily-digest` 卡片会把手动运行、日志和图片预览放在一起；搜索主题兼容保留在卡片内，保存后可直接按新配置运行
 - `搜索`（`/#search`）：集中管理 Brave 搜索相关配置，可直接修改 `Brave Search API Key`、`daily-digest` 搜索主题，以及 Brave `news/search` 的 `count / offset / freshness / safesearch / ui_lang / spellcheck / extra_snippets / goggles` 与国内 / 国际 `country / search_lang`；保存后写入 `data/skills/daily-digest/config.json`
+- 默认搜索主题现在更聚焦 `AI + 教育`，例如 `AI 教育`、`生成式 AI 教育`、`教育科技 AI`、`教育 AI 公司`、`OpenAI education`
 
 ### IM — `/#im` / `/#im-status` / `/#im-config`
 
