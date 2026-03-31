@@ -26,6 +26,7 @@ import type { Message } from "../llm/types.js";
 import type { SkillRegistry } from "../skills/registry.js";
 import type { SkillResult } from "../skills/types.js";
 import { findLatestSkillPng } from "../skills/loader.js";
+import { listDailyDigestRunSummaries, loadDailyDigestRunRecord } from "../skills/daily-digest/run-record.js";
 import type { MountedDocLibrary } from "../docs/library.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -319,6 +320,17 @@ export class WebServer {
 
     if (req.method === "GET" && path === "/api/news") {
       this.#handleNews(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/daily-digest/runs") {
+      this.#handleDailyDigestRuns(req, res);
+      return;
+    }
+
+    if (req.method === "GET" && path.startsWith("/api/daily-digest/runs/")) {
+      const runId = decodeURIComponent(path.slice("/api/daily-digest/runs/".length));
+      this.#handleDailyDigestRunDetail(runId, res);
       return;
     }
 
@@ -656,6 +668,27 @@ export class WebServer {
     res.end(JSON.stringify(result));
   }
 
+  #handleDailyDigestRuns(req: IncomingMessage, res: ServerResponse): void {
+    const qs = new URL(req.url ?? "/", "http://localhost").searchParams;
+    const page = parseIntParam(qs.get("page"), 1);
+    const pageSize = parseIntParam(qs.get("pageSize"), 20);
+    const result = listDailyDigestRunSummaries(this.#getDailyDigestDataDir(), page, pageSize);
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify(result));
+  }
+
+  #handleDailyDigestRunDetail(runId: string, res: ServerResponse): void {
+    const dataDir = this.#getDailyDigestDataDir();
+    const record = dataDir ? loadDailyDigestRunRecord(dataDir, runId) : undefined;
+    if (!record) {
+      res.writeHead(404, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.end(JSON.stringify({ ok: false, error: `Daily digest run not found: ${runId}` }));
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(JSON.stringify(record));
+  }
+
   #handleMemory(req: IncomingMessage, res: ServerResponse): void {
     const qs = new URL(req.url ?? "/", "http://localhost").searchParams;
     const page = parseIntParam(qs.get("page"), 1);
@@ -672,6 +705,10 @@ export class WebServer {
 
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({ entries, total, page, pageSize }));
+  }
+
+  #getDailyDigestDataDir(): string | undefined {
+    return this.#config.skillDataRoot ? join(this.#config.skillDataRoot, "daily-digest") : undefined;
   }
 
   async #handleIMLog(req: IncomingMessage, res: ServerResponse): Promise<void> {

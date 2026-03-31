@@ -416,8 +416,9 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 7. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML
 8. 条目元信息展示层只显示来源；新闻时间仍保留在文章对象中供 JSON 输出与 `date` 推导复用
 9. Playwright 截图为 PNG，写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
-10. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
-11. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
+10. 同一次执行还会写入 `data/skills/daily-digest/runs/{runId}.json`，内容包含 Brave 请求参数、原始返回、解析候选、LLM 抽取结果与最终入选统计
+11. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
+12. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
 
 其中 HTML 不再由 `index.ts` 直接拼整页结构，而是运行时读取 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 和 `layout.css` 进行模板替换；这样 HTML 模板和 CSS 模板共同成为截图与导出文件的单一版式源。
 截图阶段使用 `browser.newContext({ viewport: { width: 1080, height: 1400 }, deviceScaleFactor: 4 })`，并以 `scale: "device"` 输出 PNG，在不改变版心尺寸的前提下提升清晰度。
@@ -509,6 +510,8 @@ defineTool({
 | `/api/chat` | POST | SSE 流式对话，body `{message}` |
 | `/api/status` | GET | 系统状态 JSON |
 | `/api/news` | GET | 新闻库查询，扫描 `data/skills/*/YYYY-MM-DD.json`，query: `q / page / pageSize` |
+| `/api/daily-digest/runs` | GET | 日报执行记录列表，扫描 `data/skills/daily-digest/runs/*.json`，query: `page / pageSize` |
+| `/api/daily-digest/runs/:id` | GET | 单次日报执行详情，返回 Brave 请求/返回和筛选阶段数据 |
 | `/api/memory` | GET | 记忆库查询，query: `q / page / pageSize` |
 | `/api/skills` | GET | 已注册 Skill 列表（id + description） |
 | `/api/skills/:id/run` | POST | 手动触发 Skill，SSE 流式日志 |
@@ -565,6 +568,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 对话 | 对话 | `#chat` | `ChatView` | 消息气泡 + 工具事件 + 思考气泡 + 等待动画 |
 | 内容 | 新闻库 | `#news` | `NewsView` | 关键词搜索、分页浏览（读 skill JSON 输出） |
 | 内容 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起，只展示已通过 `memory_save` 落库的条目 |
+| 日报记录 | 日报记录 | `#digest` | `DailyDigestRunsView` | 查看 `daily-digest` 每次执行的 Brave 请求参数、返回结果和筛选阶段数据 |
 | 自动化 | Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行、直发文本 / Markdown / 图片、支持多目标发送 |
 | 自动化 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志；`daily-digest` 卡片内可直接修改搜索主题 |
 | 自动化 | 搜索 | `#search` | `SearchConfigView` | 集中管理 Brave Search API Key、`daily-digest` 搜索主题与 Brave `news/search` 参数；保存到 `data/skills/daily-digest/config.json` |

@@ -15,6 +15,7 @@ import type { AgentConfig } from "../../src/core/types.js";
 import type { AgentEvent } from "../../src/core/types.js";
 import type { CronJobConfig } from "../../src/cron/types.js";
 import type { IMPlatform } from "../../src/platform/types.js";
+import { createDailyDigestRunRecord, persistDailyDigestRunRecord } from "../../src/skills/daily-digest/run-record.js";
 
 /** Temp directory with a fake index.html for static serving tests */
 let staticDir: string;
@@ -744,6 +745,99 @@ describe("WebServer", () => {
     expect(body.articles).toEqual([]);
     expect(body.total).toBe(0);
     await server.stop();
+  });
+
+  it("GET /api/daily-digest/runs returns summaries and detail", async () => {
+    const agent = makeMockAgent();
+    const skillRoot = mkdtempSync(join(tmpdir(), "clawclaw-digest-runs-"));
+    mkdirSync(join(skillRoot, "daily-digest"), { recursive: true });
+
+    const record = createDailyDigestRunRecord({
+      dateKey: "2026-03-31",
+      queries: ["中国教育", "OpenAI 教育"],
+      quota: { domestic: 10, international: 5 },
+      maxCandidates: 36,
+      braveSearchConfig: {
+        request: {
+          count: 20,
+          offset: 0,
+          freshness: "pw",
+          spellcheck: false,
+          safesearch: "strict",
+          uiLang: "",
+          extraSnippets: false,
+          goggles: [],
+        },
+        domestic: {
+          country: "CN",
+          searchLang: "zh-hans",
+        },
+        international: {
+          country: "",
+          searchLang: "",
+        },
+      },
+      searchPlans: [{ query: "中国教育", searchText: "中国教育", hintCategory: "domestic" }],
+      now: new Date("2026-03-31T02:00:00.000Z"),
+    });
+    record.status = "success";
+    record.finishedAt = "2026-03-31T02:05:00.000Z";
+    record.counts.filteredLinkCount = 12;
+    record.counts.finalCount = 6;
+    record.counts.finalDomesticCount = 4;
+    record.counts.finalInternationalCount = 2;
+    record.searchRequests.push({
+      query: "中国教育",
+      searchText: "中国教育",
+      hintCategory: "domestic",
+      startedAt: "2026-03-31T02:00:00.000Z",
+      finishedAt: "2026-03-31T02:00:10.000Z",
+      requestUrl: "https://api.search.brave.com/res/v1/news/search?q=%E4%B8%AD%E5%9B%BD%E6%95%99%E8%82%B2",
+      request: {
+        endpoint: "https://api.search.brave.com/res/v1/news/search",
+        q: "中国教育",
+        count: 20,
+        offset: 0,
+        spellcheck: false,
+        freshness: "pw",
+        safesearch: "strict",
+        uiLang: "",
+        extraSnippets: false,
+        goggles: [],
+        country: "CN",
+        searchLang: "zh-hans",
+        maxCandidates: 36,
+      },
+      responseResultCount: 9,
+      parsedLinks: [],
+      response: { results: [{ title: "教育 AI 公司发布新产品" }] },
+    });
+    persistDailyDigestRunRecord(join(skillRoot, "daily-digest"), record);
+
+    const server = new WebServer({ agent, port: 0, staticDir, skillDataRoot: skillRoot });
+    await server.start();
+
+    const listRes = await fetch(`http://localhost:${server.port}/api/daily-digest/runs`);
+    expect(listRes.status).toBe(200);
+    const listBody = await listRes.json() as {
+      runs: Array<{ runId: string; rawResultCount: number; finalCount: number }>;
+      total: number;
+    };
+    expect(listBody.total).toBe(1);
+    expect(listBody.runs[0]).toEqual(expect.objectContaining({
+      runId: record.runId,
+      rawResultCount: 9,
+      finalCount: 6,
+    }));
+
+    const detailRes = await fetch(`http://localhost:${server.port}/api/daily-digest/runs/${record.runId}`);
+    expect(detailRes.status).toBe(200);
+    const detailBody = await detailRes.json() as { runId: string; searchRequests: Array<{ responseResultCount: number }> };
+    expect(detailBody.runId).toBe(record.runId);
+    expect(detailBody.searchRequests[0]?.responseResultCount).toBe(9);
+
+    await server.stop();
+    rmSync(skillRoot, { recursive: true, force: true });
   });
 
   it("GET /api/im-config returns empty object when no imConfigStorage", async () => {

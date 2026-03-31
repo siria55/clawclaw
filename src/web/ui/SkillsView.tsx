@@ -162,14 +162,20 @@ function SkillRow({ skill }: { skill: SkillInfo }): React.JSX.Element {
 
 function DailyDigestConfigCard(): React.JSX.Element {
   const [fields, setFields] = useState<DailyDigestFields>({ queries: "" });
+  const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    void fetchDailyDigestConfig().then(setFields).catch(() => {
-      setStatus({ type: "err", msg: "加载 DailyDigest 配置失败" });
-    });
+    void fetchDailyDigestConfig()
+      .then(setFields)
+      .catch(() => {
+        setStatus({ type: "err", msg: "加载 DailyDigest 配置失败" });
+      })
+      .finally(() => {
+        setLoaded(true);
+      });
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -204,24 +210,30 @@ function DailyDigestConfigCard(): React.JSX.Element {
           搜索主题和手动运行放在同一张卡片里。保存后无需重启，直接点击上方「运行」即可按新配置生成。
         </div>
       </div>
-      <label className={styles.configLabel} htmlFor="daily-digest-queries">搜索主题（每行一个）</label>
-      <textarea
-        id="daily-digest-queries"
-        className={styles.configInput}
-        placeholder={"国内AI科技\n中国创业投资\n中国互联网平台\n美国OpenAI\n美国英伟达AI"}
-        value={fields.queries}
-        onChange={(e) => setFields({ queries: e.target.value })}
-        rows={6}
-        autoComplete="off"
-        spellCheck={false}
-      />
-      <div className={styles.configMeta}>skill 会按这些主题逐个搜索，再做国内 / 国际分类筛选。</div>
-      <div className={styles.configActions}>
-        <button className={styles.saveBtn} type="button" onClick={save} disabled={saving}>
-          {saving ? "保存中…" : "保存 DailyDigest 配置"}
-        </button>
-        {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
-      </div>
+      {loaded ? (
+        <>
+          <label className={styles.configLabel} htmlFor="daily-digest-queries">搜索主题（每行一个）</label>
+          <textarea
+            id="daily-digest-queries"
+            className={styles.configInput}
+            placeholder={"国内AI科技\n中国创业投资\n中国互联网平台\n美国OpenAI\n美国英伟达AI"}
+            value={fields.queries}
+            onChange={(e) => setFields({ queries: e.target.value })}
+            rows={6}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <div className={styles.configMeta}>skill 会按这些主题逐个搜索，再做国内 / 国际分类筛选。</div>
+          <div className={styles.configActions}>
+            <button className={styles.saveBtn} type="button" onClick={save} disabled={saving}>
+              {saving ? "保存中…" : "保存 DailyDigest 配置"}
+            </button>
+            {status && <span className={`${styles.saveStatus} ${styles[status.type]}`}>{status.msg}</span>}
+          </div>
+        </>
+      ) : (
+        <div className={styles.configMeta}>正在加载 DailyDigest 配置…</div>
+      )}
     </section>
   );
 }

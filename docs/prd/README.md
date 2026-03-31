@@ -174,6 +174,7 @@ Agent 指令...
 7. 新闻条目生成结果仅展示来源，不展示新闻时间
 8. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`；其中 JSON 会包含 `publishedAt` 和最佳努力推导的 `date`
 9. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
+10. 每次执行还会额外生成一份 run 记录 `data/skills/daily-digest/runs/{runId}.json`，保存 Brave 请求参数、原始返回、LLM 抽取结果与最终入选情况
 
 HTML 结构由 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 提供，视觉样式由 `src/skills/daily-digest/layout.css` 提供；Skill 运行时读取这些模板并填入文本内容，保证模板、截图和导出 HTML 使用同一套版式。
 PNG 截图使用 `1080px` 版心和 `4x` 高清输出，适合在 IM 里预览和放大查看。
@@ -237,6 +238,8 @@ Agent 可挂载一组飞书文档来源（名称 + URL），由服务端使用 P
 | `GET /api/status` | 系统状态（cron 任务、IM 连接） |
 | `GET /api/im-log` | IM 消息日志（支持 `since` 增量轮询，并补齐飞书用户名 / 群名） |
 | `GET /api/news` | 新闻库查询（扫描 data/skills/*/YYYY-MM-DD.json） |
+| `GET /api/daily-digest/runs` | 日报检索执行记录列表（分页） |
+| `GET /api/daily-digest/runs/:id` | 单次日报执行详情（含 Brave 请求/返回与筛选阶段数据） |
 | `GET /api/memory` | 记忆库查询（关键词、分页） |
 | `GET /api/skills` | 已注册 Skill 列表 |
 | `POST /api/skills/:id/run` | 手动触发 Skill（SSE 流式日志） |
@@ -255,17 +258,19 @@ Agent 可挂载一组飞书文档来源（名称 + URL），由服务端使用 P
 
 所有 POST 配置接口均支持热更新，保存后立即生效，无需重启。
 
-Web UI 现已收敛为 5 个一级能力域：
+Web UI 现已收敛为 6 个一级能力域：
 
 - `对话`：实时与 Agent 对话，入口 hash 为 `#chat`
 - `内容`：二级 tab 为 `新闻库` / `记忆库`，对应 `#news` / `#memory`
+- `日报记录`：查看 `daily-digest` 每次执行的请求参数、返回结果与筛选细节，入口 hash 为 `#digest`
 - `自动化`：二级 tab 为 `Cron` / `Skills` / `搜索`，对应 `#cron` / `#skills` / `#search`
 - `IM`：二级 tab 为 `状态` / `消息` / `配置`，默认入口 hash 为 `#im`
 - `系统`：二级 tab 为 `状态` / `设置`，对应 `#status` / `#settings`
 
 补充说明：
-- 点击一级 tab 会落到该能力域的默认二级页：`对话 -> #chat`、`内容 -> #news`、`自动化 -> #cron`、`IM -> #im`、`系统 -> #status`
+- 点击一级 tab 会落到该能力域的默认页：`对话 -> #chat`、`内容 -> #news`、`日报记录 -> #digest`、`自动化 -> #cron`、`IM -> #im`、`系统 -> #status`
 - `自动化 > 搜索` 集中管理 `Brave Search API Key`、`daily-digest` 搜索主题，以及 Brave `news/search` 参数，统一写入 `data/skills/daily-digest/config.json`
+- `日报记录` 会读取 `data/skills/daily-digest/runs/*.json`，直接展示 Brave 请求参数、原始返回、LLM 抽取结果与最终入选数，方便排查“为什么只搜到很少的新闻”
 - `IM > 状态` 展示 IM 平台连接、飞书运行摘要、飞书群聊列表
 - `IM > 消息` 展示实时 IM 消息日志，支持群聊 / 直发筛选，并以“用户名 / 群名 + 原始 ID”形式展示飞书身份
 - 当飞书用户名 / 群名未解析成功时，界面会明确显示未解析状态，而不是只剩下一串 `ou_...` / `oc_...`

@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { AutomationView, type AutomationTab } from "./AutomationView";
 import { ChatView } from "./ChatView";
 import { ContentView, type ContentTab } from "./ContentView";
+import { DailyDigestRunsView } from "./DailyDigestRunsView";
 import { IMView, type IMSubTab } from "./IMView";
 import { InputBar } from "./InputBar";
 import { SystemView, type SystemTab } from "./SystemView";
 import { useChatStream } from "./useChatStream";
 import styles from "./App.module.css";
 
-type View = "chat" | "content" | "automation" | "im" | "system";
+type View = "chat" | "content" | "digest" | "automation" | "im" | "system";
 
 interface RouteState {
   view: View;
@@ -26,11 +27,12 @@ const DEFAULT_ROUTE: RouteState = {
   systemTab: "status",
 };
 
-const VIEWS: View[] = ["chat", "content", "automation", "im", "system"];
+const VIEWS: View[] = ["chat", "content", "digest", "automation", "im", "system"];
 
 const TAB_LABELS: Record<View, string> = {
   chat: "对话",
   content: "内容",
+  digest: "日报记录",
   automation: "自动化",
   im: "IM",
   system: "系统",
@@ -39,6 +41,7 @@ const TAB_LABELS: Record<View, string> = {
 const DEFAULT_HASH_BY_VIEW: Record<View, string> = {
   chat: "#chat",
   content: "#news",
+  digest: "#digest",
   automation: "#cron",
   im: "#im",
   system: "#status",
@@ -50,6 +53,8 @@ function getRouteFromHash(hash: string): RouteState {
       return { ...DEFAULT_ROUTE, view: "content", contentTab: "news" };
     case "#memory":
       return { ...DEFAULT_ROUTE, view: "content", contentTab: "memory" };
+    case "#digest":
+      return { ...DEFAULT_ROUTE, view: "digest" };
     case "#skills":
       return { ...DEFAULT_ROUTE, view: "automation", automationTab: "skills" };
     case "#search":
@@ -160,6 +165,10 @@ function RouteView(props: { route: RouteState }): React.JSX.Element {
         onTabChange={(tab) => { window.location.hash = getHashForAutomationTab(tab); }}
       />
     );
+  }
+
+  if (props.route.view === "digest") {
+    return <DailyDigestRunsView />;
   }
 
   if (props.route.view === "im") {

@@ -16,7 +16,7 @@ max-candidates: 36
 4. 跨关键词去重后，先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际分别调用 LLM 优先筛选教育、教育科技、AI 教育、教育公司，以及与教育场景强相关的科技动态，并结构化为 JSON（含 `category`）；国际结果只保留简体中文 / 英文内容，明显繁体中文、日文、韩文等其他语言会在最终入选阶段被拦截；新闻时间继续沿用 Brave 返回的时间 hint，并最佳努力推导结构化 `date`
 5. 按国内 10 / 国际 5 的配额裁剪
 6. 将内容填入 HTML 模板，读取 `layout.css` 渲染日报并截图为 PNG；生成结果只展示来源，不展示新闻时间
-7. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`
+7. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`，并额外把本次执行的 Brave 请求参数、返回结果、抽取阶段数据与最终入选结果保存到 `data/skills/daily-digest/runs/{runId}.json`
 
 手动执行默认 Cron `daily-digest-generate` 时，生成文件同样写入 `data/skills/daily-digest/`。
 

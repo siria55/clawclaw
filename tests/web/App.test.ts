@@ -29,6 +29,10 @@ vi.mock("../../src/web/ui/ContentView.js", () => ({
   ),
 }));
 
+vi.mock("../../src/web/ui/DailyDigestRunsView.js", () => ({
+  DailyDigestRunsView: () => React.createElement("div", { "data-testid": "digest-view" }, "digest-view"),
+}));
+
 vi.mock("../../src/web/ui/AutomationView.js", () => ({
   AutomationView: (props: { activeTab: string; onTabChange: (tab: "cron" | "skills" | "search") => void }) => (
     React.createElement("div", { "data-testid": "automation-view" },
@@ -80,6 +84,7 @@ describe("App", () => {
 
   it.each([
     ["#memory", "content-view", "memory"],
+    ["#digest", "digest-view", "digest-view"],
     ["#skills", "automation-view", "skills"],
     ["#search", "automation-view", "search"],
     ["#search-config", "automation-view", "search"],
@@ -98,6 +103,10 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "自动化" }));
     await waitFor(() => expect(window.location.hash).toBe("#cron"));
     expect(screen.getByTestId("automation-view").textContent ?? "").toContain("cron");
+
+    fireEvent.click(screen.getByRole("button", { name: "日报记录" }));
+    await waitFor(() => expect(window.location.hash).toBe("#digest"));
+    expect(screen.getByTestId("digest-view").textContent ?? "").toContain("digest-view");
 
     fireEvent.click(screen.getByRole("button", { name: "系统" }));
     await waitFor(() => expect(window.location.hash).toBe("#status"));

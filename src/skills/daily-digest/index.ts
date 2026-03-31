@@ -9,6 +9,14 @@ import type { ConfigStorage } from "../../config/storage.js";
 import type { BraveSearchConfig, DailyDigestConfig } from "../../config/types.js";
 import { loadSkillDef } from "../loader.js";
 import type { Skill, SkillContext, SkillResult } from "../types.js";
+import {
+  buildDailyDigestRunRequestParams,
+  createDailyDigestRunRecord,
+  persistDailyDigestRunRecord,
+  type DailyDigestRunExtractionRecord,
+  type DailyDigestRunRecord,
+  type DailyDigestRunRequestRecord,
+} from "./run-record.js";
 
 export type DigestCategory = "domestic" | "international";
 
@@ -244,6 +252,7 @@ async function searchNewsWithBrave(
   referenceDate: string,
   braveSearchApiKey: string | undefined,
   braveSearchConfig: BraveSearchConfig | undefined,
+  runRecord?: DailyDigestRunRecord,
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   const allLinks: DigestCandidateLink[] = [];
@@ -254,15 +263,47 @@ async function searchNewsWithBrave(
   log(`🧭 使用 Brave Search API 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求（freshness=${freshnessLabel}）`);
   for (const plan of searchPlans) {
     log(`🌐 Brave 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
-    const response = await fetchBraveNewsResponse(plan.searchText, apiKey, maxCandidates, plan.hintCategory, searchConfig);
-    const links = parseBraveNewsSearchResponse(response, plan.hintCategory);
-    log(`🔗 获取 ${links.length} 个候选结果`);
-    allLinks.push(...links);
+    const requestUrl = buildBraveNewsSearchUrl(plan.searchText, maxCandidates, plan.hintCategory, searchConfig);
+    const requestRecord: DailyDigestRunRequestRecord = {
+      query: plan.query,
+      searchText: plan.searchText,
+      hintCategory: plan.hintCategory,
+      startedAt: new Date().toISOString(),
+      requestUrl,
+      request: buildDailyDigestRunRequestParams(requestUrl, maxCandidates),
+      responseResultCount: 0,
+      parsedLinks: [],
+    };
+    try {
+      const response = await fetchBraveNewsResponse(requestUrl, apiKey);
+      requestRecord.response = response;
+      requestRecord.responseResultCount = countBraveNewsResults(response);
+      const links = parseBraveNewsSearchResponse(response, plan.hintCategory);
+      requestRecord.parsedLinks = links.map((link) => ({ ...link }));
+      requestRecord.finishedAt = new Date().toISOString();
+      runRecord?.searchRequests.push(requestRecord);
+      log(`🔗 获取 ${links.length} 个候选结果`);
+      allLinks.push(...links);
+    } catch (error) {
+      requestRecord.finishedAt = new Date().toISOString();
+      requestRecord.error = error instanceof Error ? error.message : String(error);
+      runRecord?.searchRequests.push(requestRecord);
+      throw error;
+    }
+  }
+
+  if (runRecord) {
+    runRecord.counts.rawLinkCount = allLinks.length;
   }
 
   const uniqueLinks = dedupeLinks(allLinks);
   const filteredLinks = uniqueLinks.filter((link) => !isBlockedLink(link));
   const blockedCount = uniqueLinks.length - filteredLinks.length;
+  if (runRecord) {
+    runRecord.counts.uniqueLinkCount = uniqueLinks.length;
+    runRecord.counts.filteredLinkCount = filteredLinks.length;
+    runRecord.counts.blockedLinkCount = blockedCount;
+  }
   if (blockedCount > 0) {
     log(`🚫 过滤 ${blockedCount} 个自媒体 / 黑名单链接`);
   }
@@ -274,6 +315,10 @@ async function searchNewsWithBrave(
 
   const domesticLinks = filteredLinks.filter((link) => link.hintCategory === "domestic");
   const internationalLinks = filteredLinks.filter((link) => link.hintCategory === "international");
+  if (runRecord) {
+    runRecord.counts.domesticLinkCount = domesticLinks.length;
+    runRecord.counts.internationalLinkCount = internationalLinks.length;
+  }
 
   const domesticArticles = await extractArticlesFromLinks(
     ctx,
@@ -281,6 +326,7 @@ async function searchNewsWithBrave(
     "domestic",
     getExtractionLimit("domestic", quota, maxCandidates),
     referenceDate,
+    runRecord,
   );
   const internationalArticles = await extractArticlesFromLinks(
     ctx,
@@ -288,12 +334,18 @@ async function searchNewsWithBrave(
     "international",
     getExtractionLimit("international", quota, maxCandidates),
     referenceDate,
+    runRecord,
   );
 
   const articles = dedupeArticles([...domesticArticles, ...internationalArticles]);
 
   const domesticCount = articles.filter((article) => article.category === "domestic").length;
   const internationalCount = articles.length - domesticCount;
+  if (runRecord) {
+    runRecord.counts.extractedArticleCount = articles.length;
+    runRecord.counts.extractedDomesticCount = domesticCount;
+    runRecord.counts.extractedInternationalCount = internationalCount;
+  }
   log(`✅ 筛选出 ${articles.length} 篇文章（国内 ${domesticCount} / 国际 ${internationalCount}）`);
   return articles;
 }
@@ -396,24 +448,44 @@ export class DailyDigestSkill implements Skill {
     const queries = resolveDailyDigestQueries(config?.queries, this.#defaultQueries);
     ctx.log?.(`🧭 使用 ${queries.length} 个搜索主题`);
     const dateKey = new Date().toLocaleDateString("sv-SE");
-    const articles = await searchNewsWithBrave(
-      ctx,
-      queries,
-      this.#maxCandidates,
-      this.#quota,
+    const traceDataDir = resolveDailyDigestTraceDir(ctx.dataDir, this.#configStorage);
+    const braveSearchConfig = mergeBraveSearchConfig(config?.braveSearch);
+    const runRecord = createDailyDigestRunRecord({
       dateKey,
-      config?.braveSearchApiKey,
-      config?.braveSearch,
-    );
-    const selection = selectDigestArticles(articles, this.#quota);
-    ctx.log?.(`📊 最终入选 ${selection.all.length} 篇文章（国内 ${selection.domestic.length} / 国际 ${selection.international.length}）`);
-    if (selection.domestic.length < this.#quota.domestic || selection.international.length < this.#quota.international) {
-      ctx.log?.(`⚠️ 分类配额未完全满足，目标为国内 ${this.#quota.domestic} / 国际 ${this.#quota.international}`);
-    }
-
-    const dateLabel = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
-    const browser = await chromium.launch({ headless: true });
+      queries,
+      quota: this.#quota,
+      maxCandidates: this.#maxCandidates,
+      braveSearchConfig,
+      searchPlans: buildDailyDigestSearchPlans(queries),
+    });
+    let browser: Browser | undefined;
     try {
+      const articles = await searchNewsWithBrave(
+        ctx,
+        queries,
+        this.#maxCandidates,
+        this.#quota,
+        dateKey,
+        config?.braveSearchApiKey,
+        braveSearchConfig,
+        runRecord,
+      );
+      const selection = selectDigestArticles(articles, this.#quota);
+      runRecord.selection = {
+        domestic: selection.domestic.map((article) => ({ ...article })),
+        international: selection.international.map((article) => ({ ...article })),
+        all: selection.all.map((article) => ({ ...article })),
+      };
+      runRecord.counts.finalCount = selection.all.length;
+      runRecord.counts.finalDomesticCount = selection.domestic.length;
+      runRecord.counts.finalInternationalCount = selection.international.length;
+      ctx.log?.(`📊 最终入选 ${selection.all.length} 篇文章（国内 ${selection.domestic.length} / 国际 ${selection.international.length}）`);
+      if (selection.domestic.length < this.#quota.domestic || selection.international.length < this.#quota.international) {
+        ctx.log?.(`⚠️ 分类配额未完全满足，目标为国内 ${this.#quota.domestic} / 国际 ${this.#quota.international}`);
+      }
+
+      const dateLabel = new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+      browser = await chromium.launch({ headless: true });
       const html = renderDailyDigestHtml(selection, dateLabel);
       const imageBuffer = await screenshotHtml(browser, html);
 
@@ -423,12 +495,30 @@ export class DailyDigestSkill implements Skill {
         writeFileSync(join(dataDirPath, `${dateKey}.md`), renderDailyDigestMarkdown(selection, dateLabel), "utf8");
         writeFileSync(join(dataDirPath, `${dateKey}.png`), imageBuffer);
         writeFileSync(join(dataDirPath, `${dateKey}.json`), JSON.stringify(selection.all, null, 2), "utf8");
+        runRecord.outputFiles = {
+          html: `${dateKey}.html`,
+          md: `${dateKey}.md`,
+          png: `${dateKey}.png`,
+          json: `${dateKey}.json`,
+        };
         ctx.log?.(`💾 文件已保存到 ${dataDirPath}`);
+        runRecord.status = "success";
+        runRecord.finishedAt = new Date().toISOString();
+        if (traceDataDir) persistDailyDigestRunRecord(traceDataDir, runRecord);
         return { outputPath: join(dataDirPath, `${dateKey}.png`) };
       }
+      runRecord.status = "success";
+      runRecord.finishedAt = new Date().toISOString();
+      if (traceDataDir) persistDailyDigestRunRecord(traceDataDir, runRecord);
       return {};
+    } catch (error) {
+      runRecord.status = "error";
+      runRecord.finishedAt = new Date().toISOString();
+      runRecord.error = error instanceof Error ? error.message : String(error);
+      if (traceDataDir) persistDailyDigestRunRecord(traceDataDir, runRecord);
+      throw error;
     } finally {
-      await browser.close();
+      await browser?.close();
     }
   }
 }
@@ -528,36 +618,67 @@ async function extractArticlesFromLinks(
   category: DigestCategory,
   maxCandidates: number,
   referenceDate: string,
+  runRecord?: DailyDigestRunRecord,
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
+  const extractionRecord: DailyDigestRunExtractionRecord = {
+    category,
+    startedAt: new Date().toISOString(),
+    linkCount: links.length,
+    maxCandidates,
+    prompt: "",
+    parsedArticles: [],
+  };
   if (links.length === 0) {
+    extractionRecord.finishedAt = new Date().toISOString();
+    extractionRecord.error = `${CATEGORY_LABEL[category]}候选为空`;
+    runRecord?.extractions.push(extractionRecord);
     log(`⚠️ ${CATEGORY_LABEL[category]}候选为空`);
     return [];
   }
 
   log(`📊 ${CATEGORY_LABEL[category]}候选 ${links.length} 个链接，调用 LLM 筛选…`);
   const prompt = buildDailyDigestExtractionPrompt(category, links.slice(0, 180), maxCandidates);
+  extractionRecord.prompt = prompt;
 
-  const response = await ctx.agent.llm.complete({
-    system: DAILY_DIGEST_EXTRACTION_SYSTEM,
-    messages: [{ role: "user", content: prompt }],
-  });
-  const text = extractText(response.message.content);
-  const jsonText = extractJsonArray(text);
-  if (!jsonText) {
-    log(`⚠️ ${CATEGORY_LABEL[category]} LLM 未返回有效 JSON`);
-    if (text) log(`🪵 ${CATEGORY_LABEL[category]} LLM 原始输出: ${text.slice(0, 200)}`);
-    return [];
+  try {
+    const response = await ctx.agent.llm.complete({
+      system: DAILY_DIGEST_EXTRACTION_SYSTEM,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const text = extractText(response.message.content);
+    extractionRecord.rawOutput = text;
+    const jsonText = extractJsonArray(text);
+    if (!jsonText) {
+      extractionRecord.finishedAt = new Date().toISOString();
+      extractionRecord.error = `${CATEGORY_LABEL[category]} LLM 未返回有效 JSON`;
+      runRecord?.extractions.push(extractionRecord);
+      log(`⚠️ ${CATEGORY_LABEL[category]} LLM 未返回有效 JSON`);
+      if (text) log(`🪵 ${CATEGORY_LABEL[category]} LLM 原始输出: ${text.slice(0, 200)}`);
+      return [];
+    }
+
+    const parsed = parseArticlesFromLLMOutput(response.message.content, buildLinkHintMap(links), referenceDate);
+    if (!parsed) {
+      extractionRecord.finishedAt = new Date().toISOString();
+      extractionRecord.error = `${CATEGORY_LABEL[category]} JSON 解析失败`;
+      runRecord?.extractions.push(extractionRecord);
+      log(`⚠️ ${CATEGORY_LABEL[category]} JSON 解析失败`);
+      log(`🪵 ${CATEGORY_LABEL[category]} LLM 原始输出: ${text.slice(0, 200)}`);
+      return [];
+    }
+
+    const articles = parsed.map((article) => ({ ...article, category }));
+    extractionRecord.finishedAt = new Date().toISOString();
+    extractionRecord.parsedArticles = articles.map((article) => ({ ...article }));
+    runRecord?.extractions.push(extractionRecord);
+    return articles;
+  } catch (error) {
+    extractionRecord.finishedAt = new Date().toISOString();
+    extractionRecord.error = error instanceof Error ? error.message : String(error);
+    runRecord?.extractions.push(extractionRecord);
+    throw error;
   }
-
-  const parsed = parseArticlesFromLLMOutput(response.message.content, buildLinkHintMap(links), referenceDate);
-  if (!parsed) {
-    log(`⚠️ ${CATEGORY_LABEL[category]} JSON 解析失败`);
-    log(`🪵 ${CATEGORY_LABEL[category]} LLM 原始输出: ${text.slice(0, 200)}`);
-    return [];
-  }
-
-  return parsed.map((article) => ({ ...article, category }));
 }
 
 export function buildDailyDigestExtractionPrompt(
@@ -1083,13 +1204,10 @@ export function buildBraveNewsSearchUrl(
 }
 
 async function fetchBraveNewsResponse(
-  query: string,
+  requestUrl: string,
   apiKey: string,
-  maxCandidates: number,
-  hintCategory: DigestCategory,
-  braveSearchConfig: BraveSearchConfig | undefined,
 ): Promise<unknown> {
-  const response = await fetch(buildBraveNewsSearchUrl(query, maxCandidates, hintCategory, braveSearchConfig), {
+  const response = await fetch(requestUrl, {
     headers: {
       Accept: "application/json",
       "X-Subscription-Token": apiKey,
@@ -1100,6 +1218,11 @@ async function fetchBraveNewsResponse(
     throw new Error(`Brave Search API ${response.status}: ${body.slice(0, 240)}`);
   }
   return response.json() as Promise<unknown>;
+}
+
+function countBraveNewsResults(payload: unknown): number {
+  const parsed = BraveNewsResponseSchema.safeParse(payload);
+  return parsed.success ? parsed.data.results.length : 0;
 }
 
 export function parseBraveNewsSearchResponse(
@@ -1219,6 +1342,15 @@ function getHostname(value: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function resolveDailyDigestTraceDir(
+  dataDir: string | undefined,
+  configStorage: ConfigStorage<DailyDigestConfig> | undefined,
+): string | undefined {
+  if (dataDir) return dataDir;
+  const filePath = configStorage?.filePath;
+  return filePath ? dirname(filePath) : undefined;
 }
 
 function canonicalizeUrl(value: string): string {
