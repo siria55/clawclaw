@@ -416,7 +416,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 7. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML
 8. 条目元信息展示层只显示来源；新闻时间仍保留在文章对象中供 JSON 输出与 `date` 推导复用
 9. Playwright 截图为 PNG，写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
-10. 同一次执行还会写入 `data/skills/daily-digest/runs/{runId}.json`，内容包含 Brave 请求参数、原始返回、解析候选、LLM 抽取结果与最终入选统计
+10. 同一次执行还会写入 `data/skills/daily-digest/runs/{runId}.json`，内容包含 Brave 请求参数、原始返回、解析候选、LLM 抽取结果、送入 LLM 的候选明细与最终入选统计
 11. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
 12. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
 

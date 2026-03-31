@@ -46,6 +46,7 @@ export interface DailyDigestRunExtractionRecord {
   linkCount: number;
   maxCandidates: number;
   prompt: string;
+  candidateLinks: DigestCandidateLink[];
   rawOutput?: string;
   parsedArticles: DigestArticle[];
   error?: string;

@@ -78,6 +78,7 @@ interface DailyDigestRunExtractionRecord {
   linkCount: number;
   maxCandidates: number;
   prompt: string;
+  candidateLinks?: DigestCandidateLink[];
   rawOutput?: string;
   parsedArticles: DigestArticle[];
   error?: string;
@@ -148,6 +149,13 @@ interface DailyDigestRunRecord {
     json?: string;
   };
   error?: string;
+}
+
+interface ExtractionCandidateViewModel {
+  link: DigestCandidateLink;
+  selected: boolean;
+  finalSelected: boolean;
+  tags: string[];
 }
 
 export function DailyDigestRunsView(): React.JSX.Element {
@@ -355,30 +363,35 @@ function RunDetail(props: { record: DailyDigestRunRecord }): React.JSX.Element {
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>LLM 抽取</h2>
         <div className={styles.stack}>
-          {record.extractions.map((extraction) => (
-            <details key={`${extraction.category}-${extraction.startedAt}`} className={styles.disclosure}>
-              <summary className={styles.disclosureSummary}>
-                <span>{extraction.category === "domestic" ? "国内" : "国际"}</span>
-                <span>候选 {extraction.linkCount}</span>
-                <span>返回 {extraction.parsedArticles.length}</span>
-              </summary>
-              <div className={styles.disclosureBody}>
-                {extraction.error && <div className={styles.errorInline}>{extraction.error}</div>}
-                <details className={styles.innerDisclosure}>
-                  <summary>Prompt</summary>
-                  <pre className={styles.codeBlock}>{extraction.prompt}</pre>
-                </details>
-                <details className={styles.innerDisclosure}>
-                  <summary>LLM 原始输出</summary>
-                  <pre className={styles.codeBlock}>{extraction.rawOutput ?? ""}</pre>
-                </details>
-                <details className={styles.innerDisclosure}>
-                  <summary>解析后的文章</summary>
-                  <pre className={styles.codeBlock}>{formatJson(extraction.parsedArticles)}</pre>
-                </details>
-              </div>
-            </details>
-          ))}
+          {record.extractions.map((extraction) => {
+            const diagnostics = buildExtractionDiagnostics(record, extraction);
+            return (
+              <details key={`${extraction.category}-${extraction.startedAt}`} className={styles.disclosure} open>
+                <summary className={styles.disclosureSummary}>
+                  <span>{extraction.category === "domestic" ? "国内" : "国际"}</span>
+                  <span>候选 {diagnostics.totalCandidateCount}</span>
+                  <span>返回 {diagnostics.parsedCount}</span>
+                  <span>通过率 {diagnostics.passRateLabel}</span>
+                </summary>
+                <div className={styles.disclosureBody}>
+                  <ExtractionDiagnostics extraction={extraction} diagnostics={diagnostics} />
+                  {extraction.error && <div className={styles.errorInline}>{extraction.error}</div>}
+                  <details className={styles.innerDisclosure}>
+                    <summary>Prompt</summary>
+                    <pre className={styles.codeBlock}>{extraction.prompt}</pre>
+                  </details>
+                  <details className={styles.innerDisclosure}>
+                    <summary>LLM 原始输出</summary>
+                    <pre className={styles.codeBlock}>{extraction.rawOutput ?? ""}</pre>
+                  </details>
+                  <details className={styles.innerDisclosure}>
+                    <summary>解析后的文章</summary>
+                    <pre className={styles.codeBlock}>{formatJson(extraction.parsedArticles)}</pre>
+                  </details>
+                </div>
+              </details>
+            );
+          })}
         </div>
       </section>
 
@@ -421,6 +434,68 @@ function MetricCard(props: { label: string; value: number }): React.JSX.Element 
   );
 }
 
+function ExtractionDiagnostics(
+  props: {
+    extraction: DailyDigestRunExtractionRecord;
+    diagnostics: ReturnType<typeof buildExtractionDiagnostics>;
+  },
+): React.JSX.Element {
+  const { diagnostics } = props;
+
+  return (
+    <div className={styles.extractionBlock}>
+      <div className={styles.metricGrid}>
+        <MetricCard label="送入 LLM" value={diagnostics.promptCandidateCount} />
+        <MetricCard label="原始候选" value={diagnostics.totalCandidateCount} />
+        <MetricCard label="抽取返回" value={diagnostics.parsedCount} />
+        <MetricCard label="最终入选" value={diagnostics.finalSelectedCount} />
+        <MetricCard label="未抽取" value={diagnostics.notSelectedCount} />
+        <MetricCard label="最大返回上限" value={props.extraction.maxCandidates} />
+      </div>
+
+      <div className={styles.notePanel}>
+        <h3 className={styles.noteTitle}>诊断提示</h3>
+        {diagnostics.approximateCandidateList && (
+          <p className={styles.noteHint}>当前 run 没有持久化抽取候选明细，下面列表由搜索结果近似还原。</p>
+        )}
+        <ul className={styles.noteList}>
+          {diagnostics.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      </div>
+
+      <details className={styles.innerDisclosure}>
+        <summary>送入 LLM 的候选明细</summary>
+        <div className={styles.candidateList}>
+          {diagnostics.candidates.map((item) => (
+            <article key={item.link.href} className={styles.candidateCard}>
+              <div className={styles.candidateTop}>
+                <a href={item.link.href} target="_blank" rel="noreferrer" className={styles.candidateTitle}>
+                  {item.link.text}
+                </a>
+                <div className={styles.tagRow}>
+                  <span className={`${styles.pill} ${item.finalSelected ? styles.pillSuccess : item.selected ? styles.pillActive : styles.pillMuted}`}>
+                    {item.finalSelected ? "最终入选" : item.selected ? "LLM 选中" : "未抽取"}
+                  </span>
+                  {item.tags.map((tag) => (
+                    <span key={`${item.link.href}-${tag}`} className={`${styles.pill} ${styles.pillMuted}`}>{tag}</span>
+                  ))}
+                </div>
+              </div>
+              <div className={styles.articleMeta}>
+                <span>{item.link.source || "未知来源"}</span>
+                {item.link.publishedAt && <span>{item.link.publishedAt}</span>}
+              </div>
+              {item.link.summary && <p className={styles.candidateSummary}>{item.link.summary}</p>}
+            </article>
+          ))}
+        </div>
+      </details>
+    </div>
+  );
+}
+
 function InfoItem(props: { label: string; value: string; mono?: boolean }): React.JSX.Element {
   return (
     <div className={styles.infoItem}>
@@ -457,4 +532,158 @@ function formatDateTime(value: string): string {
 
 function formatJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+function buildExtractionDiagnostics(
+  record: DailyDigestRunRecord,
+  extraction: DailyDigestRunExtractionRecord,
+): {
+  candidates: ExtractionCandidateViewModel[];
+  notes: string[];
+  approximateCandidateList: boolean;
+  totalCandidateCount: number;
+  promptCandidateCount: number;
+  parsedCount: number;
+  finalSelectedCount: number;
+  notSelectedCount: number;
+  passRateLabel: string;
+} {
+  const candidateResult = resolveExtractionCandidates(record, extraction);
+  const selectedUrls = new Set(extraction.parsedArticles.map((article) => normalizeUrl(article.url)));
+  const finalSelectedUrls = new Set(
+    (record.selection?.all ?? [])
+      .filter((article) => article.category === extraction.category)
+      .map((article) => normalizeUrl(article.url)),
+  );
+  const candidates = candidateResult.items.map((link) => buildExtractionCandidateViewModel(link, selectedUrls, finalSelectedUrls));
+  const parsedCount = extraction.parsedArticles.length;
+  const finalSelectedCount = [...selectedUrls].filter((url) => finalSelectedUrls.has(url)).length;
+  const promptCandidateCount = candidates.length;
+  const totalCandidateCount = Math.max(extraction.linkCount, promptCandidateCount);
+  return {
+    candidates,
+    notes: buildExtractionNotes(extraction, candidates, candidateResult.approximate),
+    approximateCandidateList: candidateResult.approximate,
+    totalCandidateCount,
+    promptCandidateCount,
+    parsedCount,
+    finalSelectedCount,
+    notSelectedCount: Math.max(promptCandidateCount - parsedCount, 0),
+    passRateLabel: formatRatio(parsedCount, promptCandidateCount),
+  };
+}
+
+function resolveExtractionCandidates(
+  record: DailyDigestRunRecord,
+  extraction: DailyDigestRunExtractionRecord,
+): { items: DigestCandidateLink[]; approximate: boolean } {
+  if ((extraction.candidateLinks?.length ?? 0) > 0) {
+    return { items: extraction.candidateLinks ?? [], approximate: false };
+  }
+  const items = dedupeCandidateLinks(
+    record.searchRequests
+      .filter((request) => request.hintCategory === extraction.category)
+      .flatMap((request) => request.parsedLinks),
+  );
+  return { items, approximate: true };
+}
+
+function dedupeCandidateLinks(links: DigestCandidateLink[]): DigestCandidateLink[] {
+  const seen = new Set<string>();
+  const result: DigestCandidateLink[] = [];
+  for (const link of links) {
+    const key = normalizeUrl(link.href);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(link);
+  }
+  return result;
+}
+
+function buildExtractionCandidateViewModel(
+  link: DigestCandidateLink,
+  selectedUrls: ReadonlySet<string>,
+  finalSelectedUrls: ReadonlySet<string>,
+): ExtractionCandidateViewModel {
+  const normalizedUrl = normalizeUrl(link.href);
+  return {
+    link,
+    selected: selectedUrls.has(normalizedUrl),
+    finalSelected: finalSelectedUrls.has(normalizedUrl),
+    tags: buildCandidateTags(link),
+  };
+}
+
+function buildExtractionNotes(
+  extraction: DailyDigestRunExtractionRecord,
+  candidates: ExtractionCandidateViewModel[],
+  approximate: boolean,
+): string[] {
+  const notes: string[] = [];
+  const passRate = candidates.length > 0 ? extraction.parsedArticles.length / candidates.length : 0;
+  if (candidates.length === 0) notes.push("这一组没有可展示的候选明细，说明问题更可能出在搜索阶段。");
+  if (passRate < 0.2 && candidates.length > 0) notes.push("LLM 通过率偏低，说明这批候选里大部分与当前日报口径不匹配。");
+  if (candidates.some((item) => item.tags.includes("疑似导航/聚合"))) notes.push("候选里混入了导航、栏目或聚合页，LLM 会把它们大量剔除。");
+  if (candidates.some((item) => item.tags.includes("语言不稳"))) notes.push("候选里有不少非简体中文/英文或繁体内容，抽取阶段和最终展示阶段都会更严格。");
+  if (candidates.some((item) => item.tags.includes("教育弱相关"))) notes.push("候选中有不少只是泛科技或泛教育资讯，不够贴近“教育 / 教育科技 / AI 教育 / 教育公司”的口径。");
+  if (candidates.some((item) => item.tags.includes("来源偏弱"))) notes.push("候选来源里包含博客、专栏、聚合页或论坛型站点，提示词会优先剔除这类来源。");
+  if (extraction.linkCount > candidates.length) notes.push(`这一组共有 ${extraction.linkCount} 个候选，但页面只展示了送入 LLM 的 ${candidates.length} 个。`);
+  if (approximate) notes.push("当前候选列表由已保存的搜索结果近似还原，和当时实际 prompt 顺序可能略有差异。");
+  return notes.length > 0 ? notes : ["这一组候选整体质量还可以，抽取结果少更像是当天真正满足口径的新闻就不多。"];
+}
+
+function buildCandidateTags(link: DigestCandidateLink): string[] {
+  const tags: string[] = [];
+  if (isLikelyListOrAggregation(link)) tags.push("疑似导航/聚合");
+  if (isLikelyWeakSource(link)) tags.push("来源偏弱");
+  if (isLikelyEducationWeak(link)) tags.push("教育弱相关");
+  if (containsUnstableDisplayLanguage([link.text, link.summary ?? "", link.source ?? ""])) tags.push("语言不稳");
+  return tags;
+}
+
+function isLikelyListOrAggregation(link: DigestCandidateLink): boolean {
+  const text = `${link.text} ${link.summary ?? ""} ${link.href}`.toLowerCase();
+  return /关于我们|關於我們|新闻发布|新聞發布|会员服务|會員服務|常见问题|常見問題|订阅|訂閱|相关文章|相關文章|直播间|\.\/docs\//i.test(text)
+    || /(^|\s)(专题|專題|频道|頻道|栏目|欄目)(\s|$)/i.test(text);
+}
+
+function isLikelyWeakSource(link: DigestCandidateLink): boolean {
+  const source = `${link.source ?? ""} ${link.href}`.toLowerCase();
+  return /note\.|yahoo\.co\.jp|stheadline|cw\.com\.tw|gvm\.com\.tw|thenewslens|businesstoday|sumitai|forum|blog|docs/i.test(source);
+}
+
+function isLikelyEducationWeak(link: DigestCandidateLink): boolean {
+  const text = `${link.text} ${link.summary ?? ""}`.toLowerCase();
+  const education = /教育|学校|校園|校园|大学|大學|课堂|課堂|student|school|education|edtech|teacher|classroom|campus|admission|教科書|教科书/u;
+  const broadTech = /ai|人工智能|科技|半导体|半導體|投資|投资|雲端|云端|算力|quantum|chip|晶片|cloud/u;
+  return !education.test(text) && broadTech.test(text);
+}
+
+function containsUnstableDisplayLanguage(values: string[]): boolean {
+  const text = values.join(" ").normalize("NFKC");
+  if (/[專學體與為這來們會後從開關於發佈業產網點臺灣聯報經濟應數據醫門戶話讓還選觀讀寫實軟電腦雲處裡廣務測證遠際權聲標圖錄頁覽優勢機構續線層級國資訊華號]/u.test(text)) {
+    return true;
+  }
+  for (const char of text) {
+    if (/^[\u0020-\u007e]$/u.test(char) || /^[\u3000-\u303f\uff00-\uffef]$/u.test(char)) continue;
+    if (/\p{Script=Han}/u.test(char)) continue;
+    if (/\p{Letter}/u.test(char)) return true;
+  }
+  return false;
+}
+
+function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    const href = parsed.toString();
+    return href.endsWith("/") ? href.slice(0, -1) : href;
+  } catch {
+    return url.trim();
+  }
+}
+
+function formatRatio(numerator: number, denominator: number): string {
+  if (denominator <= 0) return "0%";
+  return `${Math.round((numerator / denominator) * 100)}%`;
 }

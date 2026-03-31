@@ -105,6 +105,7 @@ corepack pnpm start
 
 - `日报记录` 是单独的一级 tab，用来排查 `daily-digest` 每次执行到底搜到了什么、筛掉了什么
 - 页面会展示最近 run 列表，并可查看每次执行的 Brave 请求参数、原始返回、解析后的候选链接、LLM 抽取结果和最终入选文章
+- `LLM 抽取` 区块会额外显示送入 LLM 的候选明细、抽取通过率、候选与最终入选对照，以及诊断提示，便于判断到底是搜索不准还是提示词过滤过严
 - 对应持久化文件位于 `data/skills/daily-digest/runs/{runId}.json`
 
 ### 自动化 — `/#cron` / `/#skills` / `/#search`

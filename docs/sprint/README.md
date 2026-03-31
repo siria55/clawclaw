@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`、`sprint-84.md`、`sprint-85.md`、`sprint-86.md`、`sprint-87.md`、`sprint-88.md`、`sprint-89.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`、`sprint-84.md`、`sprint-85.md`、`sprint-86.md`、`sprint-87.md`、`sprint-88.md`、`sprint-89.md`、`sprint-90.md`。
 
 ---
 
@@ -337,4 +337,5 @@
 - `daily-digest` 的国内搜索现在会明确使用中国语境，不再把“国内”交给 Brave 自行歧义解释；国内请求会附带 `country=CN` 与 `search_lang=zh-hans`
 - `daily-digest` 国际区块现在只保留简体中文 / 英文内容，繁体中文、日文、韩文等其他语言会在最终入选前被过滤
 - `daily-digest` 现在会在最终选稿前先做语言归一化：繁体中文统一转简体，中文 / 英文之外的其他语言统一翻译成简体中文
+- `日报记录` 现在会显示 LLM 抽取候选明细、通过率和诊断提示，定位“为什么被过滤很多”更直接
 - Agent 现在会优先按 WebUI 中配置的名称和系统提示词回答“你谁 / 你叫什么 / 你是做什么的”

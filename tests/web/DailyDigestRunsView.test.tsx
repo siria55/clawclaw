@@ -118,6 +118,23 @@ describe("DailyDigestRunsView", () => {
             linkCount: 9,
             maxCandidates: 20,
             prompt: "prompt text",
+            candidateLinks: [
+              {
+                text: "教育 AI 公司发布新产品",
+                href: "https://example.com/a",
+                hintCategory: "domestic",
+                source: "新华社",
+                summary: "summary",
+                publishedAt: "2026-03-31 10:00",
+              },
+              {
+                text: "某科技公司推出新芯片",
+                href: "https://example.com/b",
+                hintCategory: "domestic",
+                source: "Some Blog",
+                summary: "AI 芯片消息，主要面向云计算基础设施。",
+              },
+            ],
             rawOutput: "[{\"title\":\"教育 AI 公司发布新产品\"}]",
             parsedArticles: [{
               title: "教育 AI 公司发布新产品",
@@ -182,6 +199,10 @@ describe("DailyDigestRunsView", () => {
     expect(screen.getByText("Brave 配置")).toBeDefined();
     expect(screen.getByText("最终入选")).toBeDefined();
     expect(screen.getByText("教育 AI 公司发布新产品")).toBeDefined();
+    expect(screen.getByText("诊断提示")).toBeDefined();
+    expect(screen.getByText("送入 LLM 的候选明细")).toBeDefined();
+    expect(screen.getByText("通过率 50%")).toBeDefined();
+    expect(screen.getByText("教育弱相关")).toBeDefined();
   });
 
   it("refreshes the list when clicking refresh", async () => {

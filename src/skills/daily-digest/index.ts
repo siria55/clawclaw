@@ -708,6 +708,7 @@ async function extractArticlesFromLinks(
     linkCount: links.length,
     maxCandidates,
     prompt: "",
+    candidateLinks: [],
     parsedArticles: [],
   };
   if (links.length === 0) {
@@ -719,7 +720,9 @@ async function extractArticlesFromLinks(
   }
 
   log(`📊 ${CATEGORY_LABEL[category]}候选 ${links.length} 个链接，调用 LLM 筛选…`);
-  const prompt = buildDailyDigestExtractionPrompt(category, links.slice(0, 180), maxCandidates);
+  const promptLinks = links.slice(0, 180);
+  extractionRecord.candidateLinks = promptLinks.map((link) => ({ ...link }));
+  const prompt = buildDailyDigestExtractionPrompt(category, promptLinks, maxCandidates);
   extractionRecord.prompt = prompt;
 
   try {
