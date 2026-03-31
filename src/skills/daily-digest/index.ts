@@ -865,7 +865,7 @@ ${linkText}
 [{"title":"文章标题","url":"文章完整URL","summary":"一句话摘要","source":"来源媒体","category":"${category}"}]`;
 }
 
-function dedupeLinks(links: DigestCandidateLink[]): DigestCandidateLink[] {
+export function dedupeLinks(links: DigestCandidateLink[]): DigestCandidateLink[] {
   const byUrl = new Map<string, DigestCandidateLink>();
   for (const link of links) {
     const key = canonicalizeUrl(link.href);
@@ -881,11 +881,12 @@ function dedupeLinks(links: DigestCandidateLink[]): DigestCandidateLink[] {
 }
 
 function mergeLinkItems(previous: DigestCandidateLink, next: DigestCandidateLink): DigestCandidateLink {
+  const hintCategory = previous.hintCategory === "domestic" || next.hintCategory === "domestic"
+    ? "domestic"
+    : "international";
   return {
     ...previous,
-    ...(previous.hintCategory === "domestic" && next.hintCategory === "international"
-      ? { hintCategory: next.hintCategory }
-      : {}),
+    hintCategory,
     ...(!previous.source && next.source ? { source: next.source } : {}),
     ...(!previous.summary && next.summary ? { summary: next.summary } : {}),
     ...(!previous.publishedAt && next.publishedAt ? { publishedAt: next.publishedAt } : {}),

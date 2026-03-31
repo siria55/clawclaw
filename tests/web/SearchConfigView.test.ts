@@ -60,6 +60,7 @@ describe("SearchConfigView", () => {
 
     expect(input.value).toBe("brave_key_123");
     expect(textarea.value).toBe("中国教育\nAI 教育");
+    expect(textarea.placeholder).toBe("中国 教育部 AI 教育\n中国 智慧教育\n中国 高校 AI 教育\n中国 教育科技 公司\nOpenAI education");
     expect((await screen.findByLabelText("count") as HTMLInputElement).value).toBe("30");
     expect((await screen.findByLabelText("freshness") as HTMLInputElement).value).toBe("pm");
     expect((await screen.findByLabelText("safesearch") as HTMLSelectElement).value).toBe("moderate");

@@ -5,6 +5,7 @@ import {
   buildDailyDigestExtractionPrompt,
   DAILY_DIGEST_SCREENSHOT,
   DAILY_DIGEST_EXTRACTION_SYSTEM,
+  dedupeLinks,
   normalizeDigestArticleDisplayLanguage,
   parseArticlesFromLLMOutput,
   parseBraveNewsSearchResponse,
@@ -63,6 +64,28 @@ describe("parseBraveNewsSearchResponse", () => {
     }, "domestic");
 
     expect(links[0]?.publishedAt).toBe("2026-03-30 09:12");
+  });
+});
+
+describe("dedupeLinks", () => {
+  it("keeps domestic hint when the same link appears in both domestic and international searches", () => {
+    const links = dedupeLinks([
+      {
+        text: "同一篇新闻",
+        href: "https://news.pedaily.cn/202603/562182.shtml",
+        hintCategory: "domestic",
+        source: "news.pedaily.cn",
+      },
+      {
+        text: "同一篇新闻",
+        href: "https://news.pedaily.cn/202603/562182.shtml",
+        hintCategory: "international",
+        source: "news.pedaily.cn",
+      },
+    ]);
+
+    expect(links).toHaveLength(1);
+    expect(links[0]?.hintCategory).toBe("domestic");
   });
 });
 

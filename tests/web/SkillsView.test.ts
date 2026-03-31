@@ -60,6 +60,7 @@ describe("SkillsView", () => {
     expect(screen.getByText("▶ 运行")).toBeDefined();
     const textarea = await screen.findByLabelText("搜索主题（每行一个）") as HTMLTextAreaElement;
     expect(textarea.value).toBe("国内AI科技\n国际AI科技");
+    expect(textarea.placeholder).toBe("中国 教育部 AI 教育\n中国 智慧教育\n中国 高校 AI 教育\n中国 教育科技 公司\nOpenAI education");
   });
 
   it("saves normalized daily-digest queries from the skill card", async () => {

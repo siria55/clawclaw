@@ -198,14 +198,14 @@ export function SearchConfigView(): React.JSX.Element {
               <textarea
                 id="search-daily-digest-queries"
                 className={styles.textarea}
-                placeholder={"AI 教育\n生成式 AI 教育\n教育科技 AI\n教育 AI 公司\nOpenAI education"}
+                placeholder={"中国 教育部 AI 教育\n中国 智慧教育\n中国 高校 AI 教育\n中国 教育科技 公司\nOpenAI education"}
                 value={fields.queries}
                 onChange={(e) => setField("queries", e.target.value)}
                 rows={8}
                 autoComplete="off"
                 spellCheck={false}
               />
-              <span className={styles.fieldHint}>这些主题会映射到 Brave 的 `q` 参数，逐个请求并汇总候选新闻。</span>
+              <span className={styles.fieldHint}>这些主题会映射到 Brave 的 `q` 参数，逐个请求并汇总候选新闻。国内主题建议直接写成 `中国 ...`，能明显减少境外噪音。</span>
             </div>
           </div>
         </section>

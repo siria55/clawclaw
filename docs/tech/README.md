@@ -391,8 +391,8 @@ frontmatter 字段（简化 YAML，无额外依赖）：
 ```
 ---
 id: daily-digest
-description: 浏览器搜索科技新闻，按国内 10 / 国际 5 生成 HTML 日报截图
-queries: AI 教育,生成式 AI 教育,教育科技 AI,教育 AI 公司,AI 课堂,AI 教师,智能教育,OpenAI education,Google education AI,Microsoft education AI
+description: 通过 Brave Search API 搜索过去 3 天中国大陆优先的教育与教育科技新闻，按国内 10 / 国际 5 生成 HTML 日报并截图保存
+queries: 中国 教育部 AI 教育,中国 智慧教育,中国 高校 AI 教育,中国 中小学 AI 教育,中国 教育科技 公司,中国 教育大模型,中国 学校 AI 课堂,中国 教师 AI 应用,OpenAI education,Google education AI,Microsoft education AI
 domestic-articles: 10
 international-articles: 5
 max-articles: 15
@@ -403,7 +403,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 `loadSkillDef(skillDir)` 解析 SKILL.md，返回 `SkillDef`（含 `instructions` 字段为 frontmatter 之后的 markdown body）。
 其中 `max-candidates` 用于抽取阶段的候选上限，`domestic-articles` / `international-articles` 用于最终日报配额。
-`DailyDigestSkill` 运行时还可从 `ConfigStorage<DailyDigestConfig>` 读取覆盖配置，目前支持在 WebUI 动态修改搜索主题、Brave Search API Key，以及 Brave `news/search` 参数。
+`DailyDigestSkill` 运行时还可从 `ConfigStorage<DailyDigestConfig>` 读取覆盖配置，目前支持在 WebUI 动态修改搜索主题、Brave Search API Key，以及 Brave `news/search` 参数。默认 query 现已进一步收紧到中国大陆教育语境，只保留少量明确国际 query，减少 Brave 把“国内资讯”扩散到境外来源。
 
 ### DailyDigestSkill 执行流程
 
@@ -411,16 +411,17 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 2. 启动 Playwright chromium（headless）
 3. 依次请求 Brave Search API 的 `news/search` 接口；默认请求参数为 `count=20`、`offset=0`、`freshness=p3d`、`safesearch=strict`、`spellcheck=0`，并支持由 WebUI 覆盖 `count / offset / freshness / safesearch / ui_lang / extra_snippets / goggles`；其中 `p3d` 会在运行时自动展开为滚动 3 天日期区间；国内搜索默认额外附带 `country=CN` 与 `search_lang=zh-hans`，国际搜索默认不带地域参数；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
 4. 将 Brave 返回的标题、URL、来源、摘要与时间字段归一化为候选链接，跨关键词去重后先过滤百家号等自媒体 / 黑名单链接；其中“国内”候选会先按 hostname 分成“中国大陆来源优先池”和“非大陆回退池”，再进入后续抽取
-5. 国内链路会先对大陆优先池调用 `ctx.agent.llm.complete()`；若返回数仍不足国内配额，再对非大陆回退池做第二次抽取补位。国际链路继续走单次抽取
-6. 抽取 prompt 会优先筛出教育、教育科技、AI 教育、教育公司内容，同时保留与教育场景强相关的科技动态；国内 prompt 还会明确要求优先中国大陆媒体、政府 / 高校 / 企业官网来源，输出为结构化 JSON（`DigestArticle[]`，含 `category`）
-7. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
-8. 在最终选稿前新增一层展示语言归一化：标题 / 摘要 / 来源若为繁体中文则统一转成简体中文，若为中文 / 英文之外的其他语言则统一翻译成简体中文；随后再按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；若某些文章在归一化后仍不满足“仅简体中文 / 英文展示”的约束，则在最终入选前过滤；同时国内大陆来源会获得额外排序加权，避免回退候选压过大陆来源；Brave 返回的时间会 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`
-9. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML
-10. 条目元信息展示层只显示来源；新闻时间仍保留在文章对象中供 JSON 输出与 `date` 推导复用
-11. Playwright 截图为 PNG，写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
-12. 同一次执行还会写入 `data/skills/daily-digest/runs/{runId}.json`，内容包含 Brave 请求参数、原始返回、解析候选、LLM 抽取结果、送入 LLM 的候选明细与最终入选统计；国内链路还会记录大陆候选数、回退候选数，以及 `mainland-preferred / fallback` 抽取阶段
-13. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
-14. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
+5. `dedupeLinks()` 在合并重复 URL 时，若同一链接同时命中国内与国际搜索，会优先保留 `domestic` 提示，避免中国语境命中的候选被错误洗到国际池
+6. 国内链路会先对大陆优先池调用 `ctx.agent.llm.complete()`；若返回数仍不足国内配额，再对非大陆回退池做第二次抽取补位。国际链路继续走单次抽取
+7. 抽取 prompt 会优先筛出教育、教育科技、AI 教育、教育公司内容，同时保留与教育场景强相关的科技动态；国内 prompt 还会明确要求优先中国大陆媒体、政府 / 高校 / 企业官网来源，输出为结构化 JSON（`DigestArticle[]`，含 `category`）
+8. 解析层先尝试标准 JSON，再兼容 fenced json 和 near-JSON 宽松恢复，避免标题里的未转义引号把整批结果打空
+9. 在最终选稿前新增一层展示语言归一化：标题 / 摘要 / 来源若为繁体中文则统一转成简体中文，若为中文 / 英文之外的其他语言则统一翻译成简体中文；随后再按国内 10 / 国际 5 的配额选出最终 15 篇，并对自媒体来源做硬拦截、对主流媒体和官网做额外加权；若某些文章在归一化后仍不满足“仅简体中文 / 英文展示”的约束，则在最终入选前过滤；同时国内大陆来源会获得额外排序加权，避免回退候选压过大陆来源；Brave 返回的时间会 merge 回最终文章对象，并最佳努力推导 `date: YYYY-MM-DD`
+10. 运行时读取 `template.html` / `section.html` / `item.html` / `layout.css`，只填内容，不再在 TS 里硬编码整页 HTML
+11. 条目元信息展示层只显示来源；新闻时间仍保留在文章对象中供 JSON 输出与 `date` 推导复用
+12. Playwright 截图为 PNG，写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
+13. 同一次执行还会写入 `data/skills/daily-digest/runs/{runId}.json`，内容包含 Brave 请求参数、原始返回、解析候选、LLM 抽取结果、送入 LLM 的候选明细与最终入选统计；国内链路还会记录大陆候选数、回退候选数，以及 `mainland-preferred / fallback` 抽取阶段
+14. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
+15. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
 
 其中 HTML 不再由 `index.ts` 直接拼整页结构，而是运行时读取 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 和 `layout.css` 进行模板替换；这样 HTML 模板和 CSS 模板共同成为截图与导出文件的单一版式源。
 截图阶段使用 `browser.newContext({ viewport: { width: 1080, height: 1400 }, deviceScaleFactor: 4 })`，并以 `scale: "device"` 输出 PNG，在不改变版心尺寸的前提下提升清晰度。

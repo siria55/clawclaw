@@ -216,14 +216,14 @@ function DailyDigestConfigCard(): React.JSX.Element {
           <textarea
             id="daily-digest-queries"
             className={styles.configInput}
-            placeholder={"AI 教育\n生成式 AI 教育\n教育科技 AI\n教育 AI 公司\nOpenAI education"}
+            placeholder={"中国 教育部 AI 教育\n中国 智慧教育\n中国 高校 AI 教育\n中国 教育科技 公司\nOpenAI education"}
             value={fields.queries}
             onChange={(e) => setFields({ queries: e.target.value })}
             rows={6}
             autoComplete="off"
             spellCheck={false}
           />
-          <div className={styles.configMeta}>skill 会按这些主题逐个搜索，再做国内 / 国际分类筛选。</div>
+          <div className={styles.configMeta}>skill 会按这些主题逐个搜索，再做国内 / 国际分类筛选。国内主题建议直接写成 `中国 ...`，减少非中国大陆来源混入。</div>
           <div className={styles.configActions}>
             <button className={styles.saveBtn} type="button" onClick={save} disabled={saving}>
               {saving ? "保存中…" : "保存 DailyDigest 配置"}
