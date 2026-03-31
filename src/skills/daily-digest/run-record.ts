@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ResolvedBraveSearchConfig } from "../../config/daily-digest.js";
-import type { DailyDigestSelection, DigestArticle, DigestCandidateLink, DigestCategory } from "./index.js";
+import type {
+  DailyDigestSelection,
+  DigestArticle,
+  DigestCandidateLink,
+  DigestCategory,
+  DigestExtractionStage,
+} from "./index.js";
 
 export interface DailyDigestRunPlanRecord {
   query: string;
@@ -41,6 +47,7 @@ export interface DailyDigestRunRequestRecord {
 
 export interface DailyDigestRunExtractionRecord {
   category: DigestCategory;
+  stage?: DigestExtractionStage;
   startedAt: string;
   finishedAt?: string;
   linkCount: number;
@@ -58,6 +65,8 @@ export interface DailyDigestRunCounts {
   filteredLinkCount: number;
   blockedLinkCount: number;
   domesticLinkCount: number;
+  domesticMainlandLinkCount?: number;
+  domesticFallbackLinkCount?: number;
   internationalLinkCount: number;
   extractedArticleCount: number;
   extractedDomesticCount: number;
@@ -138,6 +147,8 @@ const EMPTY_COUNTS: DailyDigestRunCounts = {
   filteredLinkCount: 0,
   blockedLinkCount: 0,
   domesticLinkCount: 0,
+  domesticMainlandLinkCount: 0,
+  domesticFallbackLinkCount: 0,
   internationalLinkCount: 0,
   extractedArticleCount: 0,
   extractedDomesticCount: 0,

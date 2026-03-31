@@ -19,6 +19,7 @@ import {
 } from "./run-record.js";
 
 export type DigestCategory = "domestic" | "international";
+export type DigestExtractionStage = "default" | "mainland-preferred" | "fallback";
 
 interface ArticleDraft {
   title: string;
@@ -177,14 +178,19 @@ const PREFERRED_MEDIA_SOURCE_PATTERNS = [
 ];
 
 const PREFERRED_MEDIA_HOST_PATTERNS = [
+  /(^|\.)xinhuanet\.com$/i,
   /(^|\.)news\.cn$/i,
   /(^|\.)people\.com\.cn$/i,
+  /(^|\.)cctv\.com$/i,
+  /(^|\.)gmw\.cn$/i,
   /(^|\.)chinanews\.com\.cn$/i,
   /(^|\.)thepaper\.cn$/i,
   /(^|\.)jiemian\.com$/i,
   /(^|\.)yicai\.com$/i,
   /(^|\.)caixin\.com$/i,
   /(^|\.)stcn\.com$/i,
+  /(^|\.)cnstock\.com$/i,
+  /(^|\.)cls\.cn$/i,
   /(^|\.)eeo\.com\.cn$/i,
   /(^|\.)36kr\.com$/i,
   /(^|\.)tmtpost\.com$/i,
@@ -213,6 +219,30 @@ const PREFERRED_MEDIA_HOST_PATTERNS = [
   /(^|\.)aws\.amazon\.com$/i,
 ];
 
+const MAINLAND_CHINA_HOST_PATTERNS = [
+  /(^|\.)gov\.cn$/i,
+  /(^|\.)edu\.cn$/i,
+  /(^|\.)xinhuanet\.com$/i,
+  /(^|\.)news\.cn$/i,
+  /(^|\.)people\.com\.cn$/i,
+  /(^|\.)cctv\.com$/i,
+  /(^|\.)gmw\.cn$/i,
+  /(^|\.)chinanews\.com\.cn$/i,
+  /(^|\.)thepaper\.cn$/i,
+  /(^|\.)jiemian\.com$/i,
+  /(^|\.)yicai\.com$/i,
+  /(^|\.)caixin\.com$/i,
+  /(^|\.)stcn\.com$/i,
+  /(^|\.)cnstock\.com$/i,
+  /(^|\.)cls\.cn$/i,
+  /(^|\.)eeo\.com\.cn$/i,
+  /(^|\.)36kr\.com$/i,
+  /(^|\.)tmtpost\.com$/i,
+  /(^|\.)huxiu\.com$/i,
+  /(^|\.)ithome\.com$/i,
+  /(^|\.)leiphone\.com$/i,
+];
+
 const TRADITIONAL_CHINESE_INDICATOR_PATTERN = /[專學體與為這來們會後從開關於發佈業產網點臺灣聯報經濟應數據醫門戶話讓還選觀讀寫實軟電腦雲處裡廣務測證遠際權聲標圖錄頁覽優勢機構續線層級國資訊華號]/u;
 
 const TRADITIONAL_CHINESE_MEDIA_HOST_PATTERNS = [
@@ -225,6 +255,15 @@ const TRADITIONAL_CHINESE_MEDIA_HOST_PATTERNS = [
   /(^|\.)stheadline\.com$/i,
   /(^|\.)cna\.com\.tw$/i,
   /(^|\.)ltn\.com\.tw$/i,
+];
+
+const NON_MAINLAND_DOMESTIC_HOST_PATTERNS = [
+  /(^|\.)worldjournal\.com$/i,
+  /(^|\.)secretchina\.com$/i,
+  /(^|\.)digitimes\.com\.tw$/i,
+  /(^|\.)afpbb\.com$/i,
+  /(^|\.)nikkei\.com$/i,
+  /(^|\.)news\.infoseek\.co\.jp$/i,
 ];
 
 const DAILY_DECK_LINES = [
@@ -290,7 +329,7 @@ async function searchNewsWithBrave(
   const searchPlans = buildDailyDigestSearchPlans(queries);
   const apiKey = getBraveSearchApiKey(braveSearchApiKey);
   const searchConfig = mergeBraveSearchConfig(braveSearchConfig);
-  const freshnessLabel = searchConfig.request.freshness || "不限";
+  const freshnessLabel = describeBraveFreshness(searchConfig.request.freshness, new Date()) || "不限";
   log(`🧭 使用 Brave Search API 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求（freshness=${freshnessLabel}）`);
   for (const plan of searchPlans) {
     log(`🌐 Brave 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
@@ -346,19 +385,46 @@ async function searchNewsWithBrave(
 
   const domesticLinks = filteredLinks.filter((link) => link.hintCategory === "domestic");
   const internationalLinks = filteredLinks.filter((link) => link.hintCategory === "international");
+  const domesticBuckets = splitDomesticCandidateLinks(domesticLinks);
   if (runRecord) {
     runRecord.counts.domesticLinkCount = domesticLinks.length;
     runRecord.counts.internationalLinkCount = internationalLinks.length;
+    runRecord.counts.domesticMainlandLinkCount = domesticBuckets.mainland.length;
+    runRecord.counts.domesticFallbackLinkCount = domesticBuckets.fallback.length;
+  }
+  if (domesticLinks.length > 0) {
+    log(`🇨🇳 国内候选 ${domesticLinks.length} 个，其中中国大陆来源 ${domesticBuckets.mainland.length} 个，非大陆回退 ${domesticBuckets.fallback.length} 个`);
   }
 
-  const domesticArticles = await extractArticlesFromLinks(
-    ctx,
-    domesticLinks,
-    "domestic",
-    getExtractionLimit("domestic", quota, maxCandidates),
-    referenceDate,
-    runRecord,
-  );
+  const domesticExtractionLimit = getExtractionLimit("domestic", quota, maxCandidates);
+  if (domesticBuckets.mainland.length === 0 && domesticBuckets.fallback.length > 0) {
+    log("⚠️ 本次国内候选没有命中中国大陆来源，将直接从非大陆候选里兜底");
+  }
+  const mainlandDomesticArticles = domesticBuckets.mainland.length > 0
+    ? await extractArticlesFromLinks(
+      ctx,
+      domesticBuckets.mainland,
+      "domestic",
+      domesticExtractionLimit,
+      referenceDate,
+      runRecord,
+      "mainland-preferred",
+    )
+    : [];
+  let domesticArticles = mainlandDomesticArticles;
+  if (domesticArticles.length < quota.domestic && domesticBuckets.fallback.length > 0) {
+    log(`↪️ 国内大陆来源不足 ${quota.domestic} 篇，追加非大陆候选兜底 ${domesticBuckets.fallback.length} 个`);
+    const fallbackDomesticArticles = await extractArticlesFromLinks(
+      ctx,
+      domesticBuckets.fallback,
+      "domestic",
+      getDomesticFallbackExtractionLimit(quota.domestic - domesticArticles.length, domesticExtractionLimit, maxCandidates),
+      referenceDate,
+      runRecord,
+      "fallback",
+    );
+    domesticArticles = dedupeArticles([...domesticArticles, ...fallbackDomesticArticles]);
+  }
   const internationalArticles = await extractArticlesFromLinks(
     ctx,
     internationalLinks,
@@ -700,10 +766,12 @@ async function extractArticlesFromLinks(
   maxCandidates: number,
   referenceDate: string,
   runRecord?: DailyDigestRunRecord,
+  stage: DigestExtractionStage = "default",
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   const extractionRecord: DailyDigestRunExtractionRecord = {
     category,
+    stage,
     startedAt: new Date().toISOString(),
     linkCount: links.length,
     maxCandidates,
@@ -783,6 +851,7 @@ ${linkText}
 - 优先保留教育、教育科技、AI 教育、教育公司、教育平台、教育政策、教育产品相关内容
 - 如果是泛科技新闻，只有在它与教育行业、教育场景、教育产品或教育公司明显相关时才保留
 - 优先原创媒体、主流媒体、公司官网和权威发布
+- ${buildCategorySourceGuidance(category)}
 - 不要百家号、搜狐号、网易号、企鹅号、头条号、一点号、大鱼号等自媒体或聚合号内容
 - 如果同一事件既有主流媒体 / 官网版本，也有自媒体版本，只保留前者
 - 尽量覆盖不同主题，避免同题反复
@@ -846,6 +915,15 @@ function getExtractionLimit(
     ? Math.max(target * 2, target + 4)
     : Math.max(target * 3, target + 6);
   return Math.min(maxCandidates, suggested);
+}
+
+function getDomesticFallbackExtractionLimit(
+  remainingQuota: number,
+  extractionLimit: number,
+  maxCandidates: number,
+): number {
+  const desired = Math.max(remainingQuota + 3, remainingQuota * 2, 4);
+  return Math.min(maxCandidates, Math.min(extractionLimit, desired));
 }
 
 function normalizeQueryList(values: string[] | undefined): string[] {
@@ -1176,6 +1254,8 @@ function scoreArticle(article: DigestArticle): number {
   if (hostname && !LOW_PRIORITY_HOSTS.has(hostname)) score += 2;
   if (hostname?.endsWith(".cn")) score += article.category === "domestic" ? 1 : 0;
   if (hostname && !hostname.endsWith(".cn")) score += article.category === "international" ? 1 : 0;
+  if (hostname && article.category === "domestic" && isMainlandChinaHostname(hostname)) score += 4;
+  if (hostname && article.category === "domestic" && isNonMainlandDomesticHostname(hostname)) score -= 3;
   if (hostname && isPreferredMediaHost(hostname)) score += 3;
   if (isPreferredMediaSource(article.source)) score += 2;
   if (isSelfMediaSource(article.source)) score -= 4;
@@ -1360,6 +1440,7 @@ export function buildBraveNewsSearchUrl(
   maxCandidates: number,
   hintCategory: DigestCategory | undefined = undefined,
   braveSearchConfig: BraveSearchConfig | undefined = undefined,
+  now: Date = new Date(),
 ): string {
   const config = mergeBraveSearchConfig(braveSearchConfig);
   const params = new URLSearchParams({
@@ -1368,7 +1449,8 @@ export function buildBraveNewsSearchUrl(
     offset: String(config.request.offset),
     spellcheck: config.request.spellcheck ? "1" : "0",
   });
-  if (config.request.freshness) params.set("freshness", config.request.freshness);
+  const freshness = resolveBraveFreshness(config.request.freshness, now);
+  if (freshness) params.set("freshness", freshness);
   if (config.request.safesearch) params.set("safesearch", config.request.safesearch);
   if (config.request.uiLang) params.set("ui_lang", config.request.uiLang);
   if (config.request.extraSnippets) params.set("extra_snippets", "true");
@@ -1437,6 +1519,47 @@ function normalizeBravePublishedAt(pageAge: string | undefined, age: string | un
   const absolute = formatBraveAbsoluteTime(pageAge);
   if (absolute) return absolute;
   return humanizeBraveAge(age);
+}
+
+function resolveBraveFreshness(value: string | undefined, now: Date): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "";
+  const rollingDays = parseRollingDayFreshness(trimmed);
+  if (!rollingDays) return trimmed;
+  return buildRollingDateRangeFreshness(rollingDays, now);
+}
+
+function describeBraveFreshness(value: string | undefined, now: Date): string {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "";
+  const rollingDays = parseRollingDayFreshness(trimmed);
+  if (!rollingDays) return trimmed;
+  return `${trimmed} (${buildRollingDateRangeFreshness(rollingDays, now)})`;
+}
+
+function parseRollingDayFreshness(value: string): number | undefined {
+  const match = value.match(/^p(\d+)d$/i);
+  if (!match) return undefined;
+  const days = Number.parseInt(match[1] ?? "", 10);
+  if (!Number.isFinite(days) || days < 1) return undefined;
+  return days;
+}
+
+function buildRollingDateRangeFreshness(days: number, now: Date): string {
+  const safeDays = Math.max(1, Math.trunc(days));
+  const end = formatDateInShanghai(now);
+  const startDate = new Date(now.getTime() - (safeDays - 1) * 24 * 60 * 60 * 1000);
+  const start = formatDateInShanghai(startDate);
+  return `${start}to${end}`;
+}
+
+function formatDateInShanghai(date: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 function formatBraveAbsoluteTime(value: string | undefined): string | undefined {
@@ -1512,6 +1635,60 @@ function isPreferredMediaSource(source: string): boolean {
 
 function isPreferredMediaHost(hostname: string): boolean {
   return PREFERRED_MEDIA_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
+}
+
+function buildCategorySourceGuidance(category: DigestCategory): string {
+  return category === "domestic"
+    ? "国内优先中国大陆媒体、政府/高校/企业官网与中国大陆机构发布；港澳台、海外华文和其他境外媒体只能作为补充，不要优先"
+    : "国际优先海外主流媒体、公司官网和权威发布";
+}
+
+/**
+ * Split domestic Brave candidates into mainland-China-first and fallback pools.
+ */
+export function splitDomesticCandidateLinks(
+  links: DigestCandidateLink[],
+): { mainland: DigestCandidateLink[]; fallback: DigestCandidateLink[] } {
+  const ranked = links
+    .map((link, index) => ({ link, index, score: scoreDomesticCandidateLink(link) }))
+    .sort((left, right) => right.score - left.score || left.index - right.index);
+
+  const mainland = ranked
+    .filter((entry) => {
+      const hostname = getHostname(entry.link.href);
+      return hostname ? isMainlandChinaHostname(hostname) : false;
+    })
+    .map((entry) => entry.link);
+  const fallback = ranked
+    .filter((entry) => {
+      const hostname = getHostname(entry.link.href);
+      return !hostname || !isMainlandChinaHostname(hostname);
+    })
+    .map((entry) => entry.link);
+  return { mainland, fallback };
+}
+
+function scoreDomesticCandidateLink(link: DigestCandidateLink): number {
+  let score = 0;
+  const hostname = getHostname(link.href);
+  if (hostname && isMainlandChinaHostname(hostname)) score += 12;
+  if (hostname?.endsWith(".cn")) score += 4;
+  if (hostname && isPreferredMediaHost(hostname)) score += 3;
+  if (link.source && isPreferredMediaSource(link.source)) score += 2;
+  if (hostname && isTraditionalChineseHostname(hostname)) score -= 6;
+  if (hostname && isNonMainlandDomesticHostname(hostname)) score -= 5;
+  return score;
+}
+
+function isMainlandChinaHostname(hostname: string): boolean {
+  return hostname.endsWith(".cn")
+    || hostname.endsWith(".com.cn")
+    || MAINLAND_CHINA_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
+}
+
+function isNonMainlandDomesticHostname(hostname: string): boolean {
+  return isTraditionalChineseHostname(hostname)
+    || NON_MAINLAND_DOMESTIC_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
 }
 
 function getHostname(value: string): string | undefined {

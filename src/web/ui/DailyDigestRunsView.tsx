@@ -73,6 +73,7 @@ interface DailyDigestRunRequestRecord {
 
 interface DailyDigestRunExtractionRecord {
   category: "domestic" | "international";
+  stage?: "default" | "mainland-preferred" | "fallback";
   startedAt: string;
   finishedAt?: string;
   linkCount: number;
@@ -129,6 +130,8 @@ interface DailyDigestRunRecord {
     filteredLinkCount: number;
     blockedLinkCount: number;
     domesticLinkCount: number;
+    domesticMainlandLinkCount?: number;
+    domesticFallbackLinkCount?: number;
     internationalLinkCount: number;
     extractedArticleCount: number;
     extractedDomesticCount: number;
@@ -313,6 +316,12 @@ function RunDetail(props: { record: DailyDigestRunRecord }): React.JSX.Element {
           <MetricCard label="去重后" value={record.counts.uniqueLinkCount} />
           <MetricCard label="过滤后" value={record.counts.filteredLinkCount} />
           <MetricCard label="拦截数" value={record.counts.blockedLinkCount} />
+          {record.counts.domesticMainlandLinkCount !== undefined && (
+            <MetricCard label="国内大陆候选" value={record.counts.domesticMainlandLinkCount} />
+          )}
+          {record.counts.domesticFallbackLinkCount !== undefined && (
+            <MetricCard label="国内回退候选" value={record.counts.domesticFallbackLinkCount} />
+          )}
           <MetricCard label="抽取结果" value={record.counts.extractedArticleCount} />
           <MetricCard label="最终入选" value={record.counts.finalCount} />
         </div>
@@ -367,11 +376,12 @@ function RunDetail(props: { record: DailyDigestRunRecord }): React.JSX.Element {
             const diagnostics = buildExtractionDiagnostics(record, extraction);
             return (
               <details key={`${extraction.category}-${extraction.startedAt}`} className={styles.disclosure} open>
-                <summary className={styles.disclosureSummary}>
-                  <span>{extraction.category === "domestic" ? "国内" : "国际"}</span>
-                  <span>候选 {diagnostics.totalCandidateCount}</span>
-                  <span>返回 {diagnostics.parsedCount}</span>
-                  <span>通过率 {diagnostics.passRateLabel}</span>
+              <summary className={styles.disclosureSummary}>
+                <span>{extraction.category === "domestic" ? "国内" : "国际"}</span>
+                {extraction.stage && extraction.stage !== "default" && <span>{formatExtractionStage(extraction.stage)}</span>}
+                <span>候选 {diagnostics.totalCandidateCount}</span>
+                <span>返回 {diagnostics.parsedCount}</span>
+                <span>通过率 {diagnostics.passRateLabel}</span>
                 </summary>
                 <div className={styles.disclosureBody}>
                   <ExtractionDiagnostics extraction={extraction} diagnostics={diagnostics} />
@@ -623,6 +633,8 @@ function buildExtractionNotes(
   const passRate = candidates.length > 0 ? extraction.parsedArticles.length / candidates.length : 0;
   if (candidates.length === 0) notes.push("这一组没有可展示的候选明细，说明问题更可能出在搜索阶段。");
   if (passRate < 0.2 && candidates.length > 0) notes.push("LLM 通过率偏低，说明这批候选里大部分与当前日报口径不匹配。");
+  if (extraction.category === "domestic" && extraction.stage === "mainland-preferred") notes.push("这一组是中国大陆来源优先候选，会先于港澳台、海外华文和其他境外来源进入抽取。");
+  if (extraction.category === "domestic" && extraction.stage === "fallback") notes.push("这一组是非大陆候选回退池，只会在中国大陆来源不足时用于补位。");
   if (candidates.some((item) => item.tags.includes("疑似导航/聚合"))) notes.push("候选里混入了导航、栏目或聚合页，LLM 会把它们大量剔除。");
   if (candidates.some((item) => item.tags.includes("语言不稳"))) notes.push("候选里有不少非简体中文/英文或繁体内容，抽取阶段和最终展示阶段都会更严格。");
   if (candidates.some((item) => item.tags.includes("教育弱相关"))) notes.push("候选中有不少只是泛科技或泛教育资讯，不够贴近“教育 / 教育科技 / AI 教育 / 教育公司”的口径。");
@@ -634,11 +646,36 @@ function buildExtractionNotes(
 
 function buildCandidateTags(link: DigestCandidateLink): string[] {
   const tags: string[] = [];
+  if (isLikelyMainlandChinaLink(link)) tags.push("大陆来源");
+  if (link.hintCategory === "domestic" && !isLikelyMainlandChinaLink(link)) tags.push("非大陆回退");
   if (isLikelyListOrAggregation(link)) tags.push("疑似导航/聚合");
   if (isLikelyWeakSource(link)) tags.push("来源偏弱");
   if (isLikelyEducationWeak(link)) tags.push("教育弱相关");
   if (containsUnstableDisplayLanguage([link.text, link.summary ?? "", link.source ?? ""])) tags.push("语言不稳");
   return tags;
+}
+
+function isLikelyMainlandChinaLink(link: DigestCandidateLink): boolean {
+  try {
+    const hostname = new URL(link.href).hostname.toLowerCase();
+    return hostname.endsWith(".cn")
+      || /(^|\.)xinhuanet\.com$/i.test(hostname)
+      || /(^|\.)news\.cn$/i.test(hostname)
+      || /(^|\.)people\.com\.cn$/i.test(hostname)
+      || /(^|\.)cctv\.com$/i.test(hostname)
+      || /(^|\.)chinanews\.com\.cn$/i.test(hostname)
+      || /(^|\.)thepaper\.cn$/i.test(hostname)
+      || /(^|\.)jiemian\.com$/i.test(hostname)
+      || /(^|\.)yicai\.com$/i.test(hostname)
+      || /(^|\.)caixin\.com$/i.test(hostname)
+      || /(^|\.)36kr\.com$/i.test(hostname)
+      || /(^|\.)tmtpost\.com$/i.test(hostname)
+      || /(^|\.)huxiu\.com$/i.test(hostname)
+      || /(^|\.)ithome\.com$/i.test(hostname)
+      || /(^|\.)leiphone\.com$/i.test(hostname);
+  } catch {
+    return false;
+  }
 }
 
 function isLikelyListOrAggregation(link: DigestCandidateLink): boolean {
@@ -686,4 +723,10 @@ function normalizeUrl(url: string): string {
 function formatRatio(numerator: number, denominator: number): string {
   if (denominator <= 0) return "0%";
   return `${Math.round((numerator / denominator) * 100)}%`;
+}
+
+function formatExtractionStage(stage: NonNullable<DailyDigestRunExtractionRecord["stage"]>): string {
+  if (stage === "mainland-preferred") return "大陆优先";
+  if (stage === "fallback") return "非大陆回退";
+  return "默认";
 }

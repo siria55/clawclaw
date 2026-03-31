@@ -1177,7 +1177,7 @@ describe("WebServer", () => {
     const body = await res.json() as DailyDigestConfig;
     expect(body.queries).toEqual(["国内AI科技", "国际AI科技"]);
     expect(body.braveSearch?.request?.count).toBe(20);
-    expect(body.braveSearch?.request?.freshness).toBe("pw");
+    expect(body.braveSearch?.request?.freshness).toBe("p3d");
     expect(body.braveSearch?.domestic?.country).toBe("CN");
 
     await server.stop();
@@ -1255,7 +1255,7 @@ describe("WebServer", () => {
         request: {
           count: 20,
           offset: 0,
-          freshness: "pw",
+          freshness: "p3d",
           spellcheck: false,
           safesearch: "strict",
           uiLang: "",

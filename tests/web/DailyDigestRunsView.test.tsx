@@ -113,6 +113,7 @@ describe("DailyDigestRunsView", () => {
           }],
           extractions: [{
             category: "domestic",
+            stage: "mainland-preferred",
             startedAt: "2026-03-31T02:00:20.000Z",
             finishedAt: "2026-03-31T02:00:30.000Z",
             linkCount: 9,
@@ -150,6 +151,8 @@ describe("DailyDigestRunsView", () => {
             filteredLinkCount: 12,
             blockedLinkCount: 6,
             domesticLinkCount: 9,
+            domesticMainlandLinkCount: 6,
+            domesticFallbackLinkCount: 3,
             internationalLinkCount: 3,
             extractedArticleCount: 8,
             extractedDomesticCount: 5,
@@ -201,6 +204,8 @@ describe("DailyDigestRunsView", () => {
     expect(screen.getByText("教育 AI 公司发布新产品")).toBeDefined();
     expect(screen.getByText("诊断提示")).toBeDefined();
     expect(screen.getByText("送入 LLM 的候选明细")).toBeDefined();
+    expect(screen.getByText("国内大陆候选")).toBeDefined();
+    expect(screen.getByText("大陆优先")).toBeDefined();
     expect(screen.getByText("通过率 50%")).toBeDefined();
     expect(screen.getByText("教育弱相关")).toBeDefined();
   });

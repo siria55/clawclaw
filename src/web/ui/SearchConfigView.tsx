@@ -239,8 +239,8 @@ export function SearchConfigView(): React.JSX.Element {
               label="freshness"
               value={fields.freshness}
               onChange={(value) => setField("freshness", value)}
-              placeholder="pw"
-              hint="常用值：`pd` / `pw` / `pm` / `py`；留空表示不限制。"
+              placeholder="p3d"
+              hint="常用值：`pd` / `pw` / `pm` / `py`；也支持 `p3d` 这类滚动天数别名，以及 Brave 官方 `YYYY-MM-DDtoYYYY-MM-DD` 自定义区间。留空表示不限制。"
             />
             <div className={styles.field}>
               <label className={styles.label} htmlFor="search-safesearch">safesearch</label>

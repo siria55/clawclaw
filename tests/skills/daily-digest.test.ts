@@ -12,6 +12,7 @@ import {
   renderDailyDigestMarkdown,
   resolveDailyDigestQueries,
   selectDigestArticles,
+  splitDomesticCandidateLinks,
   type DailyDigestSelection,
   type DigestArticle,
 } from "../../src/skills/daily-digest/index.js";
@@ -268,6 +269,25 @@ describe("selectDigestArticles", () => {
     expect(selection.international[0]?.title).toBe("reuters");
   });
 
+  it("prefers mainland-China sources inside the domestic section when quota is tight", () => {
+    const selection = selectDigestArticles([
+      createArticle("mainland", "domestic", {
+        url: "https://example.cn/ai-education",
+        source: "某地教育局",
+      }),
+      createArticle("reuters-domestic", "domestic", {
+        url: "https://www.reuters.com/world/china/ai-education-2026-03-30/",
+        source: "Reuters",
+      }),
+    ], {
+      domestic: 1,
+      international: 0,
+    });
+
+    expect(selection.domestic).toHaveLength(1);
+    expect(selection.domestic[0]?.title).toBe("mainland");
+  });
+
   it("filters non-English-or-simplified-Chinese articles from the international section", () => {
     const selection = selectDigestArticles([
       createArticle("jp", "international", {
@@ -440,25 +460,65 @@ describe("buildDailyDigestSearchPlans", () => {
   });
 });
 
+describe("splitDomesticCandidateLinks", () => {
+  it("separates mainland-China sources from fallback domestic candidates", () => {
+    const buckets = splitDomesticCandidateLinks([
+      {
+        text: "新华社关注 AI 教育",
+        href: "https://www.news.cn/tech/20260331/a.htm",
+        hintCategory: "domestic",
+        source: "新华社",
+      },
+      {
+        text: "澎湃谈智能教育",
+        href: "https://www.thepaper.cn/newsDetail_forward_12345678",
+        hintCategory: "domestic",
+        source: "澎湃新闻",
+      },
+      {
+        text: "星岛教育观察",
+        href: "https://stheadline.com/zh-hans/local-school/3557845",
+        hintCategory: "domestic",
+        source: "星岛头条",
+      },
+      {
+        text: "日媒报道中国 AI 教育",
+        href: "https://www.nikkei.com/article/DGXZQOUB313DZ0R30C26A3000000/",
+        hintCategory: "domestic",
+        source: "日本经济新闻",
+      },
+    ]);
+
+    expect(buckets.mainland.map((item) => item.href)).toEqual([
+      "https://www.news.cn/tech/20260331/a.htm",
+      "https://www.thepaper.cn/newsDetail_forward_12345678",
+    ]);
+    expect([...buckets.fallback.map((item) => item.href)].sort()).toEqual([
+      "https://stheadline.com/zh-hans/local-school/3557845",
+      "https://www.nikkei.com/article/DGXZQOUB313DZ0R30C26A3000000/",
+    ].sort());
+  });
+});
+
 describe("buildBraveNewsSearchUrl", () => {
-  it("restricts domestic Brave News Search to China and Chinese in the past week", () => {
-    const url = new URL(buildBraveNewsSearchUrl("中国AI", 50, "domestic"));
+  it("restricts domestic Brave News Search to China and rolling past 3 days", () => {
+    const url = new URL(buildBraveNewsSearchUrl("中国AI", 50, "domestic", undefined, new Date("2026-03-31T10:00:00+08:00")));
 
     expect(url.searchParams.get("q")).toBe("中国AI");
     expect(url.searchParams.get("count")).toBe("20");
     expect(url.searchParams.get("offset")).toBe("0");
     expect(url.searchParams.get("spellcheck")).toBe("0");
-    expect(url.searchParams.get("freshness")).toBe("pw");
+    expect(url.searchParams.get("freshness")).toBe("2026-03-29to2026-03-31");
     expect(url.searchParams.get("safesearch")).toBe("strict");
     expect(url.searchParams.get("country")).toBe("CN");
     expect(url.searchParams.get("search_lang")).toBe("zh-hans");
   });
 
   it("keeps international Brave News Search free of China-only filters", () => {
-    const url = new URL(buildBraveNewsSearchUrl("OpenAI", 50, "international"));
+    const url = new URL(buildBraveNewsSearchUrl("OpenAI", 50, "international", undefined, new Date("2026-03-31T10:00:00+08:00")));
 
     expect(url.searchParams.get("q")).toBe("OpenAI");
-    expect(url.searchParams.get("freshness")).toBe("pw");
+    expect(url.searchParams.get("freshness")).toBe("2026-03-29to2026-03-31");
     expect(url.searchParams.get("country")).toBeNull();
     expect(url.searchParams.get("search_lang")).toBeNull();
   });
@@ -513,6 +573,7 @@ describe("buildDailyDigestExtractionPrompt", () => {
     expect(prompt).toContain("教育 / 教育科技 / AI 教育 / 教育公司");
     expect(prompt).toContain("优先保留教育、教育科技、AI 教育、教育公司、教育平台、教育政策、教育产品相关内容");
     expect(prompt).toContain("只有在它与教育行业、教育场景、教育产品或教育公司明显相关时才保留");
+    expect(prompt).toContain("国内优先中国大陆媒体、政府/高校/企业官网与中国大陆机构发布");
     expect(prompt).toContain("最终只允许简体中文或英文");
     expect(prompt).toContain("统一翻译成简体中文");
   });

@@ -29,7 +29,7 @@ export const DEFAULT_BRAVE_SEARCH_CONFIG: ResolvedBraveSearchConfig = {
   request: {
     count: 20,
     offset: 0,
-    freshness: "pw",
+    freshness: "p3d",
     spellcheck: false,
     safesearch: "strict",
     uiLang: "",

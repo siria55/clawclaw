@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`、`sprint-84.md`、`sprint-85.md`、`sprint-86.md`、`sprint-87.md`、`sprint-88.md`、`sprint-89.md`、`sprint-90.md`、`sprint-91.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`、`sprint-84.md`、`sprint-85.md`、`sprint-86.md`、`sprint-87.md`、`sprint-88.md`、`sprint-89.md`、`sprint-90.md`、`sprint-91.md`、`sprint-92.md`、`sprint-93.md`。
 
 ---
 
@@ -286,6 +286,18 @@
 - WebUI 新增一级 tab `日报记录`，可直接查看最近 run 列表和单次执行详情
 - 运行记录保存在 `data/skills/daily-digest/runs/*.json`
 
+## 第四十七阶段：国内资讯中国大陆优先（Sprint 92）
+
+- `daily-digest` 的国内候选在进入 LLM 前会先按“中国大陆来源 / 非大陆回退”分层
+- 国内抽取改为先吃中国大陆媒体、政府 / 高校 / 企业官网来源，不足时才回退到港澳台、海外华文或其他境外来源
+- `日报记录` 会额外展示国内大陆候选数、回退候选数，以及“大陆优先 / 非大陆回退”抽取阶段
+
+## 第四十八阶段：日报滚动 3 天时效（Sprint 93）
+
+- `daily-digest` 默认搜索时间窗口改为滚动过去 3 天
+- Brave `freshness` 新增 `p3d` 这类滚动天数别名，运行时自动展开成官方日期区间
+- 当前本地 `data` 配置也同步切到 3 天口径，避免继续停在 24 小时
+
 ---
 
 ## 当前落点
@@ -331,7 +343,7 @@
 - `daily-digest` 的候选新闻搜索现已切到 Brave Search API，浏览器只保留给最终截图使用
 - Brave Search API Key 现在可直接在 WebUI 中配置，不再只能依赖环境变量
 - Brave `news/search` 的关键参数现在也可直接在 WebUI 中配置，并持久化到本地 `./data`
-- `daily-digest` 现在默认只检索过去一周内的新闻，兼顾时效性和候选覆盖面
+- `daily-digest` 现在默认只检索滚动过去 3 天内的新闻，兼顾时效性和中国大陆候选覆盖面
 - `daily-digest` 生成结果现在只显示来源，不再显示新闻时间；JSON 仍保留 `publishedAt` / `date`
 - `daily-digest` 现在会优先筛出教育、教育科技、AI 教育、教育公司内容，同时保留与教育强相关的科技动态
 - `daily-digest` 的国内搜索现在会明确使用中国语境，不再把“国内”交给 Brave 自行歧义解释；国内请求会附带 `country=CN` 与 `search_lang=zh-hans`
@@ -339,4 +351,5 @@
 - `daily-digest` 现在会在最终选稿前先做语言归一化：繁体中文统一转简体，中文 / 英文之外的其他语言统一翻译成简体中文
 - `日报记录` 现在会显示 LLM 抽取候选明细、通过率和诊断提示，定位“为什么被过滤很多”更直接
 - `daily-digest` 默认 query 现已改成更聚焦 `AI + 教育` 的组合，并同步更新到本地持久化配置和 WebUI 示例
+- `daily-digest` 的国内资讯现在会优先使用中国大陆来源，不足时才回退到非大陆来源，减少“国内栏里全是港媒 / 日媒 / 海外华文”的情况
 - Agent 现在会优先按 WebUI 中配置的名称和系统提示词回答“你谁 / 你叫什么 / 你是做什么的”
