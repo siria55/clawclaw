@@ -13,7 +13,7 @@ max-candidates: 36
 1. 默认使用本文件里的 `queries`；若 `data/skills/daily-digest/config.json` 中配置了自定义主题，则运行时优先使用配置值
 2. 通过 Brave Search API 的 `news/search` 接口检索各关键词在过去一周内的候选新闻；默认参数为 `count=20`、`offset=0`、`freshness=pw`、`safesearch=strict`、`spellcheck=0`，国内搜索默认会明确使用中国口径（如 `中国AI`）并带 `country=CN` / `search_lang=zh-hans`；这些参数都可由 WebUI `自动化 > 搜索` 覆盖（Brave Key 仍优先使用 WebUI 保存值，未配置时回退到 `BRAVE_SEARCH_API_KEY` 环境变量）
 3. 将 Brave 返回的标题、URL、来源、摘要与时间元信息整理为候选链接，并打上国内/国际查询提示
-4. 跨关键词去重后，先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际分别调用 LLM 优先筛选教育、教育科技、AI 教育、教育公司，以及与教育场景强相关的科技动态，并结构化为 JSON（含 `category`）；国际结果只保留简体中文 / 英文内容，明显繁体中文、日文、韩文等其他语言会在最终入选阶段被拦截；新闻时间继续沿用 Brave 返回的时间 hint，并最佳努力推导结构化 `date`
+4. 跨关键词去重后，先过滤百家号等自媒体 / 黑名单链接，再按国内 / 国际分别调用 LLM 优先筛选教育、教育科技、AI 教育、教育公司，以及与教育场景强相关的科技动态，并结构化为 JSON（含 `category`）；在最终选稿前，标题 / 摘要 / 来源里的繁体中文会统一转成简体中文，中文 / 英文之外的其他语言会统一翻译成简体中文；若归一化后仍不满足“只允许简体中文 / 英文展示”，则会在最终入选阶段被拦截；新闻时间继续沿用 Brave 返回的时间 hint，并最佳努力推导结构化 `date`
 5. 按国内 10 / 国际 5 的配额裁剪
 6. 将内容填入 HTML 模板，读取 `layout.css` 渲染日报并截图为 PNG；生成结果只展示来源，不展示新闻时间
 7. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`，并额外把本次执行的 Brave 请求参数、返回结果、抽取阶段数据与最终入选结果保存到 `data/skills/daily-digest/runs/{runId}.json`

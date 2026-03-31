@@ -53,6 +53,16 @@ export interface DigestCandidateLink {
   publishedAt?: string;
 }
 
+/**
+ * Mutable display fields used when normalizing digest output language.
+ */
+export interface DigestDisplayLanguageItem {
+  index: number;
+  title: string;
+  summary: string;
+  source: string;
+}
+
 interface SearchPlan {
   query: string;
   searchText: string;
@@ -91,6 +101,13 @@ const ArticleDraftSchema = z.object({
   summary: z.string(),
   source: z.string(),
   category: z.string().optional(),
+});
+
+const DigestDisplayLanguageItemSchema = z.object({
+  index: z.number().int().nonnegative(),
+  title: z.string(),
+  summary: z.string(),
+  source: z.string(),
 });
 
 const SKILL_DIR = dirname(fileURLToPath(import.meta.url));
@@ -227,6 +244,7 @@ export const DAILY_DIGEST_SCREENSHOT = {
 
 const BRAVE_NEWS_SEARCH_ENDPOINT = process.env["BRAVE_SEARCH_API_URL"] ?? "https://api.search.brave.com/res/v1/news/search";
 const DAILY_DIGEST_FOCUS = "教育 / 教育科技 / AI 教育 / 教育公司";
+const DAILY_DIGEST_LANGUAGE_NORMALIZATION_BATCH_SIZE = 8;
 
 export const DAILY_DIGEST_EXTRACTION_SYSTEM = [
   "你是一个严谨的教育科技新闻筛选器。",
@@ -240,8 +258,21 @@ export const DAILY_DIGEST_EXTRACTION_SYSTEM = [
   "category 只允许 domestic 或 international。",
   "domestic 表示中国教育、教育科技、AI 教育、教育公司、教育政策、教育平台，或与中国教育场景强相关的科技/创投动态为主。",
   "international 表示海外教育、教育科技、AI 教育、教育公司、教育政策、教育平台，或与全球教育场景强相关的科技/创投动态为主。",
-  "international 结果只保留可用简体中文或英文阅读与展示的内容，繁体中文、日文、韩文等其他语言页面不要返回。",
+  "返回结果里的 title / summary / source 最终只允许简体中文或英文。",
+  "如果原文是繁体中文，必须转换成简体中文；如果原文是中文和英文之外的其他语言，必须翻译成简体中文后再返回。",
   "如果字符串里出现双引号，必须转义。",
+].join("\n");
+
+const DAILY_DIGEST_LANGUAGE_NORMALIZATION_SYSTEM = [
+  "你是一个日报展示语言规范器。",
+  "你的任务是把新闻条目的 title、summary、source 规范成只包含简体中文或英文的展示文本。",
+  "如果字段已经是英文，可保留英文。",
+  "如果字段是繁体中文，必须转换成简体中文。",
+  "如果字段是中文和英文之外的其他语言，必须翻译成简体中文。",
+  "source 优先使用常见简体中文译名；若没有公认中文译名，可保留英文名。",
+  "不要改写事实，不要扩写，不要新增字段。",
+  "返回与输入相同数量、相同 index 的 JSON 数组。",
+  "不要输出 JSON 数组之外的任何内容。",
 ].join("\n");
 
 async function searchNewsWithBrave(
@@ -470,7 +501,12 @@ export class DailyDigestSkill implements Skill {
         braveSearchConfig,
         runRecord,
       );
-      const selection = selectDigestArticles(articles, this.#quota);
+      const normalizedArticles = await this.#normalizeDigestArticles(articles, ctx);
+      const invalidDisplayCount = normalizedArticles.filter((article) => !isDisplayLanguageCompliantArticle(article)).length;
+      if (invalidDisplayCount > 0) {
+        ctx.log?.(`⚠️ 有 ${invalidDisplayCount} 篇文章仍包含非简体中文 / 英文展示文本，已在最终入选阶段自动过滤`);
+      }
+      const selection = selectDigestArticles(normalizedArticles, this.#quota);
       runRecord.selection = {
         domestic: selection.domestic.map((article) => ({ ...article })),
         international: selection.international.map((article) => ({ ...article })),
@@ -521,6 +557,23 @@ export class DailyDigestSkill implements Skill {
       await browser?.close();
     }
   }
+
+  async #normalizeDigestArticles(
+    articles: DigestArticle[],
+    ctx: SkillContext,
+  ): Promise<DigestArticle[]> {
+    try {
+      return await normalizeDigestArticleDisplayLanguage(
+        articles,
+        async (items) => normalizeDigestDisplayLanguageBatch(ctx, items),
+        ctx.log,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      ctx.log?.(`⚠️ 日报语言归一化失败，保留原始文本继续筛选：${message}`);
+      return articles;
+    }
+  }
 }
 
 export function parseArticlesFromLLMOutput(
@@ -543,12 +596,15 @@ export function selectDigestArticles(
   articles: DigestArticle[],
   quota: DigestQuota,
 ): DailyDigestSelection {
-  const ranked = rankArticles(articles.filter((article) => !isBlockedArticle(article)));
+  const ranked = rankArticles(
+    articles
+      .filter((article) => !isBlockedArticle(article))
+      .filter((article) => isDisplayLanguageCompliantArticle(article)),
+  );
   const domestic = pickArticlesByCategory(ranked, "domestic", quota.domestic);
   const used = new Set(domestic.map((article) => canonicalizeUrl(article.url)));
   const international = ranked
     .filter((article) => article.category === "international")
-    .filter((article) => isAllowedInternationalArticle(article))
     .filter((article) => !used.has(canonicalizeUrl(article.url)))
     .slice(0, quota.international);
 
@@ -557,6 +613,31 @@ export function selectDigestArticles(
     international,
     all: [...domestic, ...international],
   };
+}
+
+/**
+ * Normalize digest display fields so the final digest only contains
+ * simplified Chinese or English text.
+ */
+export async function normalizeDigestArticleDisplayLanguage(
+  articles: DigestArticle[],
+  normalizeBatch: (items: DigestDisplayLanguageItem[]) => Promise<DigestDisplayLanguageItem[] | undefined>,
+  log?: (msg: string) => void,
+): Promise<DigestArticle[]> {
+  const items = collectDigestDisplayLanguageItems(articles);
+  if (items.length === 0) return articles;
+
+  log?.(`🌍 检测到 ${items.length} 篇文章需要做语言归一化`);
+  let normalized = articles.map((article) => ({ ...article }));
+  const batches = chunkDigestDisplayLanguageItems(items, DAILY_DIGEST_LANGUAGE_NORMALIZATION_BATCH_SIZE);
+  for (const [index, batch] of batches.entries()) {
+    const result = await safeNormalizeDigestDisplayLanguageBatch(normalizeBatch, batch, index, log);
+    if (!result) {
+      continue;
+    }
+    normalized = applyDigestDisplayLanguageItems(normalized, result);
+  }
+  return normalized;
 }
 
 export function resolveDailyDigestQueries(
@@ -703,7 +784,7 @@ ${linkText}
 - 如果同一事件既有主流媒体 / 官网版本，也有自媒体版本，只保留前者
 - 尽量覆盖不同主题，避免同题反复
 - summary 尽量用一句中文短句概括；如果从标题无法可靠概括，可留空字符串
-- 国际结果只保留简体中文或英文内容；如果页面明显是繁体中文、日文、韩文或其他非简体中文/英文语言，不要返回
+- title / summary / source 最终只允许简体中文或英文；繁体中文统一转换成简体中文，其他语言统一翻译成简体中文；英文内容可保留英文
 - category 固定返回 ${category}
 
 最多返回 ${maxCandidates} 篇，按质量、相关性和时效性排序。
@@ -774,6 +855,45 @@ function normalizeQueryList(values: string[] | undefined): string[] {
     normalized.push(trimmed);
   }
   return normalized;
+}
+
+function collectDigestDisplayLanguageItems(articles: DigestArticle[]): DigestDisplayLanguageItem[] {
+  return articles.flatMap((article, index) => (
+    needsDigestDisplayNormalization(article)
+      ? [{ index, title: article.title, summary: article.summary, source: article.source }]
+      : []
+  ));
+}
+
+function chunkDigestDisplayLanguageItems(
+  items: DigestDisplayLanguageItem[],
+  size: number,
+): DigestDisplayLanguageItem[][] {
+  const chunks: DigestDisplayLanguageItem[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function applyDigestDisplayLanguageItems(
+  articles: DigestArticle[],
+  normalizedItems: DigestDisplayLanguageItem[],
+): DigestArticle[] {
+  const next = articles.map((article) => ({ ...article }));
+  for (const item of normalizedItems) {
+    const article = next[item.index];
+    if (!article) continue;
+    article.title = resolveNormalizedDigestText(item.title, article.title);
+    article.summary = resolveNormalizedDigestText(item.summary, article.summary);
+    article.source = resolveNormalizedDigestText(item.source, article.source);
+  }
+  return next;
+}
+
+function resolveNormalizedDigestText(value: string, fallback: string): string {
+  const normalized = value.trim();
+  return normalized || fallback;
 }
 
 function parseArticleDrafts(text: string): ArticleDraft[] | undefined {
@@ -934,6 +1054,57 @@ function dedupeArticles(articles: DigestArticle[]): DigestArticle[] {
   });
 }
 
+async function normalizeDigestDisplayLanguageBatch(
+  ctx: SkillContext,
+  items: DigestDisplayLanguageItem[],
+): Promise<DigestDisplayLanguageItem[] | undefined> {
+  const response = await ctx.agent.llm.complete({
+    system: DAILY_DIGEST_LANGUAGE_NORMALIZATION_SYSTEM,
+    messages: [{ role: "user", content: buildDailyDigestLanguageNormalizationPrompt(items) }],
+  });
+  return parseDigestDisplayLanguageItems(response.message.content);
+}
+
+function buildDailyDigestLanguageNormalizationPrompt(items: DigestDisplayLanguageItem[]): string {
+  return [
+    "请把下面这些日报条目的展示文本规范为简体中文或英文。",
+    "要求：繁体中文转简体中文；其他非中文/英文语言翻译成简体中文；英文保留英文。",
+    "只允许修改 title、summary、source，必须保留原有 index。",
+    "只返回 JSON 数组，不要其他文字。",
+    JSON.stringify(items, null, 2),
+  ].join("\n\n");
+}
+
+function parseDigestDisplayLanguageItems(content: unknown): DigestDisplayLanguageItem[] | undefined {
+  const jsonText = extractJsonArray(extractText(content));
+  if (!jsonText) return undefined;
+  try {
+    const parsed = JSON.parse(jsonText) as unknown;
+    const result = z.array(DigestDisplayLanguageItemSchema).safeParse(parsed);
+    return result.success ? result.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function safeNormalizeDigestDisplayLanguageBatch(
+  normalizeBatch: (items: DigestDisplayLanguageItem[]) => Promise<DigestDisplayLanguageItem[] | undefined>,
+  items: DigestDisplayLanguageItem[],
+  batchIndex: number,
+  log?: (msg: string) => void,
+): Promise<DigestDisplayLanguageItem[] | undefined> {
+  try {
+    const result = await normalizeBatch(items);
+    if (result) return result;
+    log?.(`⚠️ 语言归一化第 ${batchIndex + 1} 批未返回有效 JSON，保留原始文本`);
+    return undefined;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log?.(`⚠️ 语言归一化第 ${batchIndex + 1} 批失败，保留原始文本：${message}`);
+    return undefined;
+  }
+}
+
 function rankArticles(articles: DigestArticle[]): DigestArticle[] {
   return articles
     .map((article, index) => ({ article, index, score: scoreArticle(article) }))
@@ -947,11 +1118,15 @@ function isBlockedArticle(article: DigestArticle): boolean {
   return hostname ? isBlockedHostname(hostname) : false;
 }
 
-function isAllowedInternationalArticle(article: DigestArticle): boolean {
-  if (article.category !== "international") return true;
+function isDisplayLanguageCompliantArticle(article: DigestArticle): boolean {
   const fields = [article.title, article.summary, article.source];
-  if (!fields.every((text) => containsOnlySimplifiedChineseOrEnglishText(text))) return false;
-  return !hasTraditionalChineseSiteSignal(article.url, [article.title, article.summary].join(" "));
+  return fields.every((text) => containsOnlySimplifiedChineseOrEnglishText(text));
+}
+
+function needsDigestDisplayNormalization(article: DigestArticle): boolean {
+  const fields = [article.title, article.summary, article.source];
+  if (fields.some((text) => !containsOnlySimplifiedChineseOrEnglishText(text))) return true;
+  return hasTraditionalChineseSiteSignal(article.url, fields.join(" "));
 }
 
 function containsOnlySimplifiedChineseOrEnglishText(text: string): boolean {

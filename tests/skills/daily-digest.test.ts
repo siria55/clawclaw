@@ -5,6 +5,7 @@ import {
   buildDailyDigestExtractionPrompt,
   DAILY_DIGEST_SCREENSHOT,
   DAILY_DIGEST_EXTRACTION_SYSTEM,
+  normalizeDigestArticleDisplayLanguage,
   parseArticlesFromLLMOutput,
   parseBraveNewsSearchResponse,
   renderDailyDigestHtml,
@@ -307,7 +308,7 @@ describe("selectDigestArticles", () => {
     ]);
   });
 
-  it("filters Han-language articles from traditional Chinese sites while keeping English ones", () => {
+  it("keeps compliant Chinese and English articles from Hong Kong or Taiwan domains", () => {
     const selection = selectDigestArticles([
       createArticle("hk-shared-han", "international", {
         title: "AI 教育平台进入校园",
@@ -326,8 +327,86 @@ describe("selectDigestArticles", () => {
       international: 3,
     });
 
-    expect(selection.international).toHaveLength(1);
-    expect(selection.international[0]?.title).toBe("OpenAI expands campus tools");
+    expect(selection.international).toHaveLength(2);
+    expect(selection.international.map((article) => article.title)).toEqual([
+      "AI 教育平台进入校园",
+      "OpenAI expands campus tools",
+    ]);
+  });
+});
+
+describe("normalizeDigestArticleDisplayLanguage", () => {
+  it("translates other languages to simplified Chinese and converts traditional Chinese", async () => {
+    const calls: Array<Array<{ index: number; title: string; summary: string; source: string }>> = [];
+    const normalized = await normalizeDigestArticleDisplayLanguage([
+      createArticle("jp", "international", {
+        title: "OpenAIが教育向け新機能を発表",
+        summary: "学校向けの新機能を公開した。",
+        source: "日経クロステック",
+      }),
+      createArticle("zh-hant", "international", {
+        title: "OpenAI 擴大教育產品佈局",
+        summary: "新功能面向全球課堂場景推出。",
+        source: "聯合新聞網",
+        url: "https://udn.com/news/story/7240/1234567",
+      }),
+      createArticle("en", "international", {
+        title: "OpenAI expands education tools",
+        summary: "New classroom workflow features roll out this week.",
+        source: "Reuters",
+      }),
+    ], async (items) => {
+      calls.push(items.map((item) => ({ ...item })));
+      return items.map((item) => {
+        if (item.index === 0) {
+          return {
+            ...item,
+            title: "OpenAI 发布教育新功能",
+            summary: "面向学校场景推出新功能。",
+            source: "日经跨界科技",
+          };
+        }
+        return {
+          ...item,
+          title: "OpenAI 扩大教育产品布局",
+          summary: "新功能面向全球课堂场景推出。",
+          source: "联合新闻网",
+        };
+      });
+    });
+
+    expect(calls).toEqual([[
+      {
+        index: 0,
+        title: "OpenAIが教育向け新機能を発表",
+        summary: "学校向けの新機能を公開した。",
+        source: "日経クロステック",
+      },
+      {
+        index: 1,
+        title: "OpenAI 擴大教育產品佈局",
+        summary: "新功能面向全球課堂場景推出。",
+        source: "聯合新聞網",
+      },
+    ]]);
+    expect(normalized).toEqual([
+      createArticle("jp", "international", {
+        title: "OpenAI 发布教育新功能",
+        summary: "面向学校场景推出新功能。",
+        source: "日经跨界科技",
+      }),
+      createArticle("zh-hant", "international", {
+        title: "OpenAI 扩大教育产品布局",
+        summary: "新功能面向全球课堂场景推出。",
+        source: "联合新闻网",
+        url: "https://udn.com/news/story/7240/1234567",
+      }),
+      createArticle("en", "international", {
+        title: "OpenAI expands education tools",
+        summary: "New classroom workflow features roll out this week.",
+        source: "Reuters",
+      }),
+    ]);
   });
 });
 
@@ -429,12 +508,13 @@ describe("buildDailyDigestExtractionPrompt", () => {
     ], 8);
 
     expect(DAILY_DIGEST_EXTRACTION_SYSTEM).toContain("教育科技新闻筛选器");
-    expect(DAILY_DIGEST_EXTRACTION_SYSTEM).toContain("international 结果只保留可用简体中文或英文阅读与展示的内容");
+    expect(DAILY_DIGEST_EXTRACTION_SYSTEM).toContain("返回结果里的 title / summary / source 最终只允许简体中文或英文");
+    expect(DAILY_DIGEST_EXTRACTION_SYSTEM).toContain("必须翻译成简体中文后再返回");
     expect(prompt).toContain("教育 / 教育科技 / AI 教育 / 教育公司");
     expect(prompt).toContain("优先保留教育、教育科技、AI 教育、教育公司、教育平台、教育政策、教育产品相关内容");
     expect(prompt).toContain("只有在它与教育行业、教育场景、教育产品或教育公司明显相关时才保留");
-    expect(prompt).toContain("国际结果只保留简体中文或英文内容");
-    expect(prompt).toContain("繁体中文");
+    expect(prompt).toContain("最终只允许简体中文或英文");
+    expect(prompt).toContain("统一翻译成简体中文");
   });
 });
 
