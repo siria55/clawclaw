@@ -1540,6 +1540,10 @@ function mergeDailyDigestConfig(
   const baseQueries = normalizeStringList(defaults?.queries);
   let queries = [...baseQueries];
   let braveSearchApiKey = defaults?.braveSearchApiKey?.trim() || undefined;
+  let bingSearchApiKey = defaults?.bingSearchApiKey?.trim() || undefined;
+  let bochaSearchApiKey = defaults?.bochaSearchApiKey?.trim() || undefined;
+  let domesticSource = defaults?.domesticSource;
+  let internationalSource = defaults?.internationalSource;
 
   for (const layer of layers) {
     if (!layer) continue;
@@ -1549,6 +1553,18 @@ function mergeDailyDigestConfig(
     }
     if (layer.braveSearchApiKey !== undefined) {
       braveSearchApiKey = layer.braveSearchApiKey.trim() || undefined;
+    }
+    if (layer.bingSearchApiKey !== undefined) {
+      bingSearchApiKey = layer.bingSearchApiKey.trim() || undefined;
+    }
+    if (layer.bochaSearchApiKey !== undefined) {
+      bochaSearchApiKey = layer.bochaSearchApiKey.trim() || undefined;
+    }
+    if (layer.domesticSource !== undefined) {
+      domesticSource = layer.domesticSource;
+    }
+    if (layer.internationalSource !== undefined) {
+      internationalSource = layer.internationalSource;
     }
   }
 
@@ -1560,6 +1576,10 @@ function mergeDailyDigestConfig(
   return {
     ...(queries.length > 0 && { queries }),
     ...(braveSearchApiKey !== undefined && { braveSearchApiKey }),
+    ...(bingSearchApiKey !== undefined && { bingSearchApiKey }),
+    ...(bochaSearchApiKey !== undefined && { bochaSearchApiKey }),
+    ...(domesticSource !== undefined && { domesticSource }),
+    ...(internationalSource !== undefined && { internationalSource }),
     braveSearch,
   };
 }
