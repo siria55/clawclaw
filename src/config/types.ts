@@ -71,12 +71,21 @@ export interface BraveSearchConfig {
   international?: BraveSearchScopeConfig;
 }
 
+/** Supported news search engine backends. */
+export type NewsSearchSource = "brave" | "bing";
+
 /** DailyDigest skill runtime settings configurable from WebUI. */
 export interface DailyDigestConfig {
   /** Search topics used by the skill. One query per search request. */
   queries?: string[];
   /** Brave Search API key used by daily-digest when configured from WebUI. */
   braveSearchApiKey?: string;
+  /** Bing News Search API key (Azure Cognitive Services). */
+  bingSearchApiKey?: string;
+  /** News search engine for domestic queries. Default: "brave". */
+  domesticSource?: NewsSearchSource;
+  /** News search engine for international queries. Default: "brave". */
+  internationalSource?: NewsSearchSource;
   /** Brave `news/search` request parameters configurable from WebUI. */
   braveSearch?: BraveSearchConfig;
 }

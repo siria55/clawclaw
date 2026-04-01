@@ -121,6 +121,9 @@ describe("SearchConfigView", () => {
     expect(JSON.parse(String(saveCall?.[1]?.body))).toEqual({
       queries: ["中国教育", "AI 教育"],
       braveSearchApiKey: "new_brave_key",
+      bingSearchApiKey: "",
+      domesticSource: "brave",
+      internationalSource: "brave",
       braveSearch: {
         request: {
           count: 50,

@@ -6,8 +6,13 @@ import { chromium } from "playwright";
 import { z } from "zod";
 import { mergeBraveSearchConfig } from "../../config/daily-digest.js";
 import type { ConfigStorage } from "../../config/storage.js";
-import type { BraveSearchConfig, DailyDigestConfig } from "../../config/types.js";
+import type { BraveSearchConfig, DailyDigestConfig, NewsSearchSource } from "../../config/types.js";
 import { loadSkillDef } from "../loader.js";
+import {
+  buildBingNewsSearchUrl,
+  fetchBingNewsResponse,
+  parseBingNewsSearchResponse,
+} from "./bing-news-search.js";
 import {
   isMainlandChinaHostname,
   isMainlandChinaMediaHostname,
@@ -291,26 +296,32 @@ const DAILY_DIGEST_LANGUAGE_NORMALIZATION_SYSTEM = [
   "不要输出 JSON 数组之外的任何内容。",
 ].join("\n");
 
-async function searchNewsWithBrave(
+async function searchNews(
   ctx: SkillContext,
   queries: string[],
   maxCandidates: number,
   quota: DigestQuota,
   referenceDate: string,
   braveSearchApiKey: string | undefined,
+  bingSearchApiKey: string | undefined,
+  domesticSource: NewsSearchSource,
+  internationalSource: NewsSearchSource,
   braveSearchConfig: BraveSearchConfig | undefined,
   runRecord?: DailyDigestRunRecord,
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
   const allLinks: DigestCandidateLink[] = [];
   const searchPlans = buildDailyDigestSearchPlans(queries);
-  const apiKey = getBraveSearchApiKey(braveSearchApiKey);
   const searchConfig = mergeBraveSearchConfig(braveSearchConfig);
   const freshnessLabel = describeBraveFreshness(searchConfig.request.freshness, new Date()) || "不限";
-  log(`🧭 使用 Brave Search API 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条搜索请求（freshness=${freshnessLabel}）`);
+  const domesticLabel = domesticSource === "bing" ? "Bing" : "Brave";
+  const internationalLabel = internationalSource === "bing" ? "Bing" : "Brave";
+  log(`🧭 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条请求（国内=${domesticLabel}，国际=${internationalLabel}，freshness=${freshnessLabel}）`);
   for (const plan of searchPlans) {
-    log(`🌐 Brave 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
-    const requestUrl = buildBraveNewsSearchUrl(plan.searchText, maxCandidates, plan.hintCategory, searchConfig);
+    const source = plan.hintCategory === "domestic" ? domesticSource : internationalSource;
+    const engineLabel = source === "bing" ? "Bing" : "Brave";
+    log(`🌐 ${engineLabel} 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
+    const { requestUrl, apiKey: resolvedApiKey } = buildSearchRequest(source, plan, maxCandidates, searchConfig, braveSearchApiKey, bingSearchApiKey);
     const requestRecord: DailyDigestRunRequestRecord = {
       query: plan.query,
       searchText: plan.searchText,
@@ -322,10 +333,9 @@ async function searchNewsWithBrave(
       parsedLinks: [],
     };
     try {
-      const response = await fetchBraveNewsResponse(requestUrl, apiKey);
+      const { response, links, resultCount } = await executeSearchRequest(source, requestUrl, resolvedApiKey, plan.hintCategory);
       requestRecord.response = response;
-      requestRecord.responseResultCount = countBraveNewsResults(response);
-      const links = parseBraveNewsSearchResponse(response, plan.hintCategory);
+      requestRecord.responseResultCount = resultCount;
       requestRecord.parsedLinks = links.map((link) => ({ ...link }));
       requestRecord.finishedAt = new Date().toISOString();
       runRecord?.searchRequests.push(requestRecord);
@@ -534,13 +544,16 @@ export class DailyDigestSkill implements Skill {
     });
     let browser: Browser | undefined;
     try {
-      const articles = await searchNewsWithBrave(
+      const articles = await searchNews(
         ctx,
         queries,
         this.#maxCandidates,
         this.#quota,
         dateKey,
         config?.braveSearchApiKey,
+        config?.bingSearchApiKey,
+        config?.domesticSource ?? "brave",
+        config?.internationalSource ?? "brave",
         braveSearchConfig,
         runRecord,
       );
@@ -1421,6 +1434,49 @@ function getBraveSearchApiKey(configuredKey: string | undefined): string {
     throw new Error("BRAVE_SEARCH_API_KEY is required for daily-digest");
   }
   return apiKey;
+}
+
+function getBingSearchApiKey(configuredKey: string | undefined): string {
+  const apiKey = configuredKey?.trim() || process.env["BING_SEARCH_API_KEY"]?.trim();
+  if (!apiKey) {
+    throw new Error("BING_SEARCH_API_KEY is required when using Bing as news search source");
+  }
+  return apiKey;
+}
+
+/** Resolve the API URL and key for one search plan based on the chosen source. */
+function buildSearchRequest(
+  source: NewsSearchSource,
+  plan: SearchPlan,
+  maxCandidates: number,
+  braveConfig: ReturnType<typeof mergeBraveSearchConfig>,
+  braveApiKey: string | undefined,
+  bingApiKey: string | undefined,
+): { requestUrl: string; apiKey: string } {
+  if (source === "bing") {
+    const freshness = braveConfig.request.freshness;
+    const requestUrl = buildBingNewsSearchUrl(plan.searchText, maxCandidates, plan.hintCategory, freshness);
+    return { requestUrl, apiKey: getBingSearchApiKey(bingApiKey) };
+  }
+  const requestUrl = buildBraveNewsSearchUrl(plan.searchText, maxCandidates, plan.hintCategory, braveConfig);
+  return { requestUrl, apiKey: getBraveSearchApiKey(braveApiKey) };
+}
+
+/** Execute a single search request and return parsed candidate links. */
+async function executeSearchRequest(
+  source: NewsSearchSource,
+  requestUrl: string,
+  apiKey: string,
+  hintCategory: DigestCategory,
+): Promise<{ response: unknown; links: DigestCandidateLink[]; resultCount: number }> {
+  if (source === "bing") {
+    const response = await fetchBingNewsResponse(requestUrl, apiKey);
+    const links = parseBingNewsSearchResponse(response, hintCategory);
+    return { response, links, resultCount: links.length };
+  }
+  const response = await fetchBraveNewsResponse(requestUrl, apiKey);
+  const links = parseBraveNewsSearchResponse(response, hintCategory);
+  return { response, links, resultCount: countBraveNewsResults(response) };
 }
 
 export function buildBraveNewsSearchUrl(

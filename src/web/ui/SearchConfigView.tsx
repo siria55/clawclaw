@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { mergeBraveSearchConfig } from "../../config/daily-digest.js";
-import type { BraveSearchConfig, BraveSearchSafeSearch, DailyDigestConfig } from "../../config/types.js";
+import type { BraveSearchConfig, BraveSearchSafeSearch, DailyDigestConfig, NewsSearchSource } from "../../config/types.js";
 import styles from "./SearchConfigView.module.css";
 
 const BRAVE_DOC_URL = "https://api-dashboard.search.brave.com/api-reference/news/news_search/get";
@@ -8,6 +8,9 @@ const BRAVE_DOC_URL = "https://api-dashboard.search.brave.com/api-reference/news
 interface SearchConfigFields {
   queries: string;
   braveSearchApiKey: string;
+  bingSearchApiKey: string;
+  domesticSource: NewsSearchSource;
+  internationalSource: NewsSearchSource;
   count: string;
   offset: string;
   freshness: string;
@@ -64,6 +67,9 @@ function buildFieldsFromConfig(config: DailyDigestConfig): SearchConfigFields {
   return {
     queries: (config.queries ?? []).join("\n"),
     braveSearchApiKey: config.braveSearchApiKey ?? "",
+    bingSearchApiKey: config.bingSearchApiKey ?? "",
+    domesticSource: config.domesticSource ?? "brave",
+    internationalSource: config.internationalSource ?? "brave",
     count: String(braveSearch.request.count),
     offset: String(braveSearch.request.offset),
     freshness: braveSearch.request.freshness,
@@ -116,6 +122,9 @@ async function saveSearchConfig(fields: SearchConfigFields): Promise<void> {
     body: JSON.stringify({
       queries: normalizeQueries(fields.queries),
       braveSearchApiKey: fields.braveSearchApiKey,
+      bingSearchApiKey: fields.bingSearchApiKey,
+      domesticSource: fields.domesticSource,
+      internationalSource: fields.internationalSource,
       braveSearch: toBraveSearchConfig(fields),
     }),
   });
@@ -176,8 +185,37 @@ export function SearchConfigView(): React.JSX.Element {
         </div>
 
         <section className={styles.card}>
-          <div className={styles.sectionTitle}>主题与鉴权</div>
+          <div className={styles.sectionTitle}>搜索源与鉴权</div>
           <div className={styles.fields}>
+            <div className={styles.grid}>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="search-domestic-source">国内搜索源</label>
+                <select
+                  id="search-domestic-source"
+                  className={styles.select}
+                  value={fields.domesticSource}
+                  onChange={(e) => setField("domesticSource", e.target.value as NewsSearchSource)}
+                >
+                  <option value="brave">Brave Search</option>
+                  <option value="bing">Bing News Search</option>
+                </select>
+                <span className={styles.fieldHint}>国内候选新闻使用的搜索引擎。Bing 对中国大陆媒体覆盖更好。</span>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="search-international-source">国际搜索源</label>
+                <select
+                  id="search-international-source"
+                  className={styles.select}
+                  value={fields.internationalSource}
+                  onChange={(e) => setField("internationalSource", e.target.value as NewsSearchSource)}
+                >
+                  <option value="brave">Brave Search</option>
+                  <option value="bing">Bing News Search</option>
+                </select>
+                <span className={styles.fieldHint}>国际候选新闻使用的搜索引擎。</span>
+              </div>
+            </div>
+
             <div className={styles.field}>
               <label className={styles.label} htmlFor="search-brave-api-key">Brave Search API Key</label>
               <input
@@ -190,7 +228,22 @@ export function SearchConfigView(): React.JSX.Element {
                 autoComplete="off"
                 spellCheck={false}
               />
-              <span className={styles.fieldHint}>留空时会回退到环境变量 `BRAVE_SEARCH_API_KEY`。</span>
+              <span className={styles.fieldHint}>留空时回退到环境变量 `BRAVE_SEARCH_API_KEY`。</span>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="search-bing-api-key">Bing Search API Key</label>
+              <input
+                id="search-bing-api-key"
+                className={styles.input}
+                type="password"
+                placeholder="Azure Cognitive Services Key"
+                value={fields.bingSearchApiKey}
+                onChange={(e) => setField("bingSearchApiKey", e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <span className={styles.fieldHint}>Azure 门户的 Bing Search v7 订阅密钥。留空时回退到环境变量 `BING_SEARCH_API_KEY`。</span>
             </div>
 
             <div className={styles.field}>
@@ -341,7 +394,7 @@ export function SearchConfigView(): React.JSX.Element {
         </section>
 
         <div className={styles.meta}>
-          保存后会直接写入本地 `./data`。`daily-digest` 下次搜索时会按这里的参数构造 Brave `news/search` 请求。
+          保存后会直接写入本地 `./data`。`daily-digest` 下次搜索时会按这里的配置选择搜索引擎并构造请求。
         </div>
 
         <div className={styles.actions}>

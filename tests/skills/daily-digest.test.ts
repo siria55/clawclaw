@@ -21,6 +21,10 @@ import {
   isMainlandChinaHostname,
   isNonMainlandDomesticHostname,
 } from "../../src/skills/daily-digest/source-classification.js";
+import {
+  buildBingNewsSearchUrl,
+  parseBingNewsSearchResponse,
+} from "../../src/skills/daily-digest/bing-news-search.js";
 
 describe("parseBraveNewsSearchResponse", () => {
   it("maps Brave results into digest candidate links", () => {
@@ -663,6 +667,62 @@ describe("buildBraveNewsSearchUrl", () => {
     expect(url.searchParams.getAll("goggles")).toEqual(["https://example.com/g1", "https://example.com/g2"]);
     expect(url.searchParams.get("country")).toBe("US");
     expect(url.searchParams.get("search_lang")).toBe("en");
+  });
+});
+
+describe("buildBingNewsSearchUrl", () => {
+  it("sets mkt=zh-CN for domestic queries", () => {
+    const url = new URL(buildBingNewsSearchUrl("中国 AI 教育", 20, "domestic", "p3d"));
+    expect(url.searchParams.get("q")).toBe("中国 AI 教育");
+    expect(url.searchParams.get("mkt")).toBe("zh-CN");
+    expect(url.searchParams.get("freshness")).toBe("Week");
+    expect(url.searchParams.get("sortBy")).toBe("Date");
+  });
+
+  it("omits mkt for international queries", () => {
+    const url = new URL(buildBingNewsSearchUrl("OpenAI education", 20, "international"));
+    expect(url.searchParams.get("mkt")).toBeNull();
+  });
+
+  it("maps Brave freshness aliases to Bing values", () => {
+    expect(new URL(buildBingNewsSearchUrl("q", 10, "domestic", "pd")).searchParams.get("freshness")).toBe("Day");
+    expect(new URL(buildBingNewsSearchUrl("q", 10, "domestic", "pw")).searchParams.get("freshness")).toBe("Week");
+    expect(new URL(buildBingNewsSearchUrl("q", 10, "domestic", "pm")).searchParams.get("freshness")).toBe("Month");
+    expect(new URL(buildBingNewsSearchUrl("q", 10, "domestic", "2026-03-29to2026-03-31")).searchParams.get("freshness")).toBe("2026-03-29..2026-03-31");
+  });
+});
+
+describe("parseBingNewsSearchResponse", () => {
+  it("parses a standard Bing News response into candidate links", () => {
+    const payload = {
+      value: [
+        {
+          name: "中国教育部发布AI教育指南",
+          url: "https://www.moe.gov.cn/news/123",
+          description: "教育部发布关于AI教育的指导意见",
+          datePublished: "2026-04-01T10:30:00.0000000Z",
+          provider: [{ name: "教育部" }],
+        },
+        {
+          name: "OpenAI 发布教育工具",
+          url: "https://openai.com/blog/edu",
+          description: "OpenAI launches education tools",
+          provider: [{ name: "OpenAI" }],
+        },
+      ],
+    };
+    const links = parseBingNewsSearchResponse(payload, "domestic");
+    expect(links).toHaveLength(2);
+    expect(links[0]?.text).toBe("中国教育部发布AI教育指南");
+    expect(links[0]?.source).toBe("教育部");
+    expect(links[0]?.hintCategory).toBe("domestic");
+    expect(links[0]?.publishedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(links[1]?.source).toBe("OpenAI");
+  });
+
+  it("returns empty array for invalid payload", () => {
+    expect(parseBingNewsSearchResponse({ bad: true }, "domestic")).toEqual([]);
+    expect(parseBingNewsSearchResponse(null, "domestic")).toEqual([]);
   });
 });
 
