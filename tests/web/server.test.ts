@@ -1356,6 +1356,42 @@ describe("WebServer", () => {
     rmSync(configDir, { recursive: true, force: true });
   });
 
+  it("POST /api/config/daily-digest persists bochaSearch config", async () => {
+    const agent = makeMockAgent();
+    const configDir = join(tmpdir(), `clawclaw-daily-digest-bocha-${Date.now()}`);
+    mkdirSync(configDir, { recursive: true });
+    const dailyDigestConfigStorage = new ConfigStorage<DailyDigestConfig>(join(configDir, "config.json"), {
+      queries: ["默认主题"],
+    });
+    dailyDigestConfigStorage.write({ queries: ["默认主题"], domesticSource: "bocha", bochaSearchApiKey: "sk-test" });
+
+    const server = new WebServer({ agent, port: 0, staticDir, dailyDigestConfigStorage });
+    await server.start();
+
+    const postRes = await fetch(`http://localhost:${server.port}/api/config/daily-digest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        queries: ["默认主题"],
+        bochaSearchApiKey: "sk-test",
+        domesticSource: "bocha",
+        bochaSearch: { count: 30, freshness: "30d", summary: true },
+      }),
+    });
+    expect(postRes.status).toBe(200);
+
+    const saved = dailyDigestConfigStorage.read();
+    expect(saved.bochaSearch).toEqual({ count: 30, freshness: "30d", summary: true });
+    expect(saved.domesticSource).toBe("bocha");
+
+    const getRes = await fetch(`http://localhost:${server.port}/api/config/daily-digest`);
+    const returned = await getRes.json() as DailyDigestConfig;
+    expect(returned.bochaSearch).toEqual({ count: 30, freshness: "30d", summary: true });
+
+    await server.stop();
+    rmSync(configDir, { recursive: true, force: true });
+  });
+
   it("GET /api/config/feishu-docs returns mounted docs and synced snapshots", async () => {
     const agent = makeMockAgent();
     const docsDir = join(tmpdir(), `clawclaw-docs-get-${Date.now()}`);
