@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isMainlandChinaHostname } from "../../skills/daily-digest/source-classification.js";
 import styles from "./DailyDigestRunsView.module.css";
 
 interface DailyDigestRunSummary {
@@ -657,22 +658,7 @@ function buildCandidateTags(link: DigestCandidateLink): string[] {
 
 function isLikelyMainlandChinaLink(link: DigestCandidateLink): boolean {
   try {
-    const hostname = new URL(link.href).hostname.toLowerCase();
-    return hostname.endsWith(".cn")
-      || /(^|\.)xinhuanet\.com$/i.test(hostname)
-      || /(^|\.)news\.cn$/i.test(hostname)
-      || /(^|\.)people\.com\.cn$/i.test(hostname)
-      || /(^|\.)cctv\.com$/i.test(hostname)
-      || /(^|\.)chinanews\.com\.cn$/i.test(hostname)
-      || /(^|\.)thepaper\.cn$/i.test(hostname)
-      || /(^|\.)jiemian\.com$/i.test(hostname)
-      || /(^|\.)yicai\.com$/i.test(hostname)
-      || /(^|\.)caixin\.com$/i.test(hostname)
-      || /(^|\.)36kr\.com$/i.test(hostname)
-      || /(^|\.)tmtpost\.com$/i.test(hostname)
-      || /(^|\.)huxiu\.com$/i.test(hostname)
-      || /(^|\.)ithome\.com$/i.test(hostname)
-      || /(^|\.)leiphone\.com$/i.test(hostname);
+    return isMainlandChinaHostname(new URL(link.href).hostname.toLowerCase());
   } catch {
     return false;
   }
@@ -686,7 +672,7 @@ function isLikelyListOrAggregation(link: DigestCandidateLink): boolean {
 
 function isLikelyWeakSource(link: DigestCandidateLink): boolean {
   const source = `${link.source ?? ""} ${link.href}`.toLowerCase();
-  return /note\.|yahoo\.co\.jp|stheadline|cw\.com\.tw|gvm\.com\.tw|thenewslens|businesstoday|sumitai|forum|blog|docs/i.test(source);
+  return /note\.|yahoo\.co\.jp|stheadline|cw\.com\.tw|gvm\.com\.tw|thenewslens|businesstoday|sumitai|forum|blog|docs|sputniknews|archdaily/i.test(source);
 }
 
 function isLikelyEducationWeak(link: DigestCandidateLink): boolean {

@@ -17,6 +17,10 @@ import {
   type DailyDigestSelection,
   type DigestArticle,
 } from "../../src/skills/daily-digest/index.js";
+import {
+  isMainlandChinaHostname,
+  isNonMainlandDomesticHostname,
+} from "../../src/skills/daily-digest/source-classification.js";
 
 describe("parseBraveNewsSearchResponse", () => {
   it("maps Brave results into digest candidate links", () => {
@@ -295,8 +299,8 @@ describe("selectDigestArticles", () => {
   it("prefers mainland-China sources inside the domestic section when quota is tight", () => {
     const selection = selectDigestArticles([
       createArticle("mainland", "domestic", {
-        url: "https://example.cn/ai-education",
-        source: "某地教育局",
+        url: "https://www.news.cn/tech/20260331/a.htm",
+        source: "新华社",
       }),
       createArticle("reuters-domestic", "domestic", {
         url: "https://www.reuters.com/world/china/ai-education-2026-03-30/",
@@ -309,6 +313,25 @@ describe("selectDigestArticles", () => {
 
     expect(selection.domestic).toHaveLength(1);
     expect(selection.domestic[0]?.title).toBe("mainland");
+  });
+
+  it("keeps pseudo-mainland .cn sources behind real mainland media", () => {
+    const selection = selectDigestArticles([
+      createArticle("xinhua", "domestic", {
+        url: "https://www.news.cn/tech/20260331/a.htm",
+        source: "新华社",
+      }),
+      createArticle("sputnik", "domestic", {
+        url: "https://sputniknews.cn/20260331/ai-education-1064545204.html",
+        source: "俄罗斯卫星通讯社",
+      }),
+    ], {
+      domestic: 1,
+      international: 0,
+    });
+
+    expect(selection.domestic).toHaveLength(1);
+    expect(selection.domestic[0]?.title).toBe("xinhua");
   });
 
   it("filters non-English-or-simplified-Chinese articles from the international section", () => {
@@ -467,8 +490,10 @@ describe("buildDailyDigestSearchPlans", () => {
   it("expands neutral queries into domestic and international searches", () => {
     expect(buildDailyDigestSearchPlans(["AI", "教育"])).toEqual([
       { query: "AI", searchText: "中国AI", hintCategory: "domestic" },
+      { query: "AI", searchText: "中国AI 新华社 人民日报 央视网 澎湃 财新 界面 第一财经", hintCategory: "domestic" },
       { query: "AI", searchText: "国际AI", hintCategory: "international" },
       { query: "教育", searchText: "中国教育", hintCategory: "domestic" },
+      { query: "教育", searchText: "中国教育 新华社 人民日报 央视网 澎湃 财新 界面 第一财经", hintCategory: "domestic" },
       { query: "教育", searchText: "国际教育", hintCategory: "international" },
     ]);
   });
@@ -476,7 +501,9 @@ describe("buildDailyDigestSearchPlans", () => {
   it("normalizes explicitly scoped domestic queries to China-focused search text", () => {
     expect(buildDailyDigestSearchPlans(["国内AI", "中国教育", "国际AI", "OpenAI"])).toEqual([
       { query: "国内AI", searchText: "中国AI", hintCategory: "domestic" },
+      { query: "国内AI", searchText: "中国AI 新华社 人民日报 央视网 澎湃 财新 界面 第一财经", hintCategory: "domestic" },
       { query: "中国教育", searchText: "中国教育", hintCategory: "domestic" },
+      { query: "中国教育", searchText: "中国教育 新华社 人民日报 央视网 澎湃 财新 界面 第一财经", hintCategory: "domestic" },
       { query: "国际AI", searchText: "国际AI", hintCategory: "international" },
       { query: "OpenAI", searchText: "OpenAI", hintCategory: "international" },
     ]);
@@ -520,6 +547,61 @@ describe("splitDomesticCandidateLinks", () => {
       "https://stheadline.com/zh-hans/local-school/3557845",
       "https://www.nikkei.com/article/DGXZQOUB313DZ0R30C26A3000000/",
     ].sort());
+  });
+
+  it("does not treat pseudo-mainland .cn domains as mainland sources", () => {
+    const buckets = splitDomesticCandidateLinks([
+      {
+        text: "卫星通讯社谈 AI 教育",
+        href: "https://sputniknews.cn/20260331/ai-education-1064545204.html",
+        hintCategory: "domestic",
+        source: "俄罗斯卫星通讯社",
+      },
+      {
+        text: "ArchDaily 建筑案例",
+        href: "https://www.archdaily.cn/cn/1020000/example",
+        hintCategory: "domestic",
+        source: "ArchDaily",
+      },
+      {
+        text: "新浪看点聚合",
+        href: "https://k.sina.cn/article_5787187353_158f17899020022z4k.html",
+        hintCategory: "domestic",
+        source: "k.sina.cn",
+      },
+      {
+        text: "人民日报谈 AI 教育",
+        href: "https://www.people.com.cn/n1/2026/0331/c1000-12345678.html",
+        hintCategory: "domestic",
+        source: "人民日报",
+      },
+    ]);
+
+    expect(buckets.mainland.map((item) => item.href)).toEqual([
+      "https://www.people.com.cn/n1/2026/0331/c1000-12345678.html",
+    ]);
+    expect([...buckets.fallback.map((item) => item.href)].sort()).toEqual([
+      "https://sputniknews.cn/20260331/ai-education-1064545204.html",
+      "https://www.archdaily.cn/cn/1020000/example",
+      "https://k.sina.cn/article_5787187353_158f17899020022z4k.html",
+    ].sort());
+  });
+});
+
+describe("source classification", () => {
+  it("recognizes explicit mainland-China media hosts", () => {
+    expect(isMainlandChinaHostname("www.news.cn")).toBe(true);
+    expect(isMainlandChinaHostname("www.thepaper.cn")).toBe(true);
+    expect(isMainlandChinaHostname("www.people.com.cn")).toBe(true);
+  });
+
+  it("marks pseudo-mainland and overseas hosts as non-mainland domestic sources", () => {
+    expect(isMainlandChinaHostname("sputniknews.cn")).toBe(false);
+    expect(isMainlandChinaHostname("www.archdaily.cn")).toBe(false);
+    expect(isMainlandChinaHostname("k.sina.cn")).toBe(false);
+    expect(isNonMainlandDomesticHostname("sputniknews.cn")).toBe(true);
+    expect(isNonMainlandDomesticHostname("stheadline.com")).toBe(true);
+    expect(isNonMainlandDomesticHostname("www.sankei.com")).toBe(true);
   });
 });
 

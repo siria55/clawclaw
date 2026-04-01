@@ -409,8 +409,8 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 
 1. 读取 `SKILL.md` 获得默认搜索词、候选上限和国内/国际配额；若 `data/skills/daily-digest/config.json` 中存在自定义主题，则运行时覆盖默认搜索词
 2. 启动 Playwright chromium（headless）
-3. 依次请求 Brave Search API 的 `news/search` 接口；默认请求参数为 `count=20`、`offset=0`、`freshness=p3d`、`safesearch=strict`、`spellcheck=0`，并支持由 WebUI 覆盖 `count / offset / freshness / safesearch / ui_lang / extra_snippets / goggles`；其中 `p3d` 会在运行时自动展开为滚动 3 天日期区间；国内搜索默认额外附带 `country=CN` 与 `search_lang=zh-hans`，国际搜索默认不带地域参数；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
-4. 将 Brave 返回的标题、URL、来源、摘要与时间字段归一化为候选链接，跨关键词去重后先过滤百家号等自媒体 / 黑名单链接；其中“国内”候选会先按 hostname 分成“中国大陆来源优先池”和“非大陆回退池”，再进入后续抽取
+3. 依次请求 Brave Search API 的 `news/search` 接口；默认请求参数为 `count=20`、`offset=0`、`freshness=p3d`、`safesearch=strict`、`spellcheck=0`，并支持由 WebUI 覆盖 `count / offset / freshness / safesearch / ui_lang / extra_snippets / goggles`；其中 `p3d` 会在运行时自动展开为滚动 3 天日期区间；国内搜索默认额外附带 `country=CN` 与 `search_lang=zh-hans`，并会为每条国内 query 额外派生一条带大陆主流媒体提示词的搜索请求，用于补捞中国大陆媒体候选；国际搜索默认不带地域参数；接口通过 `X-Subscription-Token` 读取 `BRAVE_SEARCH_API_KEY`
+4. 将 Brave 返回的标题、URL、来源、摘要与时间字段归一化为候选链接，跨关键词去重后先过滤百家号等自媒体 / 黑名单链接；其中“国内”候选会先按共享的来源识别规则分成“中国大陆来源优先池”和“非大陆回退池”，不再把泛 `.cn` / `.com.cn` 兜底视为大陆来源，再进入后续抽取
 5. `dedupeLinks()` 在合并重复 URL 时，若同一链接同时命中国内与国际搜索，会优先保留 `domestic` 提示，避免中国语境命中的候选被错误洗到国际池
 6. 国内链路会先对大陆优先池调用 `ctx.agent.llm.complete()`；若返回数仍不足国内配额，再对非大陆回退池做第二次抽取补位。国际链路继续走单次抽取
 7. 抽取 prompt 会优先筛出教育、教育科技、AI 教育、教育公司内容，同时保留与教育场景强相关的科技动态；国内 prompt 还会明确要求优先中国大陆媒体、政府 / 高校 / 企业官网来源，输出为结构化 JSON（`DigestArticle[]`，含 `category`）
@@ -426,6 +426,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 其中 HTML 不再由 `index.ts` 直接拼整页结构，而是运行时读取 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 和 `layout.css` 进行模板替换；这样 HTML 模板和 CSS 模板共同成为截图与导出文件的单一版式源。
 截图阶段使用 `browser.newContext({ viewport: { width: 1080, height: 1400 }, deviceScaleFactor: 4 })`，并以 `scale: "device"` 输出 PNG，在不改变版心尺寸的前提下提升清晰度。
 `daily-digest` 现在不再依赖浏览器打开新闻搜索页获取候选链接，而是直接调用 Brave 官方新闻搜索 API；Playwright 浏览器只保留在最终 HTML 截图阶段使用。
+大陆来源识别被抽到 `src/skills/daily-digest/source-classification.ts`，后端筛选和 `DailyDigestRunsView` 标签都会复用这份规则，避免 UI 与实际抽取口径漂移。
 
 ### Cron 手动执行错误传播
 
@@ -571,7 +572,7 @@ React 19 + Vite 6 + CSS Modules + TypeScript strict。
 | 对话 | 对话 | `#chat` | `ChatView` | 消息气泡 + 工具事件 + 思考气泡 + 等待动画 |
 | 内容 | 新闻库 | `#news` | `NewsView` | 关键词搜索、分页浏览（读 skill JSON 输出） |
 | 内容 | 记忆库 | `#memory` | `MemoryView` | 关键词搜索、分页、内容展开/收起，只展示已通过 `memory_save` 落库的条目 |
-| 日报记录 | 日报记录 | `#digest` | `DailyDigestRunsView` | 查看 `daily-digest` 每次执行的 Brave 请求参数、返回结果和筛选阶段数据；国内链路会额外显示大陆候选 / 回退候选与抽取阶段 |
+| 日报记录 | 日报记录 | `#digest` | `DailyDigestRunsView` | 查看 `daily-digest` 每次执行的 Brave 请求参数、返回结果和筛选阶段数据；国内链路会额外显示大陆候选 / 回退候选与抽取阶段，标签口径与后端共用 |
 | 自动化 | Cron | `#cron` | `CronView` | Cron 列表、增删改、立即执行、直发文本 / Markdown / 图片、支持多目标发送 |
 | 自动化 | Skills | `#skills` | `SkillsView` | Skill 列表、手动触发、实时执行日志；`daily-digest` 卡片内可直接修改搜索主题 |
 | 自动化 | 搜索 | `#search` | `SearchConfigView` | 集中管理 Brave Search API Key、`daily-digest` 搜索主题与 Brave `news/search` 参数；保存到 `data/skills/daily-digest/config.json` |

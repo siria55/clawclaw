@@ -8,6 +8,13 @@ import { mergeBraveSearchConfig } from "../../config/daily-digest.js";
 import type { ConfigStorage } from "../../config/storage.js";
 import type { BraveSearchConfig, DailyDigestConfig } from "../../config/types.js";
 import { loadSkillDef } from "../loader.js";
+import {
+  isMainlandChinaHostname,
+  isMainlandChinaMediaHostname,
+  isNonMainlandDomesticHostname,
+  isPseudoMainlandHostname,
+  isTraditionalChineseHostname,
+} from "./source-classification.js";
 import type { Skill, SkillContext, SkillResult } from "../types.js";
 import {
   buildDailyDigestRunRequestParams,
@@ -129,6 +136,7 @@ const QUERY_HINT_PATTERNS: Array<{ pattern: RegExp; category: DigestCategory }> 
   { pattern: /国际|海外|全球|硅谷|美国|欧洲|日本|韩国|印度/i, category: "international" },
   { pattern: /国内|中国|本土|本地/i, category: "domestic" },
 ];
+const MAINLAND_MEDIA_QUERY_HINT = "新华社 人民日报 央视网 澎湃 财新 界面 第一财经";
 
 const INTERNATIONAL_PATTERNS = [
   /国际|海外|全球|硅谷|美国|欧洲|欧盟|英国|日本|韩国|印度|中东|东南亚/i,
@@ -144,6 +152,11 @@ const DOMESTIC_PATTERNS = [
 
 const LOW_PRIORITY_HOSTS = new Set([
   "k.sina.com.cn",
+  "k.sina.cn",
+  "sputniknews.cn",
+  "www.archdaily.cn",
+  "archdaily.cn",
+  "hub.baai.ac.cn",
   "www.toutiao.com",
 ]);
 
@@ -171,8 +184,8 @@ const SELF_MEDIA_SOURCE_PATTERNS = [
 ];
 
 const PREFERRED_MEDIA_SOURCE_PATTERNS = [
-  /新华社|人民日报|央视网|中国新闻网|澎湃新闻|界面新闻|第一财经|财新|证券时报|经济观察报|晚点/i,
-  /36氪|钛媒体|虎嗅|IT之家|雷峰网/i,
+  /新华社|人民日报|央视网|中国新闻网|澎湃新闻|界面新闻|第一财经|财新|证券时报|经济观察报|21世纪经济报道|每日经济新闻|新京报|创业邦|投资界|晚点/i,
+  /36氪|钛媒体|虎嗅|IT之家|雷峰网|极客公园|新浪新闻|腾讯新闻|网易新闻/i,
   /Reuters|路透|Bloomberg|彭博|Financial Times|FT|华尔街日报|WSJ|BBC|CNBC|The Verge|TechCrunch|AP News|美联社/i,
   /OpenAI|Anthropic|Google|Microsoft|NVIDIA|Meta|Apple|Amazon|Tesla|字节跳动|阿里巴巴|腾讯|华为/i,
 ];
@@ -192,11 +205,20 @@ const PREFERRED_MEDIA_HOST_PATTERNS = [
   /(^|\.)cnstock\.com$/i,
   /(^|\.)cls\.cn$/i,
   /(^|\.)eeo\.com\.cn$/i,
+  /(^|\.)21jingji\.com$/i,
+  /(^|\.)nbd\.com\.cn$/i,
+  /(^|\.)bjnews\.com\.cn$/i,
+  /(^|\.)cyzone\.cn$/i,
+  /(^|\.)pedaily\.cn$/i,
   /(^|\.)36kr\.com$/i,
   /(^|\.)tmtpost\.com$/i,
   /(^|\.)huxiu\.com$/i,
   /(^|\.)ithome\.com$/i,
   /(^|\.)leiphone\.com$/i,
+  /(^|\.)geekpark\.net$/i,
+  /^(news|edu|finance)\.sina\.com\.cn$/i,
+  /^(new|news|edu|tech|finance)\.qq\.com$/i,
+  /^(news|edu|tech|finance)\.163\.com$/i,
   /(^|\.)reuters\.com$/i,
   /(^|\.)bloomberg\.com$/i,
   /(^|\.)ft\.com$/i,
@@ -219,52 +241,7 @@ const PREFERRED_MEDIA_HOST_PATTERNS = [
   /(^|\.)aws\.amazon\.com$/i,
 ];
 
-const MAINLAND_CHINA_HOST_PATTERNS = [
-  /(^|\.)gov\.cn$/i,
-  /(^|\.)edu\.cn$/i,
-  /(^|\.)xinhuanet\.com$/i,
-  /(^|\.)news\.cn$/i,
-  /(^|\.)people\.com\.cn$/i,
-  /(^|\.)cctv\.com$/i,
-  /(^|\.)gmw\.cn$/i,
-  /(^|\.)chinanews\.com\.cn$/i,
-  /(^|\.)thepaper\.cn$/i,
-  /(^|\.)jiemian\.com$/i,
-  /(^|\.)yicai\.com$/i,
-  /(^|\.)caixin\.com$/i,
-  /(^|\.)stcn\.com$/i,
-  /(^|\.)cnstock\.com$/i,
-  /(^|\.)cls\.cn$/i,
-  /(^|\.)eeo\.com\.cn$/i,
-  /(^|\.)36kr\.com$/i,
-  /(^|\.)tmtpost\.com$/i,
-  /(^|\.)huxiu\.com$/i,
-  /(^|\.)ithome\.com$/i,
-  /(^|\.)leiphone\.com$/i,
-];
-
 const TRADITIONAL_CHINESE_INDICATOR_PATTERN = /[專學體與為這來們會後從開關於發佈業產網點臺灣聯報經濟應數據醫門戶話讓還選觀讀寫實軟電腦雲處裡廣務測證遠際權聲標圖錄頁覽優勢機構續線層級國資訊華號]/u;
-
-const TRADITIONAL_CHINESE_MEDIA_HOST_PATTERNS = [
-  /(^|\.)storm\.mg$/i,
-  /(^|\.)udn\.com$/i,
-  /(^|\.)ettoday\.net$/i,
-  /(^|\.)hk01\.com$/i,
-  /(^|\.)mingpao\.com$/i,
-  /(^|\.)hket\.com$/i,
-  /(^|\.)stheadline\.com$/i,
-  /(^|\.)cna\.com\.tw$/i,
-  /(^|\.)ltn\.com\.tw$/i,
-];
-
-const NON_MAINLAND_DOMESTIC_HOST_PATTERNS = [
-  /(^|\.)worldjournal\.com$/i,
-  /(^|\.)secretchina\.com$/i,
-  /(^|\.)digitimes\.com\.tw$/i,
-  /(^|\.)afpbb\.com$/i,
-  /(^|\.)nikkei\.com$/i,
-  /(^|\.)news\.infoseek\.co\.jp$/i,
-];
 
 const DAILY_DECK_LINES = [
   "先看事实，再下判断。",
@@ -735,11 +712,23 @@ export function buildDailyDigestSearchPlans(queries: string[]): Array<{
 function buildSearchPlansForQuery(query: string): SearchPlan[] {
   const scope = classifyQueryScope(query);
   if (scope === "domestic" || scope === "international") {
-    return [{ query, searchText: normalizeScopedSearchText(query, scope), hintCategory: scope }];
+    return buildScopedSearchPlans(query, scope);
   }
   return [
     { query, searchText: scopeQuery(query, "domestic"), hintCategory: "domestic" },
+    { query, searchText: buildMainlandMediaBiasedSearchText(scopeQuery(query, "domestic")), hintCategory: "domestic" },
     { query, searchText: scopeQuery(query, "international"), hintCategory: "international" },
+  ];
+}
+
+function buildScopedSearchPlans(query: string, category: DigestCategory): SearchPlan[] {
+  const searchText = normalizeScopedSearchText(query, category);
+  if (category !== "domestic") {
+    return [{ query, searchText, hintCategory: category }];
+  }
+  return [
+    { query, searchText, hintCategory: "domestic" },
+    { query, searchText: buildMainlandMediaBiasedSearchText(searchText), hintCategory: "domestic" },
   ];
 }
 
@@ -757,6 +746,10 @@ function normalizeScopedSearchText(query: string, category: DigestCategory): str
   const trimmed = query.trim();
   if (category !== "domestic") return trimmed;
   return trimmed.replace(/^(国内|本土|本地)/, "中国");
+}
+
+function buildMainlandMediaBiasedSearchText(query: string): string {
+  return `${query.trim()} ${MAINLAND_MEDIA_QUERY_HINT}`.trim();
 }
 
 async function extractArticlesFromLinks(
@@ -1232,13 +1225,6 @@ function containsHanText(text: string): boolean {
   return /\p{Script=Han}/u.test(text.normalize("NFKC"));
 }
 
-function isTraditionalChineseHostname(hostname: string): boolean {
-  return hostname.endsWith(".tw")
-    || hostname.endsWith(".hk")
-    || hostname.endsWith(".mo")
-    || TRADITIONAL_CHINESE_MEDIA_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
-}
-
 function isAsciiReadableChar(char: string): boolean {
   return /^[\u0020-\u007e]$/u.test(char);
 }
@@ -1253,9 +1239,10 @@ function scoreArticle(article: DigestArticle): number {
   if (article.source.trim()) score += 1;
   const hostname = getHostname(article.url);
   if (hostname && !LOW_PRIORITY_HOSTS.has(hostname)) score += 2;
-  if (hostname?.endsWith(".cn")) score += article.category === "domestic" ? 1 : 0;
-  if (hostname && !hostname.endsWith(".cn")) score += article.category === "international" ? 1 : 0;
-  if (hostname && article.category === "domestic" && isMainlandChinaHostname(hostname)) score += 4;
+  if (hostname && article.category === "domestic" && isMainlandChinaHostname(hostname)) score += 1;
+  if (hostname && article.category === "international" && !isMainlandChinaHostname(hostname)) score += 1;
+  if (hostname && article.category === "domestic" && isMainlandChinaMediaHostname(hostname)) score += 4;
+  if (hostname && article.category === "domestic" && isMainlandChinaHostname(hostname) && !isMainlandChinaMediaHostname(hostname)) score += 2;
   if (hostname && article.category === "domestic" && isNonMainlandDomesticHostname(hostname)) score -= 3;
   if (hostname && isPreferredMediaHost(hostname)) score += 3;
   if (isPreferredMediaSource(article.source)) score += 2;
@@ -1672,24 +1659,14 @@ export function splitDomesticCandidateLinks(
 function scoreDomesticCandidateLink(link: DigestCandidateLink): number {
   let score = 0;
   const hostname = getHostname(link.href);
-  if (hostname && isMainlandChinaHostname(hostname)) score += 12;
-  if (hostname?.endsWith(".cn")) score += 4;
+  if (hostname && isMainlandChinaMediaHostname(hostname)) score += 16;
+  if (hostname && isMainlandChinaHostname(hostname) && !isMainlandChinaMediaHostname(hostname)) score += 8;
   if (hostname && isPreferredMediaHost(hostname)) score += 3;
   if (link.source && isPreferredMediaSource(link.source)) score += 2;
+  if (hostname && isPseudoMainlandHostname(hostname)) score -= 8;
   if (hostname && isTraditionalChineseHostname(hostname)) score -= 6;
-  if (hostname && isNonMainlandDomesticHostname(hostname)) score -= 5;
+  if (hostname && isNonMainlandDomesticHostname(hostname)) score -= 6;
   return score;
-}
-
-function isMainlandChinaHostname(hostname: string): boolean {
-  return hostname.endsWith(".cn")
-    || hostname.endsWith(".com.cn")
-    || MAINLAND_CHINA_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
-}
-
-function isNonMainlandDomesticHostname(hostname: string): boolean {
-  return isTraditionalChineseHostname(hostname)
-    || NON_MAINLAND_DOMESTIC_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
 }
 
 function getHostname(value: string): string | undefined {

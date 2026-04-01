@@ -1,6 +1,6 @@
 # Sprint 历史总览
 
-所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`、`sprint-84.md`、`sprint-85.md`、`sprint-86.md`、`sprint-87.md`、`sprint-88.md`、`sprint-89.md`、`sprint-90.md`、`sprint-91.md`、`sprint-92.md`、`sprint-93.md`、`sprint-94.md`、`sprint-95.md`、`sprint-96.md`。
+所有 sprint 均已完成 ✅。单独的 `sprint-31.md` 到 `sprint-49.md` 已压缩归并到本页，不再保留逐条文档；最新增量保留 `sprint-50.md`、`sprint-51.md`、`sprint-52.md`、`sprint-53.md`、`sprint-54.md`、`sprint-55.md`、`sprint-56.md`、`sprint-57.md`、`sprint-58.md`、`sprint-59.md`、`sprint-60.md`、`sprint-61.md`、`sprint-62.md`、`sprint-63.md`、`sprint-64.md`、`sprint-65.md`、`sprint-66.md`、`sprint-67.md`、`sprint-68.md`、`sprint-69.md`、`sprint-70.md`、`sprint-71.md`、`sprint-72.md`、`sprint-73.md`、`sprint-74.md`、`sprint-75.md`、`sprint-76.md`、`sprint-77.md`、`sprint-78.md`、`sprint-79.md`、`sprint-80.md`、`sprint-81.md`、`sprint-82.md`、`sprint-83.md`、`sprint-84.md`、`sprint-85.md`、`sprint-86.md`、`sprint-87.md`、`sprint-88.md`、`sprint-89.md`、`sprint-90.md`、`sprint-91.md`、`sprint-92.md`、`sprint-93.md`、`sprint-94.md`、`sprint-95.md`、`sprint-96.md`、`sprint-97.md`。
 
 ---
 
@@ -316,6 +316,12 @@
 - 当天日报缺失时，会向飞书目标明确发送失败提醒
 - 默认 cron 文案同步从“最新日报”改为“当日日报”
 
+## 第五十二阶段：大陆来源识别收紧（Sprint 97）
+
+- `daily-digest` 的大陆来源识别改为显式白名单，不再把泛 `.cn` / `.com.cn` 当成中国大陆来源
+- `sputniknews.cn`、`archdaily.cn`、`k.sina.cn` 这类伪大陆域名会进入非大陆回退池，不再挤占大陆优先候选
+- `日报记录` 页改为和后端共用同一套来源识别逻辑，`大陆来源` 标签与真实筛选口径保持一致
+
 ---
 
 ## 当前落点
@@ -370,6 +376,7 @@
 - `日报记录` 现在会显示 LLM 抽取候选明细、通过率和诊断提示，定位“为什么被过滤很多”更直接
 - `daily-digest` 默认 query 现已进一步收紧到中国大陆教育语境，并同步更新到本地持久化配置和 WebUI 示例
 - `daily-digest` 的国内资讯现在会优先使用中国大陆来源，不足时才回退到非大陆来源，减少“国内栏里全是港媒 / 日媒 / 海外华文”的情况
+- `daily-digest` 的大陆来源识别现在只接受明确白名单域名，不再把伪大陆 `.cn` 站点误抬到大陆优先池
 - `daily-digest` 候选去重现在会保留国内提示，不再把同链接的中国语境命中结果错误覆盖成国际
 - `daily-digest-send` 现在只发送当天 PNG；若当天未生成成功，会明确提示失败且不会回退发旧日报
 - Agent 现在会优先按 WebUI 中配置的名称和系统提示词回答“你谁 / 你叫什么 / 你是做什么的”

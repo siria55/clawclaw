@@ -122,7 +122,7 @@ describe("DailyDigestRunsView", () => {
             candidateLinks: [
               {
                 text: "教育 AI 公司发布新产品",
-                href: "https://example.com/a",
+                href: "https://www.news.cn/tech/20260331/a.htm",
                 hintCategory: "domestic",
                 source: "新华社",
                 summary: "summary",
@@ -130,16 +130,16 @@ describe("DailyDigestRunsView", () => {
               },
               {
                 text: "某科技公司推出新芯片",
-                href: "https://example.com/b",
+                href: "https://sputniknews.cn/20260331/ai-education-1064545204.html",
                 hintCategory: "domestic",
-                source: "Some Blog",
+                source: "俄罗斯卫星通讯社",
                 summary: "AI 芯片消息，主要面向云计算基础设施。",
               },
             ],
             rawOutput: "[{\"title\":\"教育 AI 公司发布新产品\"}]",
             parsedArticles: [{
               title: "教育 AI 公司发布新产品",
-              url: "https://example.com/a",
+              url: "https://www.news.cn/tech/20260331/a.htm",
               summary: "summary",
               source: "新华社",
               category: "domestic",
@@ -164,7 +164,7 @@ describe("DailyDigestRunsView", () => {
           selection: {
             domestic: [{
               title: "教育 AI 公司发布新产品",
-              url: "https://example.com/a",
+              url: "https://www.news.cn/tech/20260331/a.htm",
               summary: "summary",
               source: "新华社",
               category: "domestic",
@@ -172,7 +172,7 @@ describe("DailyDigestRunsView", () => {
             international: [],
             all: [{
               title: "教育 AI 公司发布新产品",
-              url: "https://example.com/a",
+              url: "https://www.news.cn/tech/20260331/a.htm",
               summary: "summary",
               source: "新华社",
               category: "domestic",
@@ -207,6 +207,8 @@ describe("DailyDigestRunsView", () => {
     expect(screen.getByText("国内大陆候选")).toBeDefined();
     expect(screen.getByText("大陆优先")).toBeDefined();
     expect(screen.getByText("通过率 50%")).toBeDefined();
+    expect(screen.getByText("大陆来源")).toBeDefined();
+    expect(screen.getByText("非大陆回退")).toBeDefined();
     expect(screen.getByText("教育弱相关")).toBeDefined();
   });
 
