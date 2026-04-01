@@ -7,6 +7,7 @@ import type { CronJob } from "../../src/cron/types.js";
 import type { LLMProvider, LLMResponse } from "../../src/llm/types.js";
 import type { IMPlatform, IMMessage } from "../../src/platform/types.js";
 import { Agent } from "../../src/core/agent.js";
+import { IMEventStorage } from "../../src/im/storage.js";
 
 function makeMockLLM(reply: string): LLMProvider {
   return {
@@ -323,6 +324,43 @@ describe("CronScheduler cron parsing", () => {
         chatId: "room-digest",
         text: expect.stringContaining("回复 1-2 获取对应新闻原文链接"),
       });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("runNow does not fall back to yesterday digest when today's digest is missing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "claw-cron-digest-missing-"));
+    try {
+      const digestDir = join(dir, "daily-digest");
+      mkdirSync(digestDir, { recursive: true });
+      writeFileSync(join(digestDir, "2000-01-01.png"), Buffer.from("png"));
+      writeFileSync(join(digestDir, "2000-01-01.json"), JSON.stringify([
+        { title: "旧日报", url: "https://example.com/old", summary: "", source: "S1", category: "domestic" },
+      ]));
+
+      const platform = makeMockPlatform();
+      const imEventStorage = new IMEventStorage();
+      const job: CronJob = {
+        id: "manual-digest-send-missing",
+        schedule: "0 10 * * *",
+        message: "send digest",
+        sendSkillOutput: "daily-digest",
+        agent: makeAgent("unused"),
+        delivery: { platform, chatId: "room-digest" },
+      };
+
+      const sched = new CronScheduler({ skillDataRoot: dir, imEventStorage, timezone: "Asia/Shanghai" });
+      await sched.runNow(job);
+
+      expect(platform.sendImage).not.toHaveBeenCalled();
+      expect(platform.sentMessages).toEqual([{
+        chatId: "room-digest",
+        text: expect.stringContaining(`今日日报（${todayKey()}）尚未生成成功`),
+      }]);
+      expect(platform.sentMessages[0]?.text).toContain("本次未发送旧日报");
+      const events = imEventStorage.since(undefined);
+      expect(events.at(-1)?.replyText).toBe(`[日报发送失败] ${todayKey()}`);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

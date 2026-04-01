@@ -266,7 +266,7 @@ Cron 直发链路也同步支持 `msgType: "markdown"`：
 
 - Agent 只执行一次
 - 生成出的同一条回复或同一张图片会依次发送到所有目标
-- `sendSkillOutput` 也是按同样的多目标广播逻辑执行
+- `sendSkillOutput` 也是按同样的多目标广播逻辑执行；其中 `daily-digest` 会额外校验“当天 PNG 是否存在”
 - 飞书里既可以填用户 `ou_...`，也可以填群 `oc_...`
 - 仅 `skillId` 的 skill-only Cron 不要求配置 `chatId`
 
@@ -335,7 +335,7 @@ Skill 职责收窄为"生成内容 + 保存文件"。IM 投递由 CronScheduler 
 
 ```
 Cron1(skillId)          → skill.run(ctx) → 保存文件，不发 IM
-Cron2(sendSkillOutput)  → findLatestSkillPng() → platform.sendImage()
+Cron2(sendSkillOutput)  → 解析待发送 PNG → platform.sendImage()
 
 WebUI 手动运行：
 onRunSkill → skill.run(ctx) → SkillResult → SSE done + outputPath → 前端加载图片预览
@@ -421,7 +421,7 @@ Agent 指令（支持 $SEARCH_URLS / $MAX_ARTICLES 变量替换）
 12. Playwright 截图为 PNG，写入 `data/skills/daily-digest/YYYY-MM-DD.{html,md,png,json}`
 13. 同一次执行还会写入 `data/skills/daily-digest/runs/{runId}.json`，内容包含 Brave 请求参数、原始返回、解析候选、LLM 抽取结果、送入 LLM 的候选明细与最终入选统计；国内链路还会记录大陆候选数、回退候选数，以及 `mainland-preferred / fallback` 抽取阶段
 14. 返回 `{ outputPath: "data/skills/daily-digest/YYYY-MM-DD.png" }`
-15. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`
+15. 由独立的 `sendSkillOutput` Cron Job 调用 `feishu.sendImage(chatId, pngPath)`；其中 `daily-digest-send` 只发送当天 PNG，若当天文件缺失则改为发送失败提醒文本，不再回退到前一天文件
 
 其中 HTML 不再由 `index.ts` 直接拼整页结构，而是运行时读取 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 和 `layout.css` 进行模板替换；这样 HTML 模板和 CSS 模板共同成为截图与导出文件的单一版式源。
 截图阶段使用 `browser.newContext({ viewport: { width: 1080, height: 1400 }, deviceScaleFactor: 4 })`，并以 `scale: "device"` 输出 PNG，在不改变版心尺寸的前提下提升清晰度。

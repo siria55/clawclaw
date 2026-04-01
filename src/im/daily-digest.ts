@@ -98,6 +98,10 @@ export function buildDailyDigestImageHint(total: number | undefined): string {
   return `已发送今天的新闻图片。${range}，例如回复“3”。如需文字版，回复“今天新闻文本版”。`;
 }
 
+export function buildDailyDigestMissingTodayReply(dateKey: string): string {
+  return `今日日报（${dateKey}）尚未生成成功，本次未发送旧日报。请先检查 09:00 生成任务，或手动重跑 daily-digest。`;
+}
+
 export function buildDailyDigestTextHint(total: number | undefined): string {
   const range = total ? `回复 1-${total} 获取对应新闻原文链接` : "回复数字获取对应新闻原文链接";
   return `已发送今天的新闻文字版。${range}，例如回复“3”。`;

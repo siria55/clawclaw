@@ -5,9 +5,9 @@ import type { CronJob, CronSchedulerOptions } from "./types.js";
 import type { IMEventStorage } from "../im/storage.js";
 import {
   buildDailyDigestImageHint,
-  extractDailyDigestDateKeyFromPath,
+  buildDailyDigestMissingTodayReply,
   getDailyDigestArticleCount,
-  getDailyDigestFilesByDate,
+  getDailyDigestFiles,
 } from "../im/daily-digest.js";
 import type { FeishuPlatform } from "../platform/feishu.js";
 import type { SkillRegistry } from "../skills/registry.js";
@@ -156,24 +156,38 @@ export class CronScheduler {
         return;
       } else if (job.sendSkillOutput) {
         const delivery = requireDelivery(job);
+        if (job.sendSkillOutput === "daily-digest") {
+          const todayFiles = this.#skillDataRoot
+            ? getDailyDigestFiles(this.#skillDataRoot, this.#tz)
+            : { dateKey: new Date().toLocaleDateString("sv-SE", { timeZone: this.#tz }) };
+          if (!todayFiles.pngPath) {
+            const failureText = buildDailyDigestMissingTodayReply(todayFiles.dateKey);
+            for (const chatId of targetChatIds) {
+              await delivery.platform.send(chatId, failureText);
+            }
+            setCronReplies(this.#imEventStorage, eventIds, `[日报发送失败] ${todayFiles.dateKey}`);
+            return;
+          }
+
+          const digestCount = getDailyDigestArticleCount(todayFiles.jsonPath);
+          const p = delivery.platform as unknown as FeishuPlatform;
+          for (const chatId of targetChatIds) {
+            await p.sendImage(chatId, todayFiles.pngPath);
+            await delivery.platform.send(chatId, buildDailyDigestImageHint(digestCount));
+          }
+          setCronReplies(this.#imEventStorage, eventIds, `[日报图片] ${todayFiles.dateKey}`);
+          return;
+        }
+
         const pngPath = this.#skillDataRoot
           ? findLatestSkillPng(this.#skillDataRoot, job.sendSkillOutput)
           : undefined;
         if (!pngPath) throw new Error(`No output PNG found for skill: ${job.sendSkillOutput}`);
         const p = delivery.platform as unknown as FeishuPlatform;
-        const digestDateKey = job.sendSkillOutput === "daily-digest"
-          ? extractDailyDigestDateKeyFromPath(pngPath)
-          : undefined;
-        const digestCount = digestDateKey && this.#skillDataRoot
-          ? getDailyDigestArticleCount(getDailyDigestFilesByDate(this.#skillDataRoot, digestDateKey).jsonPath)
-          : undefined;
         for (const chatId of targetChatIds) {
           await p.sendImage(chatId, pngPath);
-          if (job.sendSkillOutput === "daily-digest") {
-            await delivery.platform.send(chatId, buildDailyDigestImageHint(digestCount));
-          }
         }
-        setCronReplies(this.#imEventStorage, eventIds, digestDateKey ? `[日报图片] ${digestDateKey}` : "[图片]");
+        setCronReplies(this.#imEventStorage, eventIds, "[图片]");
         return;
       } else if (job.direct) {
         const delivery = requireDelivery(job);

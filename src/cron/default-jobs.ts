@@ -22,7 +22,7 @@ export function buildDefaultDailyDigestCronJobs(defaultChatId: string): CronJobC
     normalizeCronJobConfig({
       id: DAILY_DIGEST_SEND_JOB_ID,
       schedule: "0 10 * * *",
-      message: "发送 daily-digest 最新日报到飞书。",
+      message: "发送 daily-digest 当日日报到飞书。",
       sendSkillOutput: "daily-digest",
       chatId,
       platform: "feishu",

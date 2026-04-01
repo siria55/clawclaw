@@ -113,7 +113,7 @@ Agent 可调用的外部能力单元。`defineTool()` 内置 Zod 输入校验，
 - **Agent 模式**：调用 Agent.run()，将 LLM 回复发送到 IM
 - **直发模式**（`direct: true`）：直接发送预设文本、Markdown 或图片
 - **Skill 生成**（`skillId`）：执行指定 Skill，生成并保存文件，不发 IM
-- **Skill 投递**（`sendSkillOutput`）：找指定 Skill 最新 PNG，发送到 IM
+- **Skill 投递**（`sendSkillOutput`）：发送指定 Skill 的 PNG 产物到 IM；大多数 Skill 发送最新 PNG，`daily-digest` 只发送当天 PNG
 
 Cron 投递目标支持两种配置：
 - 单目标：`chatId`
@@ -136,7 +136,7 @@ Skills 是独立的内容生成单元，职责收窄为"生成内容 + 保存文
 **架构：**
 ```
 Cron1(skillId)          → skill.run(ctx) → 保存文件，不发 IM
-Cron2(sendSkillOutput)  → 找最新 PNG → platform.sendImage()
+Cron2(sendSkillOutput)  → 找待发送 PNG → platform.sendImage()
 
 WebUI 手动运行：
 onRunSkill → skill.run(ctx) → SkillResult → 展示日志 + 图片预览
@@ -146,7 +146,7 @@ onRunSkill → skill.run(ctx) → SkillResult → 展示日志 + 图片预览
 
 其中：
 - `skillId` Cron 只负责生成内容，可不配置飞书目标
-- `sendSkillOutput` Cron 负责把最新产物投递到指定 `oc_...` / `ou_...` 飞书目标
+- `sendSkillOutput` Cron 负责把产物投递到指定 `oc_...` / `ou_...` 飞书目标；其中 `daily-digest` 只投递当天产物，不会回退到昨天
 - 手动执行 skill-only Cron（如 `daily-digest-generate`）时，若生成失败，WebUI 应直接返回错误，避免误以为已成功落盘
 
 **SKILL.md 标准：**
@@ -175,7 +175,7 @@ Agent 指令...
 8. 将内容填入 HTML 模板，封面 `deck` 使用每日轮换短句，“今日摘要”按新闻内容生成概览
 9. 新闻条目生成结果仅展示来源，不展示新闻时间
 10. 保存 `YYYY-MM-DD.{html,md,png,json}` 到 `data/skills/daily-digest/`；其中 JSON 会包含 `publishedAt` 和最佳努力推导的 `date`
-11. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书
+11. 返回 `{ outputPath }`；由独立的 `sendSkillOutput` Cron 发送到飞书；其中 `daily-digest-send` 只查找当天 PNG，若当天缺失则向目标发送失败提醒，不再回退旧日报
 12. 每次执行还会额外生成一份 run 记录 `data/skills/daily-digest/runs/{runId}.json`，保存 Brave 请求参数、原始返回、LLM 抽取结果与最终入选情况
 
 HTML 结构由 `src/skills/daily-digest/template.html`、`section.html`、`item.html` 提供，视觉样式由 `src/skills/daily-digest/layout.css` 提供；Skill 运行时读取这些模板并填入文本内容，保证模板、截图和导出 HTML 使用同一套版式。

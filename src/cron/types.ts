@@ -16,8 +16,8 @@ export interface CronJob {
   /** Skill id to execute (generate content, no IM delivery). */
   skillId?: string;
   /**
-   * Skill id whose latest PNG output should be sent to IM.
-   * Use in a separate Cron job after the skill-generation job.
+   * Skill id whose PNG output should be sent to IM.
+   * Most skills send the latest PNG; `daily-digest` is special-cased to send only today's PNG.
    */
   sendSkillOutput?: string;
   /** Agent to run */
@@ -44,7 +44,7 @@ export interface CronJobConfig {
   msgType?: "text" | "image" | "markdown";
   /** Skill id to execute (generate content, no IM delivery). */
   skillId?: string;
-  /** Skill id whose latest PNG output should be sent to IM. */
+  /** Skill id whose PNG output should be sent to IM. `daily-digest` only sends today's PNG. */
   sendSkillOutput?: string;
   chatId: string;
   /** Additional delivery targets. When set, the same message is sent to all chatIds. */
