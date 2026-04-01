@@ -731,8 +731,8 @@ describe("parseBingNewsSearchResponse", () => {
 });
 
 describe("buildBochaSearchRequest", () => {
-  it("builds a POST request with correct freshness mapping", () => {
-    const { url, body } = buildBochaSearchRequest("中国 AI 教育", 20, "p3d");
+  it("builds a POST request with correct config", () => {
+    const { url, body } = buildBochaSearchRequest("中国 AI 教育", 20, { freshness: "7d" });
     expect(url).toBe("https://api.bochaai.com/v1/web-search");
     const parsed = JSON.parse(body) as { query: string; freshness: string; summary: boolean; count: number };
     expect(parsed.query).toBe("中国 AI 教育");
@@ -741,8 +741,15 @@ describe("buildBochaSearchRequest", () => {
     expect(parsed.count).toBe(20);
   });
 
-  it("maps pd to 24h", () => {
-    const { body } = buildBochaSearchRequest("q", 10, "pd");
+  it("uses default config when none provided", () => {
+    const { body } = buildBochaSearchRequest("q", 10);
+    const parsed = JSON.parse(body) as { freshness: string; count: number };
+    expect(parsed.freshness).toBe("7d");
+    expect(parsed.count).toBe(10);
+  });
+
+  it("respects freshness config", () => {
+    const { body } = buildBochaSearchRequest("q", 10, { freshness: "24h" });
     expect((JSON.parse(body) as { freshness: string }).freshness).toBe("24h");
   });
 });

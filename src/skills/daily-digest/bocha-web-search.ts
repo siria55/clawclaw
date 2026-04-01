@@ -1,7 +1,15 @@
 import { z } from "zod";
+import type { BochaSearchConfig } from "../../config/types.js";
 import type { DigestCategory, DigestCandidateLink } from "./index.js";
 
 const BOCHA_WEB_SEARCH_ENDPOINT = "https://api.bochaai.com/v1/web-search";
+
+/** Default Bocha search config values. */
+export const DEFAULT_BOCHA_SEARCH_CONFIG: Required<BochaSearchConfig> = {
+  count: 20,
+  freshness: "7d",
+  summary: false,
+};
 
 const BochaSearchResultSchema = z.object({
   name: z.string(),
@@ -22,20 +30,18 @@ const BochaSearchResponseSchema = z.object({
 
 /**
  * Build a Bocha Web Search request body.
- *
- * @param freshness - Brave-style freshness string mapped to Bocha values.
  */
 export function buildBochaSearchRequest(
   query: string,
-  count: number,
-  freshness?: string,
+  maxCandidates: number,
+  config?: BochaSearchConfig,
 ): { url: string; body: string } {
-  const mapped = mapFreshnessToBocha(freshness);
+  const resolved = { ...DEFAULT_BOCHA_SEARCH_CONFIG, ...config };
   const body = JSON.stringify({
     query,
-    freshness: mapped,
-    summary: false,
-    count: Math.min(count, 50),
+    freshness: resolved.freshness,
+    summary: resolved.summary,
+    count: Math.min(maxCandidates, resolved.count),
   });
   return { url: BOCHA_WEB_SEARCH_ENDPOINT, body };
 }
@@ -89,20 +95,6 @@ export function parseBochaSearchResponse(
       ...(publishedAt ? { publishedAt } : {}),
     }];
   });
-}
-
-/**
- * Map Brave-style freshness to Bocha freshness values.
- * Bocha supports: "24h", "7d", "30d", "oneYear", "noLimit".
- */
-function mapFreshnessToBocha(freshness: string | undefined): string {
-  if (!freshness) return "noLimit";
-  const lower = freshness.toLowerCase();
-  if (lower === "pd") return "24h";
-  if (lower === "pw" || lower === "p3d") return "7d";
-  if (lower === "pm") return "30d";
-  if (lower === "py") return "oneYear";
-  return "7d";
 }
 
 /** Normalize Bocha's datePublished to a readable date-time string. */

@@ -61,9 +61,9 @@ describe("SearchConfigView", () => {
     expect(input.value).toBe("brave_key_123");
     expect(textarea.value).toBe("中国教育\nAI 教育");
     expect(textarea.placeholder).toBe("中国 教育部 AI 教育\n中国 智慧教育\n中国 高校 AI 教育\n中国 教育科技 公司\nOpenAI education");
-    expect((await screen.findByLabelText("count") as HTMLInputElement).value).toBe("30");
-    expect((await screen.findByLabelText("freshness") as HTMLInputElement).value).toBe("pm");
-    expect((await screen.findByLabelText("safesearch") as HTMLSelectElement).value).toBe("moderate");
+    expect((document.getElementById("search-count") as HTMLInputElement).value).toBe("30");
+    expect((document.getElementById("search-freshness") as HTMLInputElement).value).toBe("pm");
+    expect((document.getElementById("search-safesearch") as HTMLSelectElement).value).toBe("moderate");
     expect((await screen.findByLabelText("国内 country") as HTMLInputElement).value).toBe("CN");
     expect((await screen.findByLabelText("国际 country") as HTMLInputElement).value).toBe("US");
   });
@@ -87,14 +87,15 @@ describe("SearchConfigView", () => {
 
     const input = await screen.findByLabelText("Brave Search API Key");
     const textarea = await screen.findByLabelText("搜索主题（每行一个）");
-    const count = await screen.findByLabelText("count");
-    const offset = await screen.findByLabelText("offset");
-    const freshness = await screen.findByLabelText("freshness");
-    const uiLang = await screen.findByLabelText("ui_lang");
+    const count = document.getElementById("search-count") as HTMLInputElement;
+    const offset = document.getElementById("search-offset") as HTMLInputElement;
+    const freshness = document.getElementById("search-freshness") as HTMLInputElement;
+    const uiLang = document.getElementById("search-ui-lang") as HTMLInputElement;
     const goggles = await screen.findByLabelText("goggles（每行一个）");
     const domesticCountry = await screen.findByLabelText("国内 country");
     const internationalSearchLang = await screen.findByLabelText("国际 search_lang");
-    const [spellcheck, extraSnippets] = await screen.findAllByRole("checkbox");
+    const spellcheck = document.getElementById("search-spellcheck") as HTMLInputElement;
+    const extraSnippets = document.getElementById("search-extra-snippets") as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: "new_brave_key" } });
     fireEvent.change(textarea, { target: { value: "  中国教育  \nAI 教育\n\nAI 教育 " } });
@@ -144,6 +145,11 @@ describe("SearchConfigView", () => {
           country: "",
           searchLang: "en",
         },
+      },
+      bochaSearch: {
+        count: 20,
+        freshness: "7d",
+        summary: false,
       },
     });
     expect(await screen.findByText("已保存搜索配置")).toBeDefined();

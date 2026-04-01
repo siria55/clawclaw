@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 import { z } from "zod";
 import { mergeBraveSearchConfig } from "../../config/daily-digest.js";
 import type { ConfigStorage } from "../../config/storage.js";
-import type { BraveSearchConfig, DailyDigestConfig, NewsSearchSource } from "../../config/types.js";
+import type { BochaSearchConfig, BraveSearchConfig, DailyDigestConfig, NewsSearchSource } from "../../config/types.js";
 import { loadSkillDef } from "../loader.js";
 import {
   buildBingNewsSearchUrl,
@@ -313,6 +313,7 @@ async function searchNews(
   domesticSource: NewsSearchSource,
   internationalSource: NewsSearchSource,
   braveSearchConfig: BraveSearchConfig | undefined,
+  bochaSearchConfig: BochaSearchConfig | undefined,
   runRecord?: DailyDigestRunRecord,
 ): Promise<DigestArticle[]> {
   const log = (msg: string): void => { if (ctx.log) ctx.log(msg); };
@@ -325,7 +326,7 @@ async function searchNews(
   for (const plan of searchPlans) {
     const source = plan.hintCategory === "domestic" ? domesticSource : internationalSource;
     log(`🌐 ${sourceLabel(source)} 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
-    const { requestUrl, apiKey: resolvedApiKey, requestBody } = buildSearchRequest(source, plan, maxCandidates, searchConfig, braveSearchApiKey, bingSearchApiKey, bochaSearchApiKey);
+    const { requestUrl, apiKey: resolvedApiKey, requestBody } = buildSearchRequest(source, plan, maxCandidates, searchConfig, braveSearchApiKey, bingSearchApiKey, bochaSearchApiKey, bochaSearchConfig);
     const requestRecord: DailyDigestRunRequestRecord = {
       query: plan.query,
       searchText: plan.searchText,
@@ -560,6 +561,7 @@ export class DailyDigestSkill implements Skill {
         config?.domesticSource ?? "brave",
         config?.internationalSource ?? "brave",
         braveSearchConfig,
+        config?.bochaSearch,
         runRecord,
       );
       const normalizedArticles = await this.#normalizeDigestArticles(articles, ctx);
@@ -1466,10 +1468,10 @@ function buildSearchRequest(
   braveApiKey: string | undefined,
   bingApiKey: string | undefined,
   bochaApiKey: string | undefined,
+  bochaConfig: BochaSearchConfig | undefined,
 ): { requestUrl: string; apiKey: string; requestBody?: string } {
   if (source === "bocha") {
-    const freshness = braveConfig.request.freshness;
-    const { url, body } = buildBochaSearchRequest(plan.searchText, maxCandidates, freshness);
+    const { url, body } = buildBochaSearchRequest(plan.searchText, maxCandidates, bochaConfig);
     return { requestUrl: url, apiKey: getBochaSearchApiKey(bochaApiKey), requestBody: body };
   }
   if (source === "bing") {

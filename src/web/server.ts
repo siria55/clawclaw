@@ -1573,6 +1573,13 @@ function mergeDailyDigestConfig(
     ...layers.map((layer) => layer?.braveSearch),
   );
 
+  let bochaSearch = defaults?.bochaSearch;
+  for (const layer of layers) {
+    if (layer?.bochaSearch !== undefined) {
+      bochaSearch = { ...bochaSearch, ...layer.bochaSearch };
+    }
+  }
+
   return {
     ...(queries.length > 0 && { queries }),
     ...(braveSearchApiKey !== undefined && { braveSearchApiKey }),
@@ -1581,6 +1588,7 @@ function mergeDailyDigestConfig(
     ...(domesticSource !== undefined && { domesticSource }),
     ...(internationalSource !== undefined && { internationalSource }),
     braveSearch,
+    ...(bochaSearch !== undefined && { bochaSearch }),
   };
 }
 

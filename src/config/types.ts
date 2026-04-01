@@ -74,6 +74,16 @@ export interface BraveSearchConfig {
 /** Supported news search engine backends. */
 export type NewsSearchSource = "brave" | "bing" | "bocha";
 
+/** Bocha `web-search` request parameters. */
+export type BochaFreshness = "24h" | "7d" | "30d" | "oneYear" | "noLimit";
+
+/** Bocha `web-search` config grouped by request params. */
+export interface BochaSearchConfig {
+  count?: number;
+  freshness?: BochaFreshness;
+  summary?: boolean;
+}
+
 /** DailyDigest skill runtime settings configurable from WebUI. */
 export interface DailyDigestConfig {
   /** Search topics used by the skill. One query per search request. */
@@ -90,4 +100,6 @@ export interface DailyDigestConfig {
   internationalSource?: NewsSearchSource;
   /** Brave `news/search` request parameters configurable from WebUI. */
   braveSearch?: BraveSearchConfig;
+  /** Bocha `web-search` request parameters configurable from WebUI. */
+  bochaSearch?: BochaSearchConfig;
 }

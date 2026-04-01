@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { mergeBraveSearchConfig } from "../../config/daily-digest.js";
-import type { BraveSearchConfig, BraveSearchSafeSearch, DailyDigestConfig, NewsSearchSource } from "../../config/types.js";
+import type { BochaFreshness, BochaSearchConfig, BraveSearchConfig, BraveSearchSafeSearch, DailyDigestConfig, NewsSearchSource } from "../../config/types.js";
+import { DEFAULT_BOCHA_SEARCH_CONFIG } from "../../skills/daily-digest/bocha-web-search.js";
 import styles from "./SearchConfigView.module.css";
 
 const BRAVE_DOC_URL = "https://api-dashboard.search.brave.com/api-reference/news/news_search/get";
@@ -24,6 +25,9 @@ interface SearchConfigFields {
   domesticSearchLang: string;
   internationalCountry: string;
   internationalSearchLang: string;
+  bochaCount: string;
+  bochaFreshness: BochaFreshness;
+  bochaSummary: boolean;
 }
 
 interface StatusMessage {
@@ -84,6 +88,9 @@ function buildFieldsFromConfig(config: DailyDigestConfig): SearchConfigFields {
     domesticSearchLang: braveSearch.domestic.searchLang,
     internationalCountry: braveSearch.international.country,
     internationalSearchLang: braveSearch.international.searchLang,
+    bochaCount: String(config.bochaSearch?.count ?? DEFAULT_BOCHA_SEARCH_CONFIG.count),
+    bochaFreshness: config.bochaSearch?.freshness ?? DEFAULT_BOCHA_SEARCH_CONFIG.freshness,
+    bochaSummary: config.bochaSearch?.summary ?? DEFAULT_BOCHA_SEARCH_CONFIG.summary,
   };
 }
 
@@ -110,6 +117,14 @@ function toBraveSearchConfig(fields: SearchConfigFields): BraveSearchConfig {
   };
 }
 
+function toBochaSearchConfig(fields: SearchConfigFields): BochaSearchConfig {
+  return {
+    count: normalizePositiveInt(fields.bochaCount, DEFAULT_BOCHA_SEARCH_CONFIG.count),
+    freshness: fields.bochaFreshness,
+    summary: fields.bochaSummary,
+  };
+}
+
 async function fetchSearchConfig(): Promise<SearchConfigFields> {
   const res = await fetch("/api/config/daily-digest");
   if (!res.ok) return DEFAULT_FIELDS;
@@ -129,6 +144,7 @@ async function saveSearchConfig(fields: SearchConfigFields): Promise<void> {
       domesticSource: fields.domesticSource,
       internationalSource: fields.internationalSource,
       braveSearch: toBraveSearchConfig(fields),
+      bochaSearch: toBochaSearchConfig(fields),
     }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -409,6 +425,47 @@ export function SearchConfigView(): React.JSX.Element {
               onChange={(value) => setField("internationalSearchLang", value)}
               placeholder="en"
               hint="国际请求默认不带 `search_lang`；需要时可在这里指定。"
+            />
+          </div>
+        </section>
+
+        <section className={styles.card}>
+          <div className={styles.sectionTitle}>博查 (Bocha) 参数</div>
+          <div className={styles.sectionHint}>
+            当国内或国际搜索源选择「博查」时生效。
+          </div>
+          <div className={styles.grid}>
+            <TextField
+              id="search-bocha-count"
+              label="count"
+              value={fields.bochaCount}
+              onChange={(value) => setField("bochaCount", value)}
+              placeholder="20"
+              hint="每次请求返回多少条结果，上限 50。"
+              inputMode="numeric"
+            />
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="search-bocha-freshness">freshness</label>
+              <select
+                id="search-bocha-freshness"
+                className={styles.select}
+                value={fields.bochaFreshness}
+                onChange={(e) => setField("bochaFreshness", e.target.value as BochaFreshness)}
+              >
+                <option value="24h">24h — 最近 24 小时</option>
+                <option value="7d">7d — 最近 7 天</option>
+                <option value="30d">30d — 最近 30 天</option>
+                <option value="oneYear">oneYear — 最近一年</option>
+                <option value="noLimit">noLimit — 不限</option>
+              </select>
+              <span className={styles.fieldHint}>搜索结果时效窗口。</span>
+            </div>
+            <CheckboxField
+              id="search-bocha-summary"
+              label="summary"
+              checked={fields.bochaSummary}
+              onChange={(checked) => setField("bochaSummary", checked)}
+              hint="是否让博查返回 AI 生成的摘要。日报链路通常不需要。"
             />
           </div>
         </section>
