@@ -32,6 +32,7 @@ const MAINLAND_CHINA_MEDIA_HOST_PATTERNS = [
 const MAINLAND_CHINA_OFFICIAL_HOST_PATTERNS = [
   /(^|\.)gov\.cn$/i,
   /(^|\.)edu\.cn$/i,
+  /(^|\.)ac\.cn$/i,
 ] as const;
 
 const TRADITIONAL_CHINESE_MEDIA_HOST_PATTERNS = [

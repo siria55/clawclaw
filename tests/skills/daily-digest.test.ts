@@ -595,6 +595,13 @@ describe("source classification", () => {
     expect(isMainlandChinaHostname("www.people.com.cn")).toBe(true);
   });
 
+  it("recognizes mainland-China official domains including .ac.cn", () => {
+    expect(isMainlandChinaHostname("hub.baai.ac.cn")).toBe(true);
+    expect(isMainlandChinaHostname("www.cas.ac.cn")).toBe(true);
+    expect(isMainlandChinaHostname("www.pku.edu.cn")).toBe(true);
+    expect(isMainlandChinaHostname("www.moe.gov.cn")).toBe(true);
+  });
+
   it("marks pseudo-mainland and overseas hosts as non-mainland domestic sources", () => {
     expect(isMainlandChinaHostname("sputniknews.cn")).toBe(false);
     expect(isMainlandChinaHostname("www.archdaily.cn")).toBe(false);
