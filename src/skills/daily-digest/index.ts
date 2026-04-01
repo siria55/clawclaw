@@ -14,6 +14,11 @@ import {
   parseBingNewsSearchResponse,
 } from "./bing-news-search.js";
 import {
+  buildBochaSearchRequest,
+  fetchBochaSearchResponse,
+  parseBochaSearchResponse,
+} from "./bocha-web-search.js";
+import {
   isMainlandChinaHostname,
   isMainlandChinaMediaHostname,
   isNonMainlandDomesticHostname,
@@ -304,6 +309,7 @@ async function searchNews(
   referenceDate: string,
   braveSearchApiKey: string | undefined,
   bingSearchApiKey: string | undefined,
+  bochaSearchApiKey: string | undefined,
   domesticSource: NewsSearchSource,
   internationalSource: NewsSearchSource,
   braveSearchConfig: BraveSearchConfig | undefined,
@@ -314,14 +320,12 @@ async function searchNews(
   const searchPlans = buildDailyDigestSearchPlans(queries);
   const searchConfig = mergeBraveSearchConfig(braveSearchConfig);
   const freshnessLabel = describeBraveFreshness(searchConfig.request.freshness, new Date()) || "不限";
-  const domesticLabel = domesticSource === "bing" ? "Bing" : "Brave";
-  const internationalLabel = internationalSource === "bing" ? "Bing" : "Brave";
-  log(`🧭 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条请求（国内=${domesticLabel}，国际=${internationalLabel}，freshness=${freshnessLabel}）`);
+  const sourceLabel = (s: NewsSearchSource): string => s === "bing" ? "Bing" : s === "bocha" ? "Bocha" : "Brave";
+  log(`🧭 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条请求（国内=${sourceLabel(domesticSource)}，国际=${sourceLabel(internationalSource)}，freshness=${freshnessLabel}）`);
   for (const plan of searchPlans) {
     const source = plan.hintCategory === "domestic" ? domesticSource : internationalSource;
-    const engineLabel = source === "bing" ? "Bing" : "Brave";
-    log(`🌐 ${engineLabel} 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
-    const { requestUrl, apiKey: resolvedApiKey } = buildSearchRequest(source, plan, maxCandidates, searchConfig, braveSearchApiKey, bingSearchApiKey);
+    log(`🌐 ${sourceLabel(source)} 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
+    const { requestUrl, apiKey: resolvedApiKey, requestBody } = buildSearchRequest(source, plan, maxCandidates, searchConfig, braveSearchApiKey, bingSearchApiKey, bochaSearchApiKey);
     const requestRecord: DailyDigestRunRequestRecord = {
       query: plan.query,
       searchText: plan.searchText,
@@ -333,7 +337,7 @@ async function searchNews(
       parsedLinks: [],
     };
     try {
-      const { response, links, resultCount } = await executeSearchRequest(source, requestUrl, resolvedApiKey, plan.hintCategory);
+      const { response, links, resultCount } = await executeSearchRequest(source, requestUrl, resolvedApiKey, plan.hintCategory, requestBody);
       requestRecord.response = response;
       requestRecord.responseResultCount = resultCount;
       requestRecord.parsedLinks = links.map((link) => ({ ...link }));
@@ -552,6 +556,7 @@ export class DailyDigestSkill implements Skill {
         dateKey,
         config?.braveSearchApiKey,
         config?.bingSearchApiKey,
+        config?.bochaSearchApiKey,
         config?.domesticSource ?? "brave",
         config?.internationalSource ?? "brave",
         braveSearchConfig,
@@ -1444,6 +1449,14 @@ function getBingSearchApiKey(configuredKey: string | undefined): string {
   return apiKey;
 }
 
+function getBochaSearchApiKey(configuredKey: string | undefined): string {
+  const apiKey = configuredKey?.trim() || process.env["BOCHA_SEARCH_API_KEY"]?.trim();
+  if (!apiKey) {
+    throw new Error("BOCHA_SEARCH_API_KEY is required when using Bocha as news search source");
+  }
+  return apiKey;
+}
+
 /** Resolve the API URL and key for one search plan based on the chosen source. */
 function buildSearchRequest(
   source: NewsSearchSource,
@@ -1452,7 +1465,13 @@ function buildSearchRequest(
   braveConfig: ReturnType<typeof mergeBraveSearchConfig>,
   braveApiKey: string | undefined,
   bingApiKey: string | undefined,
-): { requestUrl: string; apiKey: string } {
+  bochaApiKey: string | undefined,
+): { requestUrl: string; apiKey: string; requestBody?: string } {
+  if (source === "bocha") {
+    const freshness = braveConfig.request.freshness;
+    const { url, body } = buildBochaSearchRequest(plan.searchText, maxCandidates, freshness);
+    return { requestUrl: url, apiKey: getBochaSearchApiKey(bochaApiKey), requestBody: body };
+  }
   if (source === "bing") {
     const freshness = braveConfig.request.freshness;
     const requestUrl = buildBingNewsSearchUrl(plan.searchText, maxCandidates, plan.hintCategory, freshness);
@@ -1468,7 +1487,13 @@ async function executeSearchRequest(
   requestUrl: string,
   apiKey: string,
   hintCategory: DigestCategory,
+  requestBody?: string,
 ): Promise<{ response: unknown; links: DigestCandidateLink[]; resultCount: number }> {
+  if (source === "bocha") {
+    const response = await fetchBochaSearchResponse(requestUrl, requestBody ?? "", apiKey);
+    const links = parseBochaSearchResponse(response, hintCategory);
+    return { response, links, resultCount: links.length };
+  }
   if (source === "bing") {
     const response = await fetchBingNewsResponse(requestUrl, apiKey);
     const links = parseBingNewsSearchResponse(response, hintCategory);

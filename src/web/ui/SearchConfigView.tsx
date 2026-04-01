@@ -9,6 +9,7 @@ interface SearchConfigFields {
   queries: string;
   braveSearchApiKey: string;
   bingSearchApiKey: string;
+  bochaSearchApiKey: string;
   domesticSource: NewsSearchSource;
   internationalSource: NewsSearchSource;
   count: string;
@@ -68,6 +69,7 @@ function buildFieldsFromConfig(config: DailyDigestConfig): SearchConfigFields {
     queries: (config.queries ?? []).join("\n"),
     braveSearchApiKey: config.braveSearchApiKey ?? "",
     bingSearchApiKey: config.bingSearchApiKey ?? "",
+    bochaSearchApiKey: config.bochaSearchApiKey ?? "",
     domesticSource: config.domesticSource ?? "brave",
     internationalSource: config.internationalSource ?? "brave",
     count: String(braveSearch.request.count),
@@ -123,6 +125,7 @@ async function saveSearchConfig(fields: SearchConfigFields): Promise<void> {
       queries: normalizeQueries(fields.queries),
       braveSearchApiKey: fields.braveSearchApiKey,
       bingSearchApiKey: fields.bingSearchApiKey,
+      bochaSearchApiKey: fields.bochaSearchApiKey,
       domesticSource: fields.domesticSource,
       internationalSource: fields.internationalSource,
       braveSearch: toBraveSearchConfig(fields),
@@ -198,8 +201,9 @@ export function SearchConfigView(): React.JSX.Element {
                 >
                   <option value="brave">Brave Search</option>
                   <option value="bing">Bing News Search</option>
+                  <option value="bocha">博查 (Bocha)</option>
                 </select>
-                <span className={styles.fieldHint}>国内候选新闻使用的搜索引擎。Bing 对中国大陆媒体覆盖更好。</span>
+                <span className={styles.fieldHint}>国内候选新闻使用的搜索引擎。Bing 和博查对中国大陆媒体覆盖更好。</span>
               </div>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="search-international-source">国际搜索源</label>
@@ -211,6 +215,7 @@ export function SearchConfigView(): React.JSX.Element {
                 >
                   <option value="brave">Brave Search</option>
                   <option value="bing">Bing News Search</option>
+                  <option value="bocha">博查 (Bocha)</option>
                 </select>
                 <span className={styles.fieldHint}>国际候选新闻使用的搜索引擎。</span>
               </div>
@@ -244,6 +249,21 @@ export function SearchConfigView(): React.JSX.Element {
                 spellCheck={false}
               />
               <span className={styles.fieldHint}>Azure 门户的 Bing Search v7 订阅密钥。留空时回退到环境变量 `BING_SEARCH_API_KEY`。</span>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="search-bocha-api-key">博查 (Bocha) API Key</label>
+              <input
+                id="search-bocha-api-key"
+                className={styles.input}
+                type="password"
+                placeholder="bca-..."
+                value={fields.bochaSearchApiKey}
+                onChange={(e) => setField("bochaSearchApiKey", e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <span className={styles.fieldHint}>博查 AI 开放平台的 API Key。留空时回退到环境变量 `BOCHA_SEARCH_API_KEY`。</span>
             </div>
 
             <div className={styles.field}>

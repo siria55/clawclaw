@@ -122,6 +122,7 @@ describe("SearchConfigView", () => {
       queries: ["中国教育", "AI 教育"],
       braveSearchApiKey: "new_brave_key",
       bingSearchApiKey: "",
+      bochaSearchApiKey: "",
       domesticSource: "brave",
       internationalSource: "brave",
       braveSearch: {

@@ -72,7 +72,7 @@ export interface BraveSearchConfig {
 }
 
 /** Supported news search engine backends. */
-export type NewsSearchSource = "brave" | "bing";
+export type NewsSearchSource = "brave" | "bing" | "bocha";
 
 /** DailyDigest skill runtime settings configurable from WebUI. */
 export interface DailyDigestConfig {
@@ -82,6 +82,8 @@ export interface DailyDigestConfig {
   braveSearchApiKey?: string;
   /** Bing News Search API key (Azure Cognitive Services). */
   bingSearchApiKey?: string;
+  /** Bocha Web Search API key (bochaai.com). */
+  bochaSearchApiKey?: string;
   /** News search engine for domestic queries. Default: "brave". */
   domesticSource?: NewsSearchSource;
   /** News search engine for international queries. Default: "brave". */

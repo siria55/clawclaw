@@ -25,6 +25,10 @@ import {
   buildBingNewsSearchUrl,
   parseBingNewsSearchResponse,
 } from "../../src/skills/daily-digest/bing-news-search.js";
+import {
+  buildBochaSearchRequest,
+  parseBochaSearchResponse,
+} from "../../src/skills/daily-digest/bocha-web-search.js";
 
 describe("parseBraveNewsSearchResponse", () => {
   it("maps Brave results into digest candidate links", () => {
@@ -723,6 +727,61 @@ describe("parseBingNewsSearchResponse", () => {
   it("returns empty array for invalid payload", () => {
     expect(parseBingNewsSearchResponse({ bad: true }, "domestic")).toEqual([]);
     expect(parseBingNewsSearchResponse(null, "domestic")).toEqual([]);
+  });
+});
+
+describe("buildBochaSearchRequest", () => {
+  it("builds a POST request with correct freshness mapping", () => {
+    const { url, body } = buildBochaSearchRequest("中国 AI 教育", 20, "p3d");
+    expect(url).toBe("https://api.bochaai.com/v1/web-search");
+    const parsed = JSON.parse(body) as { query: string; freshness: string; summary: boolean; count: number };
+    expect(parsed.query).toBe("中国 AI 教育");
+    expect(parsed.freshness).toBe("7d");
+    expect(parsed.summary).toBe(false);
+    expect(parsed.count).toBe(20);
+  });
+
+  it("maps pd to 24h", () => {
+    const { body } = buildBochaSearchRequest("q", 10, "pd");
+    expect((JSON.parse(body) as { freshness: string }).freshness).toBe("24h");
+  });
+});
+
+describe("parseBochaSearchResponse", () => {
+  it("parses a standard Bocha response into candidate links", () => {
+    const payload = {
+      data: {
+        webPages: {
+          value: [
+            {
+              name: "教育部发布AI教育指南",
+              url: "https://www.moe.gov.cn/news/123",
+              snippet: "教育部发布关于AI教育的指导意见。",
+              siteName: "教育部",
+              datePublished: "2026-04-01T10:30:00Z",
+            },
+            {
+              name: "澎湃新闻报道",
+              url: "https://www.thepaper.cn/detail/456",
+              snippet: "智慧教育新进展",
+              siteName: "澎湃新闻",
+            },
+          ],
+        },
+      },
+    };
+    const links = parseBochaSearchResponse(payload, "domestic");
+    expect(links).toHaveLength(2);
+    expect(links[0]?.text).toBe("教育部发布AI教育指南");
+    expect(links[0]?.source).toBe("教育部");
+    expect(links[0]?.hintCategory).toBe("domestic");
+    expect(links[0]?.publishedAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(links[1]?.source).toBe("澎湃新闻");
+  });
+
+  it("returns empty array for invalid payload", () => {
+    expect(parseBochaSearchResponse({ bad: true }, "domestic")).toEqual([]);
+    expect(parseBochaSearchResponse(null, "domestic")).toEqual([]);
   });
 });
 
