@@ -70,11 +70,18 @@ export function findRecentDailyDigestDateKey(
 ): string | undefined {
   if (!imEventStorage) return undefined;
   const events = imEventStorage.since(undefined);
-  // Scan all events for this chatId, return the most recent digest dateKey.
+  // First pass: find digest sent to this specific chatId.
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (!event) continue;
     if (event.chatId !== chatId) continue;
+    const dateKey = extractDailyDigestDateKey(event.replyText);
+    if (dateKey) return dateKey;
+  }
+  // Fallback: use the most recent digest dateKey from any chatId.
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!event) continue;
     const dateKey = extractDailyDigestDateKey(event.replyText);
     if (dateKey) return dateKey;
   }
