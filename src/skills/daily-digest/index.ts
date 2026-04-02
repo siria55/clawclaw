@@ -269,6 +269,8 @@ export const DAILY_DIGEST_SCREENSHOT = {
 } as const;
 
 const BRAVE_NEWS_SEARCH_ENDPOINT = process.env["BRAVE_SEARCH_API_URL"] ?? "https://api.search.brave.com/res/v1/news/search";
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const DAILY_DIGEST_FOCUS = "教育 / 教育科技 / AI 教育 / 教育公司";
 const DAILY_DIGEST_LANGUAGE_NORMALIZATION_BATCH_SIZE = 8;
 
@@ -323,10 +325,14 @@ async function searchNews(
   const freshnessLabel = describeBraveFreshness(searchConfig.request.freshness, new Date()) || "不限";
   const sourceLabel = (s: NewsSearchSource): string => s === "bing" ? "Bing" : s === "bocha" ? "Bocha" : "Brave";
   log(`🧭 搜索主题 ${queries.length} 个，扩展为 ${searchPlans.length} 条请求（国内=${sourceLabel(domesticSource)}，国际=${sourceLabel(internationalSource)}，freshness=${freshnessLabel}）`);
-  for (const plan of searchPlans) {
+  for (let planIndex = 0; planIndex < searchPlans.length; planIndex++) {
+    const plan = searchPlans[planIndex]!;
     const source = plan.hintCategory === "domestic" ? domesticSource : internationalSource;
     log(`🌐 ${sourceLabel(source)} 搜索: ${plan.searchText}（${CATEGORY_LABEL[plan.hintCategory]}，源主题 ${plan.query}）`);
     const { requestUrl, apiKey: resolvedApiKey, requestBody } = buildSearchRequest(source, plan, maxCandidates, searchConfig, braveSearchApiKey, bingSearchApiKey, bochaSearchApiKey, bochaSearchConfig);
+    if (planIndex > 0 && (source === "bocha" || source === "bing")) {
+      await delay(500);
+    }
     const requestRecord: DailyDigestRunRequestRecord = {
       query: plan.query,
       searchText: plan.searchText,
