@@ -4,7 +4,6 @@ import type { DigestArticle } from "../skills/daily-digest/index.js";
 import type { IMEventStorage } from "./storage.js";
 
 const DAILY_DIGEST_REPLY_RE = /^\[日报(?:图片|文本)\]\s+(\d{4}-\d{2}-\d{2})$/;
-const RECENT_DIGEST_WINDOW_MS = 36 * 60 * 60 * 1000;
 
 export interface DailyDigestFiles {
   dateKey: string;
@@ -71,11 +70,10 @@ export function findRecentDailyDigestDateKey(
 ): string | undefined {
   if (!imEventStorage) return undefined;
   const events = imEventStorage.since(undefined);
-  const cutoff = Date.now() - RECENT_DIGEST_WINDOW_MS;
+  // Scan all events for this chatId, return the most recent digest dateKey.
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (!event) continue;
-    if (Date.parse(event.timestamp) < cutoff) break;
     if (event.chatId !== chatId) continue;
     const dateKey = extractDailyDigestDateKey(event.replyText);
     if (dateKey) return dateKey;
