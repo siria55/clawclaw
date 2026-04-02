@@ -344,7 +344,7 @@ async function searchNews(
       parsedLinks: [],
     };
     try {
-      const { response, links, resultCount } = await executeSearchRequest(source, requestUrl, resolvedApiKey, plan.hintCategory, requestBody);
+      const { response, links, resultCount } = await executeSearchRequest(source, requestUrl, resolvedApiKey, plan.hintCategory, requestBody, bochaSearchConfig);
       requestRecord.response = response;
       requestRecord.responseResultCount = resultCount;
       requestRecord.parsedLinks = links.map((link) => ({ ...link }));
@@ -1496,10 +1496,11 @@ async function executeSearchRequest(
   apiKey: string,
   hintCategory: DigestCategory,
   requestBody?: string,
+  bochaConfig?: BochaSearchConfig,
 ): Promise<{ response: unknown; links: DigestCandidateLink[]; resultCount: number }> {
   if (source === "bocha") {
     const response = await fetchBochaSearchResponse(requestUrl, requestBody ?? "", apiKey);
-    const links = parseBochaSearchResponse(response, hintCategory);
+    const links = parseBochaSearchResponse(response, hintCategory, bochaConfig?.freshness);
     return { response, links, resultCount: links.length };
   }
   if (source === "bing") {

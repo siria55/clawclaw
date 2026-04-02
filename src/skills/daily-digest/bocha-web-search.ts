@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { BochaSearchConfig } from "../../config/types.js";
+import type { BochaFreshness, BochaSearchConfig } from "../../config/types.js";
 import type { DigestCategory, DigestCandidateLink } from "./index.js";
 
 const BOCHA_WEB_SEARCH_ENDPOINT = "https://api.bochaai.com/v1/web-search";
@@ -71,18 +71,25 @@ export async function fetchBochaSearchResponse(
 
 /**
  * Parse a Bocha Web Search response into candidate links.
+ *
+ * Bocha is a web search (not news search), so `freshness` controls crawl
+ * recency, not publish date.  We post-filter by `datePublished` to discard
+ * pages published outside the configured window.
  */
 export function parseBochaSearchResponse(
   payload: unknown,
   hintCategory: DigestCategory,
+  freshness?: BochaFreshness,
 ): DigestCandidateLink[] {
   const parsed = BochaSearchResponseSchema.safeParse(payload);
   if (!parsed.success) return [];
+  const cutoff = freshnessToDateCutoff(freshness);
   const values = parsed.data.data?.webPages?.value ?? [];
   return values.flatMap((result) => {
     const href = result.url.trim();
     const text = result.name.trim();
     if (!href.startsWith("http") || text.length === 0) return [];
+    if (cutoff && !isAfterCutoff(result.datePublished, cutoff)) return [];
     const source = result.siteName?.trim();
     const summary = result.snippet?.trim() || result.summary?.trim() || "";
     const publishedAt = normalizeBochaDate(result.datePublished);
@@ -111,5 +118,32 @@ function normalizeBochaDate(value: string | undefined): string | undefined {
     return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
   } catch {
     return value.trim() || undefined;
+  }
+}
+
+/** Convert BochaFreshness to a Date cutoff. Returns undefined for "noLimit". */
+function freshnessToDateCutoff(freshness: BochaFreshness | undefined): Date | undefined {
+  const ms = freshnessToMs(freshness);
+  return ms !== undefined ? new Date(Date.now() - ms) : undefined;
+}
+
+function freshnessToMs(freshness: BochaFreshness | undefined): number | undefined {
+  switch (freshness) {
+    case "24h": return 24 * 60 * 60 * 1000;
+    case "7d": return 7 * 24 * 60 * 60 * 1000;
+    case "30d": return 30 * 24 * 60 * 60 * 1000;
+    case "oneYear": return 365 * 24 * 60 * 60 * 1000;
+    default: return undefined;
+  }
+}
+
+/** Check if datePublished is after the cutoff. Missing dates are rejected. */
+function isAfterCutoff(datePublished: string | undefined, cutoff: Date): boolean {
+  if (!datePublished) return false;
+  try {
+    const date = new Date(datePublished);
+    return !isNaN(date.getTime()) && date >= cutoff;
+  } catch {
+    return false;
   }
 }
